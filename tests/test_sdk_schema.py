@@ -7,10 +7,18 @@ def _variants(schema):
     return schema["$defs"]["node"]["oneOf"]
 
 
-def test_registry_covers_both_domains():
-    assert set(DOMAIN_VOCAB) == {"hardware", "threed"}
+def test_registry_covers_all_domains():
+    assert set(DOMAIN_VOCAB) == {"hardware", "threed", "mechanical"}
     assert set(DOMAIN_VOCAB["hardware"]) == {"board", "net", "component"}
     assert set(DOMAIN_VOCAB["threed"]) == {"scene", "material", "mesh", "object"}
+    assert set(DOMAIN_VOCAB["mechanical"]) == {"part", "body", "sketch", "pad", "pocket"}
+
+
+def test_mechanical_schema_pins_domain_and_includes_pad():
+    schema = domain_schema("mechanical")
+    assert schema["properties"]["domain"] == {"const": "mechanical"}
+    consts = {v["properties"]["type"]["const"] for v in _variants(schema)}
+    assert consts == {"part", "body", "sketch", "pad", "pocket"}
 
 
 def test_hardware_schema_pins_domain_const():
@@ -53,7 +61,7 @@ def _collect_refs(node):
     return refs
 
 
-@pytest.mark.parametrize("domain", ["hardware", "threed"])
+@pytest.mark.parametrize("domain", ["hardware", "threed", "mechanical"])
 def test_all_internal_refs_resolve(domain):
     schema = domain_schema(domain)
     defs = schema["$defs"]

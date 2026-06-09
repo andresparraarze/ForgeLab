@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Mechanical CAD domain: typed vocabulary (`forgelab/spec/mechanical.py` —
+  Part/Body/Sketch/SketchGeometry/Constraint/Pad/Pocket/Placement), a stdlib-only
+  FCStd codec (`forgelab/formats/fcstd.py`), real FreeCAD `.FCStd`
+  importer/exporter with an IR-level round-trip guarantee, and a box-with-hole
+  example.
+- Mechanical domain registered in the AI SDK (`domain_schema`/`system_prompt`/
+  `few_shot`/`validate_llm_output` now support `"mechanical"`).
 - AI SDK (`forgelab/sdk/`): `domain_schema()` tight per-domain JSON Schema,
   `system_prompt()`/`few_shot()` prompt templates, `validate_llm_output()` for
   cleaning and validating raw LLM output, and `ForgeAgent` (Claude-backed,
@@ -40,9 +47,11 @@ All notable changes to this project are documented here. The format is based on
 - Real `examples/threed/cube.gltf` (red cube) and its generated `cube.forge.json`.
 
 ### Changed
-- `SPEC_VERSION` bumped to `0.4.0` (additive hardware, 3D, then AI-SDK
-  vocabularies; root model unchanged; backward compatible — compatibility
-  remains major-based). Example `.forge.json` files regenerated.
+- `SPEC_VERSION` bumped to `0.5.0` (additive hardware, 3D, AI-SDK, then
+  mechanical vocabularies; root model unchanged; backward compatible —
+  compatibility remains major-based). Example `.forge.json` files regenerated.
+- `forgelab.importers.mechanical` and `forgelab.exporters.mechanical` are now
+  packages (FreeCAD implemented; Fusion 360 native stubs preserved).
 - Importers/exporters may now depend on `forgelab.formats` (shared neutral
   format primitives) in addition to `forgelab.spec`.
 - `forgelab.importers.threed` and `forgelab.exporters.threed` are now packages

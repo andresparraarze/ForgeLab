@@ -5,7 +5,7 @@
 [![CI](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml/badge.svg)](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
-[![Spec](https://img.shields.io/badge/spec-v0.4.0-orange.svg)](forgelab/spec/version.py)
+[![Spec](https://img.shields.io/badge/spec-v0.5.0-orange.svg)](forgelab/spec/version.py)
 [![Status](https://img.shields.io/badge/status-pre--alpha-red.svg)](#project-status)
 
 ForgeLab defines a JSON **intermediate representation (IR)** that sits between AI agents and design
@@ -29,6 +29,7 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
   - [Build IR with the AI SDK](#build-ir-with-the-ai-sdk)
   - [Round-trip a KiCad board](#round-trip-a-kicad-board)
   - [Round-trip a glTF scene](#round-trip-a-gltf-scene)
+  - [Round-trip a FreeCAD model](#round-trip-a-freecad-model)
   - [Run the compiler service](#run-the-compiler-service)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
@@ -56,8 +57,8 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board) |
 | Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
+| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketch dimensions) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
-| Mechanical CAD | FreeCAD       |   🚧   |   🚧   | stub                                         |
 | 3D / Game      | glTF (.gltf)  |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene hierarchy) |
 | 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
 | 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
@@ -164,6 +165,38 @@ assert GltfImporter().to_ir(gltf_bytes) == doc
 Mesh geometry is fully decoded into plain JSON arrays (positions, indices) — no
 opaque binary buffers — so an agent can read and edit the scene directly.
 
+### Round-trip a FreeCAD model
+
+Import a FreeCAD `.FCStd` mechanical model, work with the feature tree as JSON,
+and export it back:
+
+```python
+from forgelab.importers.mechanical import FreeCADImporter
+from forgelab.exporters.mechanical import FreeCADExporter
+
+source = open("examples/mechanical/box-with-hole.FCStd", "rb").read()
+
+doc = FreeCADImporter().to_ir(source)         # .FCStd -> ForgeDocument
+features = [n.id for n in doc.nodes if n.type in ("pad", "pocket")]
+print(features)                               # ['Pad', 'Pocket']
+
+fcstd_bytes = FreeCADExporter().from_ir(doc)  # ForgeDocument -> .FCStd
+
+# The round-trip is stable: import -> export -> import is an identity over the IR.
+assert FreeCADImporter().to_ir(fcstd_bytes) == doc
+```
+
+The parametric feature tree — parts, bodies, sketches with dimensions, pads
+(extrusions) and pockets (cuts) — is captured as plain JSON nodes with link
+references, so an agent can read and edit the model directly. Parsing uses only
+the standard library (`zipfile` + `xml.etree`), so **no FreeCAD installation is
+required**.
+
+The importer targets ForgeLab's canonical `.FCStd` subset (the feature tree the
+exporter writes); the round-trip guarantee is an identity over the IR. Full
+FreeCAD-authored files carry additional object types and properties that this
+subset does not yet model.
+
 ### Run the compiler service
 
 ForgeLab also ships as a compiler-as-a-service so agents can call it over HTTP:
@@ -201,9 +234,9 @@ testable plugin and makes adding the next one a contained change.
 forgelab/
 ├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, hardware vocabulary
 ├── core/        # validate(), registry, compiler pipeline, errors
-├── formats/     # shared, zero-dependency format primitives (S-expression + glTF codec)
-├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad implemented)
-├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad implemented)
+├── formats/     # shared, zero-dependency format primitives (S-expression, glTF, FCStd)
+├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
+├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
 ├── sdk/         # AI agent helpers
 └── api/         # FastAPI compiler-as-a-service
 examples/        # real sample designs (e.g. hardware/blinky.kicad_pcb + its ForgeLab JSON)
@@ -213,17 +246,18 @@ tests/           # pytest suite, including the KiCad round-trip guarantee
 ## Spec versioning
 
 Every document carries a `forgelab_version`. Compatibility is **major-based**: a document validates
-against any library sharing its major version. The current spec is **v0.4.0** (`SPEC_VERSION` in
+against any library sharing its major version. The current spec is **v0.5.0** (`SPEC_VERSION` in
 `forgelab/spec/version.py`). Any change to the `ForgeDocument` root or a breaking change to a domain
 vocabulary bumps the version — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Project status
 
-**Pre-alpha (v0.1 of the library, v0.4.0 of the spec).** The IR, validator, compiler pipeline, API,
-two end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware) and the **glTF `.gltf`** (3D /
-game) importer/exporter pairs — and the **AI SDK** (schema export, prompt templates, output
-validation, and a Claude-backed `ForgeAgent`) all work and are covered by tests. The remaining tool
-integrations are scaffolded stubs awaiting implementation. APIs may change before 1.0.
+**Pre-alpha (v0.1 of the library, v0.5.0 of the spec).** The IR, validator, compiler pipeline, API,
+three end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware), the **glTF `.gltf`** (3D /
+game), and the **FreeCAD `.FCStd`** (mechanical CAD) importer/exporter pairs — and the **AI SDK**
+(schema export, prompt templates, output validation, and a Claude-backed `ForgeAgent`) all work and
+are covered by tests. The remaining tool integrations are scaffolded stubs awaiting implementation.
+APIs may change before 1.0.
 
 ## Roadmap
 
@@ -233,7 +267,8 @@ integrations are scaffolded stubs awaiting implementation. APIs may change befor
 - [x] KiCad `.kicad_pcb` importer/exporter round-trip
 - [x] 3D / Game: Blender via glTF round-trip (meshes, materials, scene hierarchy)
 - [ ] Hardware: Gerber and Altium
-- [ ] Mechanical CAD: FreeCAD, then Fusion 360
+- [x] Mechanical CAD: FreeCAD `.FCStd` importer/exporter round-trip
+- [ ] Mechanical CAD: Fusion 360
 - [ ] 3D / Game: Unreal Engine, glTF textures/animations, and `.glb` binary container
 - [ ] Transform passes (e.g. design-rule checks, layer remaps) over the IR
 - [ ] HTTP `/import` endpoint and a CLI

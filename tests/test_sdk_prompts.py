@@ -4,14 +4,14 @@ from forgelab.sdk.prompts import few_shot, system_prompt
 from forgelab.sdk.validation import validate_llm_output
 
 
-@pytest.mark.parametrize("domain", ["hardware", "threed"])
+@pytest.mark.parametrize("domain", ["hardware", "threed", "mechanical"])
 def test_system_prompt_nonempty_and_names_domain(domain):
     prompt = system_prompt(domain)
     assert isinstance(prompt, str) and prompt.strip()
     assert domain in prompt
 
 
-@pytest.mark.parametrize("domain", ["hardware", "threed"])
+@pytest.mark.parametrize("domain", ["hardware", "threed", "mechanical"])
 def test_few_shot_examples_are_valid(domain):
     examples = few_shot(domain)
     assert examples, "expected at least one few-shot example"

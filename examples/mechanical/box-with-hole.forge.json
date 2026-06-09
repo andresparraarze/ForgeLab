@@ -1,0 +1,203 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "box-with-hole",
+    "generator": "forgelab-freecad",
+    "description": null
+  },
+  "nodes": [
+    {
+      "id": "Part",
+      "type": "part",
+      "props": {
+        "name": "Part",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "Body",
+      "type": "body",
+      "props": {
+        "name": "Body",
+        "part": "Part",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "Sketch",
+      "type": "sketch",
+      "props": {
+        "name": "Sketch",
+        "body": "Body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              0.0,
+              40.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              40.0,
+              0.0,
+              40.0,
+              20.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              40.0,
+              20.0,
+              0.0,
+              20.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              20.0,
+              0.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          }
+        ],
+        "constraints": [
+          {
+            "ctype": "DistanceX",
+            "value": 40.0,
+            "name": "Width"
+          },
+          {
+            "ctype": "DistanceY",
+            "value": 20.0,
+            "name": "Depth"
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "Pad",
+      "type": "pad",
+      "props": {
+        "name": "Pad",
+        "body": "Body",
+        "profile": "Sketch",
+        "length": 10.0,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    },
+    {
+      "id": "Sketch001",
+      "type": "sketch",
+      "props": {
+        "name": "Sketch001",
+        "body": "Body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "points": [],
+            "center": [
+              20.0,
+              10.0
+            ],
+            "radius": 4.0
+          }
+        ],
+        "constraints": [
+          {
+            "ctype": "Radius",
+            "value": 4.0,
+            "name": "HoleRadius"
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "Pocket",
+      "type": "pocket",
+      "props": {
+        "name": "Pocket",
+        "body": "Body",
+        "profile": "Sketch001",
+        "length": 0.0,
+        "through_all": true,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    }
+  ]
+}

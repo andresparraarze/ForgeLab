@@ -1,4 +1,4 @@
-"""Mechanical-CAD importers (Fusion 360, FreeCAD) -> ForgeLab IR. (stubs)"""
+"""Mechanical-CAD native-format importers (Fusion 360). (stub)"""
 
 from forgelab.importers.base import Importer
 from forgelab.spec import ForgeDocument
@@ -11,12 +11,3 @@ class Fusion360Importer(Importer):
 
     def to_ir(self, source: bytes) -> ForgeDocument:
         raise NotImplementedError("Fusion 360 import is not implemented yet.")
-
-
-class FreeCADImporter(Importer):
-    """Import a FreeCAD model into ForgeLab IR. (stub)"""
-
-    tool_name = "freecad"
-
-    def to_ir(self, source: bytes) -> ForgeDocument:
-        raise NotImplementedError("FreeCAD import is not implemented yet.")
