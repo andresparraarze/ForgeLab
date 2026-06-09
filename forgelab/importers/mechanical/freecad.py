@@ -1,5 +1,7 @@
 """FreeCAD .FCStd importer -> ForgeLab IR."""
 
+from pydantic import ValidationError
+
 from forgelab.formats import FcstdError, read_document
 from forgelab.importers.base import Importer
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
@@ -33,6 +35,10 @@ _MODEL_BY_NODE = {
     NODE_POCKET: Pocket,
 }
 
+assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), (
+    "FreeCAD type maps are out of sync"
+)
+
 
 class FreeCADParseError(FcstdError):
     """Raised when an FCStd document cannot be mapped to ForgeLab IR."""
@@ -60,7 +66,7 @@ class FreeCADImporter(Importer):
             model = _MODEL_BY_NODE[node_type]
             try:
                 validated = model.model_validate(props)
-            except Exception as exc:
+            except ValidationError as exc:
                 raise FreeCADParseError(
                     f"Object {obj.name!r} has invalid {node_type} properties: {exc}"
                 ) from exc

@@ -64,3 +64,38 @@ def test_invalid_props_raise_parse_error():
     )
     with pytest.raises(FreeCADParseError):
         FreeCADImporter().to_ir(bad)
+
+
+def test_import_handles_sketch_and_pocket_types():
+    objects = [
+        FcObject(
+            "Sketch",
+            "Sketcher::SketchObject",
+            [
+                FcProperty("name", "String", "Sketch"),
+                FcProperty(
+                    "geometry",
+                    "GeometryList",
+                    [{"geo_type": "circle", "points": [], "center": [0.0, 0.0], "radius": 4.0}],
+                ),
+                FcProperty(
+                    "constraints",
+                    "ConstraintList",
+                    [{"ctype": "Radius", "value": 4.0, "name": ""}],
+                ),
+            ],
+        ),
+        FcObject(
+            "Pocket",
+            "PartDesign::Pocket",
+            [
+                FcProperty("name", "String", "Pocket"),
+                FcProperty("profile", "Link", "Sketch"),
+                FcProperty("through_all", "Bool", True),
+            ],
+        ),
+    ]
+    doc = FreeCADImporter().to_ir(write_fcstd(FcDocument(objects=objects)))
+    assert [(n.id, n.type) for n in doc.nodes] == [("Sketch", "sketch"), ("Pocket", "pocket")]
+    assert doc.nodes[0].props["geometry"][0]["radius"] == 4.0
+    assert doc.nodes[1].props["through_all"] is True
