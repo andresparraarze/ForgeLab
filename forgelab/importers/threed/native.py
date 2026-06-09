@@ -1,4 +1,4 @@
-"""3D / game importers (Blender, Unreal Engine) -> ForgeLab IR. (stubs)"""
+"""3D / game native-format importers (Blender .blend, Unreal). (stubs)"""
 
 from forgelab.importers.base import Importer
 from forgelab.spec import ForgeDocument
@@ -10,7 +10,7 @@ class BlenderImporter(Importer):
     tool_name = "blender"
 
     def to_ir(self, source: bytes) -> ForgeDocument:
-        raise NotImplementedError("Blender import is not implemented yet.")
+        raise NotImplementedError("Blender native import is not implemented yet.")
 
 
 class UnrealImporter(Importer):

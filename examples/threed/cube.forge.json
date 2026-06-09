@@ -1,0 +1,139 @@
+{
+  "forgelab_version": "0.3.0",
+  "domain": "threed",
+  "meta": {
+    "name": "Scene",
+    "generator": "forgelab-gltf",
+    "description": null
+  },
+  "nodes": [
+    {
+      "id": "Scene",
+      "type": "scene",
+      "props": {
+        "name": "Scene"
+      },
+      "children": []
+    },
+    {
+      "id": "RedMaterial",
+      "type": "material",
+      "props": {
+        "name": "RedMaterial",
+        "base_color": [
+          0.8,
+          0.1,
+          0.1,
+          1.0
+        ],
+        "metallic": 0.0,
+        "roughness": 0.5
+      },
+      "children": []
+    },
+    {
+      "id": "CubeMesh",
+      "type": "mesh",
+      "props": {
+        "name": "CubeMesh",
+        "primitives": [
+          {
+            "positions": [
+              -0.5,
+              -0.5,
+              -0.5,
+              0.5,
+              -0.5,
+              -0.5,
+              0.5,
+              0.5,
+              -0.5,
+              -0.5,
+              0.5,
+              -0.5,
+              -0.5,
+              -0.5,
+              0.5,
+              0.5,
+              -0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              -0.5,
+              0.5,
+              0.5
+            ],
+            "indices": [
+              0,
+              1,
+              2,
+              0,
+              2,
+              3,
+              4,
+              6,
+              5,
+              4,
+              7,
+              6,
+              0,
+              4,
+              5,
+              0,
+              5,
+              1,
+              3,
+              2,
+              6,
+              3,
+              6,
+              7,
+              1,
+              5,
+              6,
+              1,
+              6,
+              2,
+              0,
+              3,
+              7,
+              0,
+              7,
+              4
+            ],
+            "material": "RedMaterial"
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "Cube",
+      "type": "object",
+      "props": {
+        "name": "Cube",
+        "transform": {
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "mesh": "CubeMesh"
+      },
+      "children": []
+    }
+  ]
+}
