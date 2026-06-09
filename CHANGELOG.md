@@ -40,9 +40,9 @@ All notable changes to this project are documented here. The format is based on
 - Real `examples/threed/cube.gltf` (red cube) and its generated `cube.forge.json`.
 
 ### Changed
-- `SPEC_VERSION` bumped to 0.4.0; example `.forge.json` files regenerated.
-- `SPEC_VERSION` bumped to `0.3.0` (additive hardware then 3D vocabularies; root
-  model unchanged; backward compatible — compatibility remains major-based).
+- `SPEC_VERSION` bumped to `0.4.0` (additive hardware, 3D, then AI-SDK
+  vocabularies; root model unchanged; backward compatible — compatibility
+  remains major-based). Example `.forge.json` files regenerated.
 - Importers/exporters may now depend on `forgelab.formats` (shared neutral
   format primitives) in addition to `forgelab.spec`.
 - `forgelab.importers.threed` and `forgelab.exporters.threed` are now packages
