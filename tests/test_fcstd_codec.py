@@ -121,3 +121,49 @@ def test_unsupported_property_type_raises_on_write():
     doc = FcDocument(objects=[FcObject("X", "App::Part", [FcProperty("p", "Mystery", 1)])])
     with pytest.raises(FcstdError):
         write_fcstd(doc)
+
+
+def test_integer_property_roundtrips():
+    doc = FcDocument(objects=[FcObject("X", "App::Part", [FcProperty("count", "Integer", 7)])])
+    restored = read_document(write_fcstd(doc))
+    assert restored.objects[0].properties[0].value == 7
+
+
+def test_empty_document_roundtrips():
+    doc = FcDocument(name="empty")
+    assert read_document(write_fcstd(doc)) == doc
+
+
+def test_malformed_placement_raises_on_write():
+    doc = FcDocument(
+        objects=[
+            FcObject(
+                "B",
+                "PartDesign::Body",
+                [
+                    FcProperty(
+                        "placement",
+                        "Placement",
+                        {"position": [0.0, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0]},
+                    )
+                ],
+            )
+        ]
+    )
+    with pytest.raises(FcstdError):
+        write_fcstd(doc)
+
+
+def test_unsupported_property_type_raises_on_read():
+    xml = (
+        "<Document SchemaVersion='4' DocName='' DocGenerator=''>"
+        "<Objects Count='1'><Object type='App::Part' name='X'/></Objects>"
+        "<ObjectData Count='1'><Object name='X'><Properties Count='1'>"
+        "<Property name='p' type='Mystery' value='1'/>"
+        "</Properties></Object></ObjectData></Document>"
+    )
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("Document.xml", xml)
+    with pytest.raises(FcstdError):
+        read_document(buffer.getvalue())

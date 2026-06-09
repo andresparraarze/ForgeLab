@@ -164,7 +164,14 @@ def _build_document_xml(document: FcDocument) -> bytes:
         od = ET.SubElement(data_el, "Object", {"name": obj.name})
         props_el = ET.SubElement(od, "Properties", {"Count": str(len(obj.properties))})
         for prop in obj.properties:
-            _encode_property(props_el, prop)
+            try:
+                _encode_property(props_el, prop)
+            except FcstdError:
+                raise
+            except (ValueError, KeyError, TypeError) as exc:
+                raise FcstdError(
+                    f"Cannot encode property {prop.name!r} of {obj.name!r}: {exc}"
+                ) from exc
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
@@ -173,7 +180,7 @@ def write_fcstd(document: FcDocument) -> bytes:
     """Serialize an FcDocument to deterministic FCStd (ZIP) bytes."""
     document_xml = _build_document_xml(document)
     buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(buffer, "w") as zf:
         info = zipfile.ZipInfo(_DOCUMENT_XML, date_time=_ZIP_DATE)
         info.compress_type = zipfile.ZIP_DEFLATED
         zf.writestr(info, document_xml)
