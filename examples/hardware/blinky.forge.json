@@ -1,0 +1,29 @@
+{
+  "forgelab_version": "0.1.0",
+  "domain": "hardware",
+  "meta": {
+    "name": "blinky",
+    "generator": "forgelab-examples",
+    "description": "A minimal LED blinker: one resistor and one LED."
+  },
+  "nodes": [
+    {
+      "id": "r1",
+      "type": "component",
+      "props": { "ref": "R1", "footprint": "0603", "value": "330R" },
+      "children": []
+    },
+    {
+      "id": "d1",
+      "type": "component",
+      "props": { "ref": "D1", "footprint": "0805", "value": "RED-LED" },
+      "children": []
+    },
+    {
+      "id": "net_led",
+      "type": "net",
+      "props": { "name": "LED_A", "connects": ["r1.2", "d1.1"] },
+      "children": []
+    }
+  ]
+}
