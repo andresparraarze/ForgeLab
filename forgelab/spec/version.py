@@ -5,7 +5,7 @@ long-term compatibility. Compatibility is determined by the major version:
 documents with a different major version than the running library are rejected.
 """
 
-SPEC_VERSION = "0.2.0"
+SPEC_VERSION = "0.3.0"
 
 
 def is_compatible(version: str) -> bool:
