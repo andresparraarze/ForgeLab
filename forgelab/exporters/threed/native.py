@@ -1,4 +1,4 @@
-"""3D / game exporters (Blender, Unreal Engine) from ForgeLab IR. (stubs)"""
+"""3D / game native-format exporters (Blender .blend, Unreal). (stubs)"""
 
 from forgelab.exporters.base import Exporter
 from forgelab.spec import ForgeDocument
@@ -10,7 +10,7 @@ class BlenderExporter(Exporter):
     tool_name = "blender"
 
     def from_ir(self, document: ForgeDocument) -> bytes:
-        raise NotImplementedError("Blender export is not implemented yet.")
+        raise NotImplementedError("Blender native export is not implemented yet.")
 
 
 class UnrealExporter(Exporter):
