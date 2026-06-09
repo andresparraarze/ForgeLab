@@ -10,6 +10,7 @@ from forgelab.spec import (
     Mesh,
     Object3D,
     Primitive,
+    Scene,
     Transform,
 )
 
@@ -62,17 +63,10 @@ def test_models_forbid_extra_fields():
 
 
 def test_scene_model_validates_name():
-    from forgelab.spec import Scene
-
     scene = Scene.model_validate({"name": "Scene"})
     assert scene.name == "Scene"
 
 
 def test_scene_model_forbids_extra():
-    import pytest
-    from pydantic import ValidationError
-
-    from forgelab.spec import Scene
-
     with pytest.raises(ValidationError):
         Scene.model_validate({"name": "Scene", "bogus": 1})
