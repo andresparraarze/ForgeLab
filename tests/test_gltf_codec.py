@@ -73,3 +73,18 @@ def test_decode_rejects_non_base64_uri():
     }
     with pytest.raises(GltfError):
         decode_accessor(gltf, 0)
+
+
+def test_add_vec3_empty_raises():
+    with pytest.raises(GltfError):
+        BufferBuilder().add_vec3([])
+
+
+def test_decode_accessor_missing_key_raises_gltf_error():
+    gltf = {
+        "accessors": [{"type": "VEC3", "count": 1}],  # missing componentType
+        "bufferViews": [],
+        "buffers": [],
+    }
+    with pytest.raises(GltfError):
+        decode_accessor(gltf, 0)

@@ -42,17 +42,23 @@ def decode_accessor(gltf: dict, index: int) -> list[float | int]:
     if index < 0 or index >= len(accessors):
         raise GltfError(f"accessor index {index} out of range")
     acc = accessors[index]
-    comp_type = acc["componentType"]
-    acc_type = acc["type"]
-    count = acc["count"]
+    try:
+        comp_type = acc["componentType"]
+        acc_type = acc["type"]
+        count = acc["count"]
+    except (KeyError, IndexError) as exc:
+        raise GltfError(f"malformed accessor {index}: {exc}") from exc
     if comp_type not in _COMPONENT_FORMAT:
         raise GltfError(f"unsupported componentType {comp_type}")
     if acc_type not in _TYPE_COMPONENTS:
         raise GltfError(f"unsupported accessor type {acc_type!r}")
 
     n_comp = _TYPE_COMPONENTS[acc_type]
-    view = gltf["bufferViews"][acc["bufferView"]]
-    buffer = gltf["buffers"][view["buffer"]]
+    try:
+        view = gltf["bufferViews"][acc["bufferView"]]
+        buffer = gltf["buffers"][view["buffer"]]
+    except (KeyError, IndexError) as exc:
+        raise GltfError(f"malformed accessor {index}: {exc}") from exc
     data = _decode_data_uri(buffer["uri"])
 
     fmt = "<" + _COMPONENT_FORMAT[comp_type]
@@ -97,6 +103,8 @@ class BufferBuilder:
         """Add flat xyz floats as a VEC3/FLOAT accessor; return its index."""
         if len(values) % 3 != 0:
             raise GltfError("VEC3 data length must be a multiple of 3")
+        if not values:
+            raise GltfError("VEC3 data must not be empty")
         data = b"".join(struct.pack("<f", v) for v in values)
         view = self._append(data, ARRAY_BUFFER)
         xs, ys, zs = values[0::3], values[1::3], values[2::3]
