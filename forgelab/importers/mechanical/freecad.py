@@ -35,9 +35,7 @@ _MODEL_BY_NODE = {
     NODE_POCKET: Pocket,
 }
 
-assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), (
-    "FreeCAD type maps are out of sync"
-)
+assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), "FreeCAD type maps are out of sync"
 
 
 class FreeCADParseError(FcstdError):
