@@ -23,11 +23,24 @@ All notable changes to this project are documented here. The format is based on
   generic Node graph.
 - `forgelab.formats` package with a zero-dependency S-expression parser/writer.
 - Real `examples/hardware/blinky.kicad_pcb` board.
+- 3D / game domain: typed `threed` vocabulary (`Material`, `Mesh`, `Primitive`,
+  `Transform`, `Object3D`) serialized into the generic Node graph, with scene
+  hierarchy expressed via `Node.children`.
+- glTF importer and exporter (`tool_name="gltf"`) with a verified IR-level
+  `.gltf` round-trip; mesh geometry is fully decoded into JSON arrays (no opaque
+  buffers). Registered in the default pipeline registry.
+- glTF accessor/buffer codec in `forgelab.formats` (zero-dependency,
+  base64-embedded buffers).
+- Real `examples/threed/cube.gltf` (red cube) and its generated `cube.forge.json`.
 
 ### Changed
 - `SPEC_VERSION` bumped to `0.2.0` (additive hardware vocabulary; backward
   compatible — version compatibility remains major-based).
+- `SPEC_VERSION` bumped to `0.3.0` (additive 3D vocabulary; root model
+  unchanged; compatibility remains major-based).
 - Importers/exporters may now depend on `forgelab.formats` (shared neutral
   format primitives) in addition to `forgelab.spec`.
+- `forgelab.importers.threed` and `forgelab.exporters.threed` are now packages
+  (glTF implemented; Blender/Unreal native stubs preserved).
 
 [Unreleased]: https://github.com/forgelab/forgelab/commits/main

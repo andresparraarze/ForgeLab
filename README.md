@@ -5,7 +5,7 @@
 [![CI](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml/badge.svg)](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
-[![Spec](https://img.shields.io/badge/spec-v0.2.0-orange.svg)](forgelab/spec/version.py)
+[![Spec](https://img.shields.io/badge/spec-v0.3.0-orange.svg)](forgelab/spec/version.py)
 [![Status](https://img.shields.io/badge/status-pre--alpha-red.svg)](#project-status)
 
 ForgeLab defines a JSON **intermediate representation (IR)** that sits between AI agents and design
@@ -28,6 +28,7 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 - [Quickstart](#quickstart)
   - [Build IR with the AI SDK](#build-ir-with-the-ai-sdk)
   - [Round-trip a KiCad board](#round-trip-a-kicad-board)
+  - [Round-trip a glTF scene](#round-trip-a-gltf-scene)
   - [Run the compiler service](#run-the-compiler-service)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
@@ -57,7 +58,8 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 | Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
 | Mechanical CAD | FreeCAD       |   🚧   |   🚧   | stub                                         |
-| 3D / Game      | Blender       |   🚧   |   🚧   | stub                                         |
+| 3D / Game      | glTF (.gltf)  |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene hierarchy) |
+| 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
 | 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
 
 ✅ implemented · 🚧 stub (base classes in place, awaiting implementation)
@@ -111,6 +113,29 @@ kicad_bytes = KiCadExporter().from_ir(doc)   # ForgeDocument -> .kicad_pcb
 assert KiCadImporter().to_ir(kicad_bytes) == doc
 ```
 
+### Round-trip a glTF scene
+
+Import a `.gltf` 3D scene, work with the geometry as JSON, and export it back:
+
+```python
+from forgelab.importers.threed.gltf import GltfImporter
+from forgelab.exporters.threed.gltf import GltfExporter
+
+source = open("examples/threed/cube.gltf", "rb").read()
+
+doc = GltfImporter().to_ir(source)           # .gltf -> ForgeDocument
+objects = [n.id for n in doc.nodes if n.type == "object"]
+print(objects)                               # ['Cube']
+
+gltf_bytes = GltfExporter().from_ir(doc)     # ForgeDocument -> .gltf
+
+# The round-trip is stable: import -> export -> import is an identity over the IR.
+assert GltfImporter().to_ir(gltf_bytes) == doc
+```
+
+Mesh geometry is fully decoded into plain JSON arrays (positions, indices) — no
+opaque binary buffers — so an agent can read and edit the scene directly.
+
 ### Run the compiler service
 
 ForgeLab also ships as a compiler-as-a-service so agents can call it over HTTP:
@@ -148,7 +173,7 @@ testable plugin and makes adding the next one a contained change.
 forgelab/
 ├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, hardware vocabulary
 ├── core/        # validate(), registry, compiler pipeline, errors
-├── formats/     # shared, zero-dependency file-format primitives (S-expression parser/writer)
+├── formats/     # shared, zero-dependency format primitives (S-expression + glTF codec)
 ├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad implemented)
 ├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad implemented)
 ├── sdk/         # AI agent helpers
@@ -166,10 +191,10 @@ vocabulary bumps the version — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CHA
 
 ## Project status
 
-**Pre-alpha (v0.1 of the library, v0.2.0 of the spec).** The IR, validator, compiler pipeline, SDK,
-API, and the **KiCad importer/exporter round-trip** all work end-to-end and are covered by tests.
-The remaining tool integrations are scaffolded stubs awaiting implementation. APIs may change before
-1.0.
+**Pre-alpha (v0.1 of the library, v0.3.0 of the spec).** The IR, validator, compiler pipeline, SDK,
+API, and two end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware) and the **glTF `.gltf`**
+(3D / game) importer/exporter pairs — all work and are covered by tests. The remaining tool
+integrations are scaffolded stubs awaiting implementation. APIs may change before 1.0.
 
 ## Roadmap
 
@@ -177,9 +202,10 @@ The remaining tool integrations are scaffolded stubs awaiting implementation. AP
 - [x] AI SDK and FastAPI compiler service
 - [x] Typed hardware vocabulary + S-expression format primitive
 - [x] KiCad `.kicad_pcb` importer/exporter round-trip
+- [x] 3D / Game: Blender via glTF round-trip (meshes, materials, scene hierarchy)
 - [ ] Hardware: Gerber and Altium
 - [ ] Mechanical CAD: FreeCAD, then Fusion 360
-- [ ] 3D / Game: Blender, then Unreal Engine
+- [ ] 3D / Game: Unreal Engine, glTF textures/animations, and `.glb` binary container
 - [ ] Transform passes (e.g. design-rule checks, layer remaps) over the IR
 - [ ] HTTP `/import` endpoint and a CLI
 
