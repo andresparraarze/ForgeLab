@@ -75,3 +75,20 @@ def test_import_garbage_raises_parse_error():
         GltfImporter().to_ir(b"not json")
     with pytest.raises(GltfParseError):
         GltfImporter().to_ir(b'{"asset": {"version": "1.0"}}')
+
+
+def test_import_out_of_range_node_index_raises():
+    bad = b'{"asset":{"version":"2.0"},"scene":0,"scenes":[{"name":"S","nodes":[99]}],"nodes":[]}'
+    with pytest.raises(GltfParseError):
+        GltfImporter().to_ir(bad)
+
+
+def test_import_primitive_bad_accessor_raises_parse_error():
+    bad = (
+        b'{"asset":{"version":"2.0"},"scene":0,'
+        b'"scenes":[{"name":"S","nodes":[0]}],'
+        b'"nodes":[{"name":"N","mesh":0}],'
+        b'"meshes":[{"name":"M","primitives":[{"attributes":{"POSITION":5}}]}]}'
+    )
+    with pytest.raises(GltfParseError):
+        GltfImporter().to_ir(bad)

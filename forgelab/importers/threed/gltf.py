@@ -112,10 +112,13 @@ class GltfImporter(Importer):
             pos_index = prim.get("attributes", {}).get("POSITION")
             if pos_index is None:
                 raise GltfParseError("primitive missing POSITION attribute")
-            positions = [float(v) for v in decode_accessor(gltf, pos_index)]
-            indices: list[int] = []
-            if "indices" in prim:
-                indices = [int(v) for v in decode_accessor(gltf, prim["indices"])]
+            try:
+                positions = [float(v) for v in decode_accessor(gltf, pos_index)]
+                indices: list[int] = []
+                if "indices" in prim:
+                    indices = [int(v) for v in decode_accessor(gltf, prim["indices"])]
+            except GltfError as exc:
+                raise GltfParseError(f"failed to decode primitive geometry: {exc}") from exc
             material = ""
             if "material" in prim:
                 material = _material_id(gltf, prim["material"])
@@ -124,6 +127,8 @@ class GltfImporter(Importer):
 
     def _object(self, gltf: dict, index: int, counter: list[int]) -> Node:
         gltf_nodes = gltf.get("nodes", [])
+        if not 0 <= index < len(gltf_nodes):
+            raise GltfParseError(f"node index {index} out of range")
         gnode = gltf_nodes[index]
         name = gnode.get("name")
         node_id = name or f"object_{counter[0]}"
