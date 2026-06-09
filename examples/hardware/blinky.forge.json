@@ -1,28 +1,177 @@
 {
-  "forgelab_version": "0.1.0",
+  "forgelab_version": "0.2.0",
   "domain": "hardware",
   "meta": {
     "name": "blinky",
-    "generator": "forgelab-examples",
-    "description": "A minimal LED blinker: one resistor and one LED."
+    "generator": "forgelab-kicad",
+    "description": null
   },
   "nodes": [
     {
-      "id": "r1",
-      "type": "component",
-      "props": { "ref": "R1", "footprint": "0603", "value": "330R" },
+      "id": "board",
+      "type": "board",
+      "props": {
+        "kicad_version": "20221018",
+        "generator": "pcbnew",
+        "layers": [
+          {
+            "ordinal": 0,
+            "canonical_name": "F.Cu",
+            "layer_type": "signal",
+            "user_name": null
+          },
+          {
+            "ordinal": 31,
+            "canonical_name": "B.Cu",
+            "layer_type": "signal",
+            "user_name": null
+          },
+          {
+            "ordinal": 44,
+            "canonical_name": "Edge.Cuts",
+            "layer_type": "user",
+            "user_name": null
+          }
+        ],
+        "outline": [
+          {
+            "start": [
+              90.0,
+              40.0
+            ],
+            "end": [
+              130.0,
+              40.0
+            ]
+          },
+          {
+            "start": [
+              130.0,
+              40.0
+            ],
+            "end": [
+              130.0,
+              60.0
+            ]
+          },
+          {
+            "start": [
+              130.0,
+              60.0
+            ],
+            "end": [
+              90.0,
+              60.0
+            ]
+          },
+          {
+            "start": [
+              90.0,
+              60.0
+            ],
+            "end": [
+              90.0,
+              40.0
+            ]
+          }
+        ],
+        "design_rules": {
+          "clearance": 0.2,
+          "track_width": 0.25,
+          "via_diameter": 0.8,
+          "via_drill": 0.4
+        }
+      },
       "children": []
     },
     {
-      "id": "d1",
-      "type": "component",
-      "props": { "ref": "D1", "footprint": "0805", "value": "RED-LED" },
-      "children": []
-    },
-    {
-      "id": "net_led",
+      "id": "net:0",
       "type": "net",
-      "props": { "name": "LED_A", "connects": ["r1.2", "d1.1"] },
+      "props": {
+        "code": 0,
+        "name": ""
+      },
+      "children": []
+    },
+    {
+      "id": "net:1",
+      "type": "net",
+      "props": {
+        "code": 1,
+        "name": "GND"
+      },
+      "children": []
+    },
+    {
+      "id": "net:2",
+      "type": "net",
+      "props": {
+        "code": 2,
+        "name": "+3V3"
+      },
+      "children": []
+    },
+    {
+      "id": "net:3",
+      "type": "net",
+      "props": {
+        "code": 3,
+        "name": "LED_A"
+      },
+      "children": []
+    },
+    {
+      "id": "R1",
+      "type": "component",
+      "props": {
+        "reference": "R1",
+        "value": "330R",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          100.0,
+          50.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+3V3"
+          },
+          {
+            "number": "2",
+            "net": "LED_A"
+          }
+        ],
+        "uuid": "11111111-1111-1111-1111-111111111111"
+      },
+      "children": []
+    },
+    {
+      "id": "D1",
+      "type": "component",
+      "props": {
+        "reference": "D1",
+        "value": "RED",
+        "footprint": "LED_SMD:LED_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          110.0,
+          50.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "LED_A"
+          },
+          {
+            "number": "2",
+            "net": "GND"
+          }
+        ],
+        "uuid": "22222222-2222-2222-2222-222222222222"
+      },
       "children": []
     }
   ]
