@@ -62,5 +62,7 @@ def test_node_children_nest():
     assert node.children[0].id == "c"
 
 
-def test_spec_version_is_0_4_0():
-    assert SPEC_VERSION == "0.4.0"
+def test_spec_version_is_0_5_0():
+    from forgelab.spec.version import SPEC_VERSION
+
+    assert SPEC_VERSION == "0.5.0"
