@@ -5,6 +5,7 @@ from forgelab.core.errors import (
     IncompatibleVersionError,
     UnknownToolError,
 )
+from forgelab.core.pipeline import default_registry, transform
 from forgelab.core.registry import Registry
 from forgelab.core.validate import validate
 
@@ -13,5 +14,7 @@ __all__ = [
     "IncompatibleVersionError",
     "UnknownToolError",
     "Registry",
+    "default_registry",
+    "transform",
     "validate",
 ]
