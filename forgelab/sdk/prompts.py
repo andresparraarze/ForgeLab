@@ -16,6 +16,10 @@ _FEW_SHOT: dict[str, tuple[str, str]] = {
         "a single cube with a clearly visible red material",
         "threed/cube.forge.json",
     ),
+    "mechanical": (
+        "a 40x20x10 box with a through hole",
+        "mechanical/box-with-hole.forge.json",
+    ),
 }
 
 

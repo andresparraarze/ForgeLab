@@ -26,6 +26,18 @@ from forgelab.spec import (
     Object3D,
     Scene,
 )
+from forgelab.spec.mechanical import (
+    NODE_BODY,
+    NODE_PAD,
+    NODE_PART,
+    NODE_POCKET,
+    NODE_SKETCH,
+    Body,
+    Pad,
+    Part,
+    Pocket,
+    Sketch,
+)
 
 DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
     "hardware": {
@@ -38,6 +50,13 @@ DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
         NODE_MATERIAL: Material,
         NODE_MESH: Mesh,
         NODE_OBJECT: Object3D,
+    },
+    "mechanical": {
+        NODE_PART: Part,
+        NODE_BODY: Body,
+        NODE_SKETCH: Sketch,
+        NODE_PAD: Pad,
+        NODE_POCKET: Pocket,
     },
 }
 
