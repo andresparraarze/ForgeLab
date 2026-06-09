@@ -230,8 +230,8 @@ forgelab/
 ├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, hardware vocabulary
 ├── core/        # validate(), registry, compiler pipeline, errors
 ├── formats/     # shared, zero-dependency format primitives (S-expression, glTF, FCStd)
-├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad implemented)
-├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad implemented)
+├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
+├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
 ├── sdk/         # AI agent helpers
 └── api/         # FastAPI compiler-as-a-service
 examples/        # real sample designs (e.g. hardware/blinky.kicad_pcb + its ForgeLab JSON)
