@@ -30,9 +30,7 @@ def _valid_doc_dict():
         "forgelab_version": SPEC_VERSION,
         "domain": "hardware",
         "meta": {"name": "blinky", "generator": "test"},
-        "nodes": [
-            {"id": "r1", "type": "component", "props": {"value": "330R"}, "children": []}
-        ],
+        "nodes": [{"id": "r1", "type": "component", "props": {"value": "330R"}, "children": []}],
     }
 
 
