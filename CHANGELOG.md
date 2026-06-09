@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- AI SDK (`forgelab/sdk/`): `domain_schema()` tight per-domain JSON Schema,
+  `system_prompt()`/`few_shot()` prompt templates, `validate_llm_output()` for
+  cleaning and validating raw LLM output, and `ForgeAgent` (Claude-backed,
+  configurable model, natural language -> validated `ForgeDocument`).
+- `Scene` model in the 3D vocabulary; `LLMOutputError` in the core error
+  hierarchy; optional `agent` extra (`pip install "forgelab[agent]"`).
 - Initial scaffold: `spec` IR models (`ForgeDocument`, `Node`, `Domain`) with a
   required `forgelab_version` field and major-version compatibility checks.
 - `core` compiler: `validate()`, tool registry, and transform pipeline.
@@ -34,8 +40,9 @@ All notable changes to this project are documented here. The format is based on
 - Real `examples/threed/cube.gltf` (red cube) and its generated `cube.forge.json`.
 
 ### Changed
-- `SPEC_VERSION` bumped to `0.3.0` (additive hardware then 3D vocabularies; root
-  model unchanged; backward compatible — compatibility remains major-based).
+- `SPEC_VERSION` bumped to `0.4.0` (additive hardware, 3D, then AI-SDK
+  vocabularies; root model unchanged; backward compatible — compatibility
+  remains major-based). Example `.forge.json` files regenerated.
 - Importers/exporters may now depend on `forgelab.formats` (shared neutral
   format primitives) in addition to `forgelab.spec`.
 - `forgelab.importers.threed` and `forgelab.exporters.threed` are now packages

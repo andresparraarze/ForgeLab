@@ -8,10 +8,27 @@ import json
 from typing import Any
 
 from forgelab.core import validate
+from forgelab.core.errors import LLMOutputError
+from forgelab.sdk.agent import ForgeAgent
+from forgelab.sdk.prompts import few_shot, system_prompt
+from forgelab.sdk.schema import DOMAIN_VOCAB, domain_schema
+from forgelab.sdk.validation import validate_llm_output
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument
 from forgelab.spec.version import SPEC_VERSION
 
-__all__ = ["new_document", "load", "dump", "SPEC_VERSION"]
+__all__ = [
+    "new_document",
+    "load",
+    "dump",
+    "SPEC_VERSION",
+    "ForgeAgent",
+    "domain_schema",
+    "DOMAIN_VOCAB",
+    "system_prompt",
+    "few_shot",
+    "validate_llm_output",
+    "LLMOutputError",
+]
 
 
 def new_document(domain: str, name: str, generator: str = "forgelab-sdk") -> ForgeDocument:

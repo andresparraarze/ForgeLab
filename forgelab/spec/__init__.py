@@ -23,6 +23,7 @@ from forgelab.spec.threed import (
     Mesh,
     Object3D,
     Primitive,
+    Scene,
     Transform,
 )
 from forgelab.spec.version import SPEC_VERSION, is_compatible
@@ -53,5 +54,6 @@ __all__ = [
     "Mesh",
     "Object3D",
     "Primitive",
+    "Scene",
     "Transform",
 ]

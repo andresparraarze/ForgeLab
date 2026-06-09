@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from forgelab.core import IncompatibleVersionError, validate
+from forgelab.core import ForgeError, IncompatibleVersionError, LLMOutputError, validate
 from forgelab.spec import SPEC_VERSION, ForgeDocument
 
 
@@ -30,3 +30,7 @@ def test_validate_rejects_incompatible_version():
 def test_validate_rejects_malformed_document():
     with pytest.raises(ValidationError):
         validate({"forgelab_version": SPEC_VERSION})  # missing domain/meta
+
+
+def test_llm_output_error_is_forge_error():
+    assert issubclass(LLMOutputError, ForgeError)

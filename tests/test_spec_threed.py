@@ -10,6 +10,7 @@ from forgelab.spec import (
     Mesh,
     Object3D,
     Primitive,
+    Scene,
     Transform,
 )
 
@@ -59,3 +60,13 @@ def test_object_defaults_to_no_mesh():
 def test_models_forbid_extra_fields():
     with pytest.raises(ValidationError):
         Material(name="x", base_color=[1, 1, 1, 1], bogus=1)
+
+
+def test_scene_model_validates_name():
+    scene = Scene.model_validate({"name": "Scene"})
+    assert scene.name == "Scene"
+
+
+def test_scene_model_forbids_extra():
+    with pytest.raises(ValidationError):
+        Scene.model_validate({"name": "Scene", "bogus": 1})

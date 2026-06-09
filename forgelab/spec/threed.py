@@ -17,6 +17,14 @@ NODE_MESH = "mesh"
 NODE_MATERIAL = "material"
 
 
+class Scene(BaseModel):
+    """A glTF scene: a named container for the object graph."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
 class Material(BaseModel):
     """A PBR metallic-roughness material (scalars only)."""
 

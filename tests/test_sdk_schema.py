@@ -1,0 +1,65 @@
+import pytest
+
+from forgelab.sdk.schema import DOMAIN_VOCAB, domain_schema
+
+
+def _variants(schema):
+    return schema["$defs"]["node"]["oneOf"]
+
+
+def test_registry_covers_both_domains():
+    assert set(DOMAIN_VOCAB) == {"hardware", "threed"}
+    assert set(DOMAIN_VOCAB["hardware"]) == {"board", "net", "component"}
+    assert set(DOMAIN_VOCAB["threed"]) == {"scene", "material", "mesh", "object"}
+
+
+def test_hardware_schema_pins_domain_const():
+    schema = domain_schema("hardware")
+    assert schema["properties"]["domain"] == {"const": "hardware"}
+
+
+def test_schema_includes_every_node_type():
+    schema = domain_schema("threed")
+    consts = {v["properties"]["type"]["const"] for v in _variants(schema)}
+    assert consts == {"scene", "material", "mesh", "object"}
+
+
+def test_component_props_field_names_match_model():
+    schema = domain_schema("hardware")
+    component = next(
+        v for v in _variants(schema) if v["properties"]["type"]["const"] == "component"
+    )
+    props = component["properties"]["props"]["properties"]
+    assert "reference" in props
+    assert "footprint" in props
+
+
+def test_unknown_domain_raises():
+    with pytest.raises(KeyError):
+        domain_schema("nope")
+
+
+def _collect_refs(node):
+    refs = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str):
+                refs.append(value)
+            else:
+                refs.extend(_collect_refs(value))
+    elif isinstance(node, list):
+        for item in node:
+            refs.extend(_collect_refs(item))
+    return refs
+
+
+@pytest.mark.parametrize("domain", ["hardware", "threed"])
+def test_all_internal_refs_resolve(domain):
+    schema = domain_schema(domain)
+    defs = schema["$defs"]
+    refs = _collect_refs(schema)
+    assert refs, "expected the schema to contain $ref pointers"
+    for ref in refs:
+        assert ref.startswith("#/$defs/"), ref
+        name = ref[len("#/$defs/") :]
+        assert name in defs, f"unresolved $ref {ref!r}; available: {sorted(defs)}"

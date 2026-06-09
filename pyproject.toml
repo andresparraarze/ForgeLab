@@ -24,6 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = ["anthropic>=0.40"]
 api = ["uvicorn>=0.27"]
 dev = [
   "pytest>=8.0",

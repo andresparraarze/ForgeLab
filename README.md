@@ -5,7 +5,7 @@
 [![CI](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml/badge.svg)](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
-[![Spec](https://img.shields.io/badge/spec-v0.3.0-orange.svg)](forgelab/spec/version.py)
+[![Spec](https://img.shields.io/badge/spec-v0.4.0-orange.svg)](forgelab/spec/version.py)
 [![Status](https://img.shields.io/badge/status-pre--alpha-red.svg)](#project-status)
 
 ForgeLab defines a JSON **intermediate representation (IR)** that sits between AI agents and design
@@ -82,14 +82,42 @@ ForgeLab has no heavy runtime dependencies — just Pydantic and FastAPI. The Ki
 
 ### Build IR with the AI SDK
 
-The SDK is the ergonomic surface an agent uses to produce and consume ForgeLab JSON:
+The AI SDK takes a natural-language prompt to a validated, ready-to-compile
+`ForgeDocument` — natural language to a real KiCad file in ~10 lines:
+
+```python
+from forgelab.sdk import ForgeAgent
+from forgelab.exporters.hardware.kicad import KiCadExporter
+
+agent = ForgeAgent()                                    # reads ANTHROPIC_API_KEY
+doc = agent.design("a blinky LED board with one resistor and one LED",
+                   domain="hardware")                   # NL -> validated ForgeDocument
+with open("blinky.kicad_pcb", "wb") as f:
+    f.write(KiCadExporter().from_ir(doc))               # -> real KiCad file
+```
+
+`ForgeAgent` forces Claude to emit ForgeLab JSON through a per-domain JSON
+Schema, then validates it before returning. Requires the optional extra:
+`pip install "forgelab[agent]"`.
+
+The lower-level building blocks are independent and provider-agnostic:
+
+```python
+from forgelab.sdk import domain_schema, system_prompt, few_shot, validate_llm_output
+
+domain_schema("hardware")        # tight JSON Schema for structured-output / tools
+system_prompt("threed")          # ready-made system prompt for any LLM
+few_shot("threed")               # (request, valid-JSON) examples
+validate_llm_output(raw_text, domain="hardware")  # clean + parse + validate, or raise
+```
+
+And the original primitives still work for hand-built documents:
 
 ```python
 from forgelab.sdk import new_document, dump, load
 
 doc = new_document(domain="hardware", name="blinky")
-text = dump(doc)          # JSON an agent can emit/store
-restored = load(text)     # validated back into a ForgeDocument
+restored = load(dump(doc))
 assert restored == doc
 ```
 
@@ -185,15 +213,16 @@ tests/           # pytest suite, including the KiCad round-trip guarantee
 ## Spec versioning
 
 Every document carries a `forgelab_version`. Compatibility is **major-based**: a document validates
-against any library sharing its major version. The current spec is **v0.2.0** (`SPEC_VERSION` in
+against any library sharing its major version. The current spec is **v0.4.0** (`SPEC_VERSION` in
 `forgelab/spec/version.py`). Any change to the `ForgeDocument` root or a breaking change to a domain
 vocabulary bumps the version — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Project status
 
-**Pre-alpha (v0.1 of the library, v0.3.0 of the spec).** The IR, validator, compiler pipeline, SDK,
-API, and two end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware) and the **glTF `.gltf`**
-(3D / game) importer/exporter pairs — all work and are covered by tests. The remaining tool
+**Pre-alpha (v0.1 of the library, v0.4.0 of the spec).** The IR, validator, compiler pipeline, API,
+two end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware) and the **glTF `.gltf`** (3D /
+game) importer/exporter pairs — and the **AI SDK** (schema export, prompt templates, output
+validation, and a Claude-backed `ForgeAgent`) all work and are covered by tests. The remaining tool
 integrations are scaffolded stubs awaiting implementation. APIs may change before 1.0.
 
 ## Roadmap
