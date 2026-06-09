@@ -48,21 +48,28 @@ def domain_schema(domain: str) -> dict[str, Any]:
     ``domain`` is pinned to a const; ``nodes`` is a discriminated union on
     ``type`` where each variant's ``props`` is the real vocab model's schema.
     ``children`` references the same node union recursively (scene hierarchy).
+    Each vocab model's own nested ``$defs`` (sub-models like ``Pad`` or
+    ``Transform``) are hoisted to the top level so their ``#/$defs/...`` refs
+    resolve against the returned document root.
     """
     try:
         vocab = DOMAIN_VOCAB[domain]
     except KeyError as exc:
         raise KeyError(f"Unknown domain {domain!r}; valid domains: {sorted(DOMAIN_VOCAB)}") from exc
 
-    variants: list[dict[str, Any]] = []
+    defs: dict[str, Any] = {"node": {"oneOf": []}}
+    variants: list[dict[str, Any]] = defs["node"]["oneOf"]
     for node_type, model in vocab.items():
+        props_schema = model.model_json_schema()
+        for name, sub_schema in props_schema.pop("$defs", {}).items():
+            defs[name] = sub_schema
         variants.append(
             {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
                     "type": {"const": node_type},
-                    "props": model.model_json_schema(),
+                    "props": props_schema,
                     "children": {
                         "type": "array",
                         "items": {"$ref": "#/$defs/node"},
@@ -75,7 +82,7 @@ def domain_schema(domain: str) -> dict[str, Any]:
 
     return {
         "type": "object",
-        "$defs": {"node": {"oneOf": variants}},
+        "$defs": defs,
         "properties": {
             "forgelab_version": {"type": "string"},
             "domain": {"const": domain},

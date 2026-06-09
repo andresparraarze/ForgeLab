@@ -37,3 +37,29 @@ def test_component_props_field_names_match_model():
 def test_unknown_domain_raises():
     with pytest.raises(KeyError):
         domain_schema("nope")
+
+
+def _collect_refs(node):
+    refs = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str):
+                refs.append(value)
+            else:
+                refs.extend(_collect_refs(value))
+    elif isinstance(node, list):
+        for item in node:
+            refs.extend(_collect_refs(item))
+    return refs
+
+
+@pytest.mark.parametrize("domain", ["hardware", "threed"])
+def test_all_internal_refs_resolve(domain):
+    schema = domain_schema(domain)
+    defs = schema["$defs"]
+    refs = _collect_refs(schema)
+    assert refs, "expected the schema to contain $ref pointers"
+    for ref in refs:
+        assert ref.startswith("#/$defs/"), ref
+        name = ref[len("#/$defs/") :]
+        assert name in defs, f"unresolved $ref {ref!r}; available: {sorted(defs)}"
