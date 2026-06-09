@@ -192,6 +192,11 @@ references, so an agent can read and edit the model directly. Parsing uses only
 the standard library (`zipfile` + `xml.etree`), so **no FreeCAD installation is
 required**.
 
+The importer targets ForgeLab's canonical `.FCStd` subset (the feature tree the
+exporter writes); the round-trip guarantee is an identity over the IR. Full
+FreeCAD-authored files carry additional object types and properties that this
+subset does not yet model.
+
 ### Run the compiler service
 
 ForgeLab also ships as a compiler-as-a-service so agents can call it over HTTP:
