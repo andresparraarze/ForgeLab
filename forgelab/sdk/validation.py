@@ -4,7 +4,7 @@ import json
 import re
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from forgelab.core import validate
 from forgelab.core.errors import LLMOutputError
@@ -24,6 +24,9 @@ def _extract_json(raw: str) -> str:
     if start == -1:
         raise LLMOutputError("No JSON object found in LLM output.")
     depth = 0
+    # Props are numeric/geometric with short identifier strings, so a naive
+    # brace counter is sufficient; arbitrary text values would need a
+    # string-aware scanner.
     for i in range(start, len(text)):
         char = text[i]
         if char == "{":
@@ -37,7 +40,7 @@ def _extract_json(raw: str) -> str:
     return text[start:]
 
 
-def _validate_node_props(node: Node, vocab: dict[str, type], where: str) -> None:
+def _validate_node_props(node: Node, vocab: dict[str, type[BaseModel]], where: str) -> None:
     model = vocab.get(node.type)
     if model is None:
         raise LLMOutputError(

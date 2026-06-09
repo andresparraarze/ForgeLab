@@ -61,3 +61,30 @@ def test_incompatible_version_raises():
     data["forgelab_version"] = "99.0.0"
     with pytest.raises(LLMOutputError):
         validate_llm_output(data)
+
+
+def test_invalid_child_props_reports_breadcrumb():
+    doc = new_document(domain="threed", name="s")
+    parent = Node(
+        id="root",
+        type="object",
+        props={
+            "name": "root",
+            "transform": {
+                "translation": [0, 0, 0],
+                "rotation": [0, 0, 0, 1],
+                "scale": [1, 1, 1],
+            },
+            "mesh": "",
+        },
+        children=[
+            Node(
+                id="bad",
+                type="object",
+                props={"name": "bad", "transform": {"translation": [0, 0]}},
+            )
+        ],
+    )
+    doc.nodes.append(parent)
+    with pytest.raises(LLMOutputError, match=r"child\[0\]"):
+        validate_llm_output(dump(doc), domain="threed")
