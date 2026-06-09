@@ -61,7 +61,7 @@ def _collect_refs(node):
     return refs
 
 
-@pytest.mark.parametrize("domain", ["hardware", "threed"])
+@pytest.mark.parametrize("domain", ["hardware", "threed", "mechanical"])
 def test_all_internal_refs_resolve(domain):
     schema = domain_schema(domain)
     defs = schema["$defs"]
