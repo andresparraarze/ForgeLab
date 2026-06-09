@@ -3,6 +3,7 @@
 from forgelab.core.errors import (
     ForgeError,
     IncompatibleVersionError,
+    LLMOutputError,
     UnknownToolError,
 )
 from forgelab.core.pipeline import default_registry, transform
@@ -12,6 +13,7 @@ from forgelab.core.validate import validate
 __all__ = [
     "ForgeError",
     "IncompatibleVersionError",
+    "LLMOutputError",
     "UnknownToolError",
     "Registry",
     "default_registry",

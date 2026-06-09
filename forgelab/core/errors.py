@@ -11,3 +11,7 @@ class IncompatibleVersionError(ForgeError):
 
 class UnknownToolError(ForgeError):
     """Raised when no importer/exporter is registered for a tool name."""
+
+
+class LLMOutputError(ForgeError):
+    """Raised when raw LLM output cannot be cleaned/parsed/validated into IR."""
