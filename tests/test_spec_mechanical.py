@@ -84,3 +84,20 @@ def test_pad_and_pocket_links_and_flags():
     part = Part(name="Part")
     body = Body(name="Body", part="Part")
     assert body.part == "Part" and part.name == "Part"
+
+
+def test_line_geometry_rejects_circle_fields():
+    with pytest.raises(ValidationError):
+        SketchGeometry(geo_type="line", points=[0.0, 0.0, 1.0, 0.0], center=[0.0, 0.0])
+    with pytest.raises(ValidationError):
+        SketchGeometry(geo_type="line", points=[0.0, 0.0, 1.0, 0.0], radius=5.0)
+
+
+def test_circle_geometry_rejects_line_fields():
+    with pytest.raises(ValidationError):
+        SketchGeometry(
+            geo_type="circle",
+            center=[0.0, 0.0],
+            radius=2.0,
+            points=[0.0, 0.0, 1.0, 0.0],
+        )
