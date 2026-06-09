@@ -39,7 +39,9 @@ This is the highest-leverage contribution. Each tool plugs in via a base class:
   implement `from_ir(document: ForgeDocument) -> bytes`.
 
 Register new classes in `forgelab/core/pipeline.py:default_registry`. Importers
-and exporters must depend on `forgelab.spec` only — never on each other.
+and exporters must depend on `forgelab.spec` and `forgelab.formats` only — never
+on each other and never on `forgelab.core`. Shared file-format primitives (such
+as the S-expression parser) live in `forgelab.formats`.
 
 ## Spec changes
 

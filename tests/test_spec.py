@@ -60,3 +60,7 @@ def test_node_children_nest():
         {"id": "p", "type": "group", "children": [{"id": "c", "type": "component"}]}
     )
     assert node.children[0].id == "c"
+
+
+def test_spec_version_is_0_2_0():
+    assert SPEC_VERSION == "0.2.0"
