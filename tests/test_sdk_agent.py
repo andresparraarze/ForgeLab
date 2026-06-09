@@ -63,3 +63,19 @@ def test_missing_anthropic_raises_friendly(monkeypatch):
     monkeypatch.setitem(sys.modules, "anthropic", None)
     with pytest.raises(ImportError, match=r"forgelab\[agent\]"):
         ForgeAgent()
+
+
+def test_no_tool_block_raises_llm_output_error():
+    from forgelab.core import LLMOutputError
+
+    class _EmptyMessages:
+        def create(self, **kwargs):
+            return _FakeMessage([])
+
+    class _EmptyClient:
+        def __init__(self):
+            self.messages = _EmptyMessages()
+
+    agent = ForgeAgent(client=_EmptyClient())
+    with pytest.raises(LLMOutputError, match="did not return"):
+        agent.design("x", domain="hardware")

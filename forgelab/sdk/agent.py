@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from forgelab.core import LLMOutputError
 from forgelab.sdk.prompts import system_prompt
 from forgelab.sdk.schema import domain_schema
 from forgelab.sdk.validation import validate_llm_output
@@ -31,7 +32,7 @@ class ForgeAgent:
             self._client = client
             return
         try:
-            import anthropic  # type: ignore[import-untyped]
+            import anthropic  # type: ignore
         except ImportError as exc:
             raise ImportError(
                 "ForgeAgent requires the Anthropic SDK. Install it with: "
@@ -59,4 +60,4 @@ class ForgeAgent:
         for block in message.content:
             if getattr(block, "type", None) == "tool_use" and block.name == _TOOL_NAME:
                 return validate_llm_output(block.input, domain=domain)
-        raise ValueError("Claude did not return a ForgeLab tool call.")
+        raise LLMOutputError("Claude did not return a ForgeLab tool call.")
