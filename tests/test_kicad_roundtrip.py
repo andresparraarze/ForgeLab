@@ -5,9 +5,7 @@ from forgelab.formats import parse
 from forgelab.importers.hardware.kicad import KiCadImporter
 from forgelab.spec import NODE_COMPONENT, NODE_NET, Component
 
-FIXTURE = (
-    Path(__file__).resolve().parent.parent / "examples" / "hardware" / "blinky.kicad_pcb"
-)
+FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "hardware" / "blinky.kicad_pcb"
 
 
 def test_semantic_roundtrip_is_stable():
@@ -27,9 +25,7 @@ def test_roundtrip_preserves_counts_and_connectivity():
 
     def comps(doc):
         return {
-            n.id: Component.model_validate(n.props)
-            for n in doc.nodes
-            if n.type == NODE_COMPONENT
+            n.id: Component.model_validate(n.props) for n in doc.nodes if n.type == NODE_COMPONENT
         }
 
     def net_names(doc):
@@ -38,9 +34,7 @@ def test_roundtrip_preserves_counts_and_connectivity():
     c1, c2 = comps(doc1), comps(doc2)
     assert c1.keys() == c2.keys()
     for ref in c1:
-        assert {p.number: p.net for p in c1[ref].pads} == {
-            p.number: p.net for p in c2[ref].pads
-        }
+        assert {p.number: p.net for p in c1[ref].pads} == {p.number: p.net for p in c2[ref].pads}
     assert net_names(doc1) == net_names(doc2)
 
 
