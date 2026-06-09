@@ -54,7 +54,7 @@ class KiCadExporter(Exporter):
 
         tree: list = [Symbol("kicad_pcb")]
         tree.append(_s("version", version))
-        tree.append(_s("generator", Symbol("forgelab")))
+        tree.append(_s("generator", Symbol(board.generator)))
         tree.append(_s("general", _s("thickness", 1.6)))
         tree.append(_s("paper", "A4"))
         tree.append(self._layers_block(board))
