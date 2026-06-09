@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "forgelab"
+version = "0.1.0"
+description = "The LLVM of design — a universal JSON design interchange format and compiler for AI agents."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "ForgeLab Contributors" }]
+keywords = ["design", "compiler", "intermediate-representation", "cad", "eda", "ai-agents"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Compilers",
+]
+dependencies = [
+  "pydantic>=2.6",
+  "fastapi>=0.110",
+]
+
+[project.optional-dependencies]
+api = ["uvicorn>=0.27"]
+dev = [
+  "pytest>=8.0",
+  "httpx>=0.27",
+  "ruff>=0.4",
+  "pyright>=1.1.350",
+]
+
+[project.urls]
+Homepage = "https://github.com/forgelab/forgelab"
+Repository = "https://github.com/forgelab/forgelab"
+
+[tool.hatch.build.targets.wheel]
+packages = ["forgelab"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.pyright]
+include = ["forgelab"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
