@@ -7,12 +7,13 @@ no-op over the unauthenticated stdio transport).
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from forgelab.core import UnknownToolError, default_registry, validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
-from forgelab.sdk import DOMAIN_VOCAB, domain_schema, few_shot, system_prompt
+from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 
 _registry = default_registry()
 
@@ -87,4 +88,24 @@ def import_file(tool: str, content: str, encoding: str = "utf-8") -> dict[str, A
         raise ValueError(str(exc)) from exc
     source = decode_content(content, encoding)
     document = importer().to_ir(source)
+    return document.model_dump(mode="json")
+
+
+def _make_agent(model: str) -> ForgeAgent:
+    """Construct a ForgeAgent. Indirection so tests can inject a fake agent."""
+    return ForgeAgent(model=model)
+
+
+def generate_document(prompt: str, domain: str, model: str = "claude-opus-4-8") -> dict[str, Any]:
+    """Generate a validated ForgeLab document from a natural-language prompt."""
+    require_scope("forge:generate")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("generation unavailable: ANTHROPIC_API_KEY is not set on the server")
+    try:
+        agent = _make_agent(model)
+    except ImportError as exc:
+        raise ValueError(
+            'generation unavailable: install the agent extra (pip install "forgelab[agent]")'
+        ) from exc
+    document = agent.design(prompt, domain=domain)
     return document.model_dump(mode="json")
