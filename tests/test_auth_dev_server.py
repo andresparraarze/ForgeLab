@@ -179,3 +179,17 @@ def test_authorize_rejects_unknown_redirect_uri():
         follow_redirects=False,
     )
     assert r.status_code == 400
+
+
+def test_authorize_percent_encodes_state():
+    c = _client()
+    r = c.get("/oauth/authorize", params={
+        "response_type": "code", "client_id": "svc",
+        "redirect_uri": "https://app/cb", "scope": "forge:read",
+        "state": "a&b=c", "code_challenge": "abc", "code_challenge_method": "S256",
+    }, follow_redirects=False)
+    assert r.status_code == 307
+    loc = r.headers["location"]
+    assert "state=a%26b%3Dc" in loc
+    # the raw, unencoded form must NOT appear
+    assert "state=a&b=c" not in loc

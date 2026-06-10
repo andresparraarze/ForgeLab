@@ -12,6 +12,7 @@ import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -147,7 +148,8 @@ def create_dev_auth_router(
             ),
         )
         sep = "&" if "?" in redirect_uri else "?"
-        return RedirectResponse(url=f"{redirect_uri}{sep}code={code}&state={state}")
+        query = f"code={code}&state={quote(state, safe='')}"
+        return RedirectResponse(url=f"{redirect_uri}{sep}{query}")
 
     def _client_credentials(
         settings: AuthSettings,
