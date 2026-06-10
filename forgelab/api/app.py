@@ -7,9 +7,11 @@ and return 501 until those land.
 
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 
+from forgelab.auth.fastapi import mount_dev_auth, require_auth
+from forgelab.auth.models import Principal
 from forgelab.core import (
     IncompatibleVersionError,
     UnknownToolError,
@@ -24,6 +26,7 @@ app = FastAPI(
     version=SPEC_VERSION,
 )
 _registry = default_registry()
+mount_dev_auth(app)
 
 
 @app.get("/health")
@@ -38,7 +41,10 @@ def spec() -> dict[str, Any]:
 
 
 @app.post("/validate")
-def validate_document(document: dict[str, Any]) -> JSONResponse:
+def validate_document(
+    document: dict[str, Any],
+    _principal: Principal = Depends(require_auth("forge:read")),  # noqa: B008
+) -> JSONResponse:
     """Validate a posted ForgeLab document."""
     try:
         validate(document)
@@ -50,7 +56,11 @@ def validate_document(document: dict[str, Any]) -> JSONResponse:
 
 
 @app.post("/export/{tool}")
-def export_document(tool: str, document: dict[str, Any]) -> JSONResponse:
+def export_document(
+    tool: str,
+    document: dict[str, Any],
+    _principal: Principal = Depends(require_auth("forge:export")),  # noqa: B008
+) -> JSONResponse:
     """Export a document to a tool's native format (stubs return 501)."""
     try:
         doc = validate(document)

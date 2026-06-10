@@ -26,11 +26,15 @@ dependencies = [
 [project.optional-dependencies]
 agent = ["anthropic>=0.40"]
 api = ["uvicorn>=0.27"]
+auth = ["pyjwt>=2.8", "cryptography>=42", "python-multipart>=0.0.9"]
 dev = [
   "pytest>=8.0",
   "httpx>=0.27",
   "ruff>=0.4",
   "pyright>=1.1.350",
+  "pyjwt>=2.8",
+  "cryptography>=42",
+  "python-multipart>=0.0.9",
 ]
 
 [project.urls]

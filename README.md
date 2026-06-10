@@ -31,6 +31,7 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
   - [Round-trip a glTF scene](#round-trip-a-gltf-scene)
   - [Round-trip a FreeCAD model](#round-trip-a-freecad-model)
   - [Run the compiler service](#run-the-compiler-service)
+  - [Authentication (optional)](#authentication-optional)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
 - [Spec versioning](#spec-versioning)
@@ -211,6 +212,37 @@ uvicorn forgelab.api.app:app --reload
 | GET    | `/spec`          | ForgeDocument JSON Schema        |
 | POST   | `/validate`      | Validate a ForgeLab document     |
 | POST   | `/export/{tool}` | Export IR to a tool's format     |
+
+### Authentication (optional)
+
+The REST API (and the upcoming MCP server) can be protected with OAuth 2.0.
+It is **off by default**. Enable it with environment variables:
+
+```bash
+export FORGELAB_AUTH_ENABLED=true       # turn auth on
+export FORGELAB_AUTH_MODE=dev           # built-in dev issuer (HS256)
+# or point at an external IdP:
+# export FORGELAB_AUTH_MODE=jwks
+# export FORGELAB_AUTH_ISSUER=https://your-idp/
+# export FORGELAB_AUTH_AUDIENCE=forgelab
+# export FORGELAB_AUTH_JWKS_URL=https://your-idp/.well-known/jwks.json
+```
+
+Get a token from the built-in dev server and call a protected endpoint:
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/oauth/token \
+  -d grant_type=client_credentials \
+  -d client_id=forgelab-dev -d client_secret=forgelab-dev-secret \
+  -d scope="forge:read" | jq -r .access_token)
+
+curl -s -X POST localhost:8000/validate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d @doc.forge.json
+```
+
+Scopes: `forge:read` (validate/spec/schema), `forge:export` (import/export),
+`forge:generate` (AI generation). Install with `pip install "forgelab[auth]"`.
 
 ## How it works
 
