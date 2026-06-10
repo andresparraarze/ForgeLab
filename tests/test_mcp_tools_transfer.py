@@ -94,3 +94,63 @@ def test_export_exporter_invalid_props_is_clear():
     }
     with pytest.raises(ValueError, match="export failed for 'kicad'"):
         tools.export_document(doc, "kicad")
+
+
+def _props_doc():
+    return {
+        "forgelab_version": SPEC_VERSION,
+        "domain": "hardware",
+        "meta": {"name": "blinky", "generator": "test"},
+        "nodes": [
+            {
+                "id": "R1",
+                "type": "component",
+                "props": {
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0402",
+                    "layer": "F.Cu",
+                    "at": [0, 0, 0],
+                },
+            }
+        ],
+    }
+
+
+def test_export_writes_to_absolute_output_path(tmp_path):
+    target = tmp_path / "boards" / "blinky.kicad_pcb"
+    out = tools.export_document(_props_doc(), "kicad", output_path=str(target))
+    assert out["tool"] == "kicad"
+    assert out["path"] == str(target)
+    assert "content" not in out
+    data = target.read_bytes()
+    assert out["bytes_written"] == len(data)
+    assert b"kicad_pcb" in data
+
+
+def test_export_filename_goes_into_forgelab_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    out = tools.export_document(_props_doc(), "kicad", output_path="blinky.kicad_pcb")
+    assert out["path"] == str(tmp_path / "blinky.kicad_pcb")
+    assert (tmp_path / "blinky.kicad_pcb").exists()
+
+
+def test_export_filename_defaults_to_cwd_without_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGELAB_OUTPUT_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    out = tools.export_document(_props_doc(), "kicad", output_path="blinky.kicad_pcb")
+    assert out["path"] == str(tmp_path / "blinky.kicad_pcb")
+    assert (tmp_path / "blinky.kicad_pcb").exists()
+
+
+def test_export_relative_path_with_directory_ignores_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path / "elsewhere"))
+    monkeypatch.chdir(tmp_path)
+    out = tools.export_document(_props_doc(), "kicad", output_path="sub/blinky.kicad_pcb")
+    assert out["path"] == "sub/blinky.kicad_pcb"
+    assert (tmp_path / "sub" / "blinky.kicad_pcb").exists()
+
+
+def test_export_without_output_path_is_unchanged():
+    out = tools.export_document(_props_doc(), "kicad")
+    assert set(out) == {"tool", "encoding", "content"}

@@ -8,6 +8,7 @@ no-op over the unauthenticated stdio transport).
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -60,10 +61,27 @@ def list_formats() -> dict[str, dict[str, bool]]:
     return _registry.tool_names()
 
 
-def export_document(document: dict[str, Any], tool: str) -> dict[str, Any]:
+def _resolve_output_path(output_path: str) -> Path:
+    """Bare filenames land in FORGELAB_OUTPUT_DIR (or the cwd); paths pass through."""
+    path = Path(output_path)
+    if not path.is_absolute() and path.parent == Path("."):
+        base = os.environ.get("FORGELAB_OUTPUT_DIR")
+        return (Path(base) if base else Path.cwd()) / path
+    return path
+
+
+def export_document(
+    document: dict[str, Any], tool: str, output_path: str | None = None
+) -> dict[str, Any]:
     """Export a ForgeLab document to a format tool's native file.
 
-    Returns {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
+    Without ``output_path``, returns the file inline:
+    {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
+
+    With ``output_path``, writes the file to disk and returns
+    {"tool", "path", "bytes_written"} so another tool (e.g. a KiCad or Blender
+    MCP server) can open it directly. A bare filename is written into
+    ``FORGELAB_OUTPUT_DIR`` when set, else the current working directory.
     """
     require_scope("forge:export")
     try:
@@ -82,6 +100,14 @@ def export_document(document: dict[str, Any], tool: str) -> dict[str, Any]:
         # The IR validator is lenient about node props; exporters re-validate
         # them strictly against the domain models.
         raise ValueError(f"export failed for {tool!r}: document props are invalid: {exc}") from exc
+    if output_path is not None:
+        target = _resolve_output_path(output_path)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        except OSError as exc:
+            raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
+        return {"tool": tool, "path": str(target), "bytes_written": len(data)}
     return {"tool": tool, **encode_bytes(data)}
 
 
