@@ -201,3 +201,71 @@ def test_authorize_percent_encodes_state():
     assert "state=a%26b%3Dc" in loc
     # the raw, unencoded form must NOT appear
     assert "state=a&b=c" not in loc
+
+
+def test_authorization_code_expired_rejected():
+    import time as _time
+
+    from forgelab.auth.dev_server import _PendingCode, s256_challenge
+
+    settings = AuthSettings(enabled=True, mode="dev", dev_secret="a" * 32)
+    store = DevClientStore()
+    store.add(
+        DevClient(
+            client_id="svc",
+            client_secret="sekret",
+            allowed_scopes=frozenset({"forge:read"}),
+            redirect_uris=("https://app/cb",),
+        )
+    )
+    verifier = "verifier-1234567890-abcdefghijklmnop"
+    store.put_code(
+        "expired",
+        _PendingCode(
+            client_id="svc",
+            scopes=frozenset({"forge:read"}),
+            code_challenge=s256_challenge(verifier),
+            redirect_uri="https://app/cb",
+            expires_at=_time.time() - 1,
+        ),
+    )
+    app = FastAPI()
+    app.include_router(create_dev_auth_router(lambda: settings, lambda: store))
+    c = TestClient(app)
+    r = c.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": "svc",
+            "code": "expired",
+            "code_verifier": verifier,
+            "redirect_uri": "https://app/cb",
+        },
+    )
+    assert r.status_code == 400
+    assert r.json()["error"] == "invalid_grant"
+
+
+def test_unsupported_grant_type_rejected():
+    c = _client()
+    r = c.post("/oauth/token", data={"grant_type": "password", "client_id": "svc"})
+    assert r.status_code == 400
+    assert r.json()["error"] == "unsupported_grant_type"
+
+
+def test_authorize_rejects_plain_pkce_method():
+    c = _client()
+    r = c.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": "svc",
+            "redirect_uri": "https://app/cb",
+            "scope": "forge:read",
+            "state": "s",
+            "code_challenge": "abc",
+            "code_challenge_method": "plain",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 400

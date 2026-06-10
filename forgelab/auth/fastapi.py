@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from forgelab.auth.config import AuthSettings
 from forgelab.auth.dev_server import DevClient, DevClientStore, create_dev_auth_router
 from forgelab.auth.models import AuthError, InsufficientScope, InvalidToken, Principal
-from forgelab.auth.verifier import build_verifier
+from forgelab.auth.verifier import TokenVerifier, build_verifier
 
 __all__ = [
     "get_auth_settings",
@@ -25,6 +25,23 @@ _ANONYMOUS = Principal(sub="anonymous", client_id="anonymous", scopes=frozenset(
 
 _settings: AuthSettings | None = None
 _store: DevClientStore | None = None
+_verifiers: dict[tuple[str, str, str, str | None, str], TokenVerifier] = {}
+
+
+def _verifier_for(settings: AuthSettings) -> TokenVerifier:
+    """Return a cached verifier for these settings (reuses the JWKS key cache)."""
+    key = (
+        settings.mode,
+        settings.issuer,
+        settings.audience,
+        settings.jwks_url,
+        settings.dev_secret,
+    )
+    verifier = _verifiers.get(key)
+    if verifier is None:
+        verifier = build_verifier(settings)
+        _verifiers[key] = verifier
+    return verifier
 
 
 def get_auth_settings() -> AuthSettings:
@@ -76,7 +93,7 @@ def require_auth(*required_scopes: str):
         scheme, _, token = header.partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise InvalidToken("missing or malformed Authorization header")
-        principal = build_verifier(settings).verify(token)
+        principal = _verifier_for(settings).verify(token)
         if not set(required_scopes).issubset(principal.scopes):
             raise InsufficientScope(required_scopes)
         return principal

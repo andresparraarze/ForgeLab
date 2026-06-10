@@ -34,6 +34,7 @@ dev = [
   "pyright>=1.1.350",
   "pyjwt>=2.8",
   "cryptography>=42",
+  "python-multipart>=0.0.9",
 ]
 
 [project.urls]
