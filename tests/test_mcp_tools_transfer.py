@@ -81,3 +81,16 @@ def test_export_invalid_document_is_clear():
 def test_import_malformed_base64_is_clear():
     with pytest.raises(ValueError, match="invalid base64"):
         tools.import_file("freecad", "not!valid!base64!", "base64")
+
+
+def test_export_exporter_invalid_props_is_clear():
+    # Structurally valid IR (lenient validator) but propless component
+    # (strict exporter) must surface the module's clear ValueError.
+    doc = {
+        "forgelab_version": SPEC_VERSION,
+        "domain": "hardware",
+        "meta": {"name": "x", "generator": "test"},
+        "nodes": [{"id": "r1", "type": "component"}],
+    }
+    with pytest.raises(ValueError, match="export failed for 'kicad'"):
+        tools.export_document(doc, "kicad")

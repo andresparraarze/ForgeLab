@@ -54,3 +54,10 @@ def test_generate_missing_agent_extra_is_graceful(monkeypatch):
     monkeypatch.setattr(tools, "_make_agent", _no_extra)
     with pytest.raises(ValueError, match="agent extra"):
         tools.generate_document("a blinky board", "hardware")
+
+
+def test_generate_unknown_domain_is_clear(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setattr(tools, "_make_agent", lambda model: _FakeAgent())
+    with pytest.raises(ValueError, match="unknown domain"):
+        tools.generate_document("a board", "not-a-domain")

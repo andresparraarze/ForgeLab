@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from pydantic import ValidationError
+
 from forgelab.core import UnknownToolError, default_registry, validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
@@ -76,6 +78,10 @@ def export_document(document: dict[str, Any], tool: str) -> dict[str, Any]:
         data = exporter().from_ir(doc)
     except NotImplementedError as exc:
         raise ValueError(f"export not implemented for {tool!r}: {exc}") from exc
+    except ValidationError as exc:
+        # The IR validator is lenient about node props; exporters re-validate
+        # them strictly against the domain models.
+        raise ValueError(f"export failed for {tool!r}: document props are invalid: {exc}") from exc
     return {"tool": tool, **encode_bytes(data)}
 
 
@@ -99,6 +105,8 @@ def _make_agent(model: str) -> ForgeAgent:
 def generate_document(prompt: str, domain: str, model: str = "claude-opus-4-8") -> dict[str, Any]:
     """Generate a validated ForgeLab document from a natural-language prompt."""
     require_scope("forge:generate")
+    if domain not in DOMAIN_VOCAB:
+        raise ValueError(f"unknown domain: {domain!r}; valid domains: {sorted(DOMAIN_VOCAB)}")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("generation unavailable: ANTHROPIC_API_KEY is not set on the server")
     try:
