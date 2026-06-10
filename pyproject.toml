@@ -43,6 +43,9 @@ dev = [
 Homepage = "https://github.com/forgelab/forgelab"
 Repository = "https://github.com/forgelab/forgelab"
 
+[project.scripts]
+forgelab-mcp = "forgelab.mcp.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["forgelab"]
 
