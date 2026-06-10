@@ -12,6 +12,14 @@ from forgelab.auth.dev_server import DevClient, DevClientStore, create_dev_auth_
 from forgelab.auth.models import AuthError, InsufficientScope, InvalidToken, Principal
 from forgelab.auth.verifier import build_verifier
 
+__all__ = [
+    "get_auth_settings",
+    "get_client_store",
+    "require_auth",
+    "install_auth_error_handler",
+    "mount_dev_auth",
+]
+
 _ALL_SCOPES = frozenset({"forge:read", "forge:export", "forge:generate"})
 _ANONYMOUS = Principal(sub="anonymous", client_id="anonymous", scopes=frozenset())
 
@@ -20,7 +28,11 @@ _store: DevClientStore | None = None
 
 
 def get_auth_settings() -> AuthSettings:
-    """Process-wide settings from env (overridable via app.dependency_overrides)."""
+    """Process-wide settings from env (overridable via app.dependency_overrides).
+
+    Resolved once per process on first use; changing FORGELAB_AUTH_* env vars
+    requires a restart. Tests override this via app.dependency_overrides.
+    """
     global _settings
     if _settings is None:
         _settings = AuthSettings.from_env(os.environ)
@@ -28,7 +40,10 @@ def get_auth_settings() -> AuthSettings:
 
 
 def get_client_store() -> DevClientStore:
-    """Default in-memory client store, seeded with one dev client from env."""
+    """Default in-memory client store, seeded with one dev client from env.
+
+    Resolved once per process on first use; requires a restart to pick up new env values.
+    """
     global _store
     if _store is None:
         store = DevClientStore()
