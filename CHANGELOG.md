@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Shared OAuth 2.0 auth module (`forgelab/auth/`): pluggable token verification
+  (built-in dev HS256 issuer + external JWKS/RS256 verifier), a self-contained
+  dev authorization server supporting `client_credentials` and
+  `authorization_code`+PKCE(S256) with RFC 8414 discovery, and a FastAPI
+  `require_auth(*scopes)` dependency. Scopes: `forge:read`, `forge:export`,
+  `forge:generate`. Optional `[auth]` extra.
+- REST API endpoints `/validate` (`forge:read`) and `/export/{tool}`
+  (`forge:export`) are now scope-protected; `/health` and `/spec` stay public.
+  Auth is off by default (`FORGELAB_AUTH_ENABLED=false`).
 - Mechanical CAD domain: typed vocabulary (`forgelab/spec/mechanical.py` —
   Part/Body/Sketch/SketchGeometry/Constraint/Pad/Pocket/Placement), a stdlib-only
   FCStd codec (`forgelab/formats/fcstd.py`), real FreeCAD `.FCStd`
