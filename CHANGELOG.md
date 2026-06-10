@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- MCP server (`forgelab/mcp/`): exposes ForgeLab as MCP tools over stdio (local)
+  and OAuth-protected Streamable HTTP (remote) using the official MCP SDK. Tools:
+  `validate_document`, `get_domain_schema`, `get_prompt`, `list_domains`,
+  `list_formats` (`forge:read`); `export_document`, `import_file`
+  (`forge:export`); `generate_document` (`forge:generate`, returns a clear error
+  when `ANTHROPIC_API_KEY` is unset). Reuses the `forgelab.auth` module as the
+  resource-server verifier. Run with `forgelab-mcp --transport stdio|streamable-http`.
+  Optional `[mcp]` extra.
+- `Registry.tool_names()` read accessor reporting per-tool import/export availability.
 - Shared OAuth 2.0 auth module (`forgelab/auth/`): pluggable token verification
   (built-in dev HS256 issuer + external JWKS/RS256 verifier), a self-contained
   dev authorization server supporting `client_credentials` and

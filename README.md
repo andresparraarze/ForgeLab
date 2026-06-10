@@ -244,6 +244,30 @@ curl -s -X POST localhost:8000/validate \
 Scopes: `forge:read` (validate/spec/schema), `forge:export` (import/export),
 `forge:generate` (AI generation). Install with `pip install "forgelab[auth]"`.
 
+### MCP server (optional)
+
+ForgeLab ships an MCP server so agents (Claude Code, Hermes, OpenClaw) can use it
+directly. Install the extra and run it:
+
+```bash
+pip install "forgelab[mcp]"
+
+# Local (stdio, no auth):
+forgelab-mcp --transport stdio
+
+# Remote (Streamable HTTP, OAuth-protected — reuses FORGELAB_AUTH_* config):
+FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
+```
+
+Tools: `validate_document`, `get_domain_schema`, `get_prompt`, `list_domains`,
+`list_formats` (scope `forge:read`); `export_document`, `import_file`
+(`forge:export`); `generate_document` (`forge:generate`). Over stdio all tools are
+available locally; over HTTP each tool requires its scope on the bearer token.
+`generate_document` needs a server-side `ANTHROPIC_API_KEY` and returns a clear
+error if it is unset. For HTTP discovery metadata you may also set
+`FORGELAB_MCP_ISSUER_URL` (the OAuth authorization server) and
+`FORGELAB_MCP_RESOURCE_URL` (this server's public URL).
+
 ## How it works
 
 A ForgeLab document is a small typed envelope — `forgelab_version`, `domain`, `meta` — wrapping a
