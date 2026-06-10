@@ -9,11 +9,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from forgelab.auth.config import AuthSettings
 from forgelab.auth.verifier import issue_token
@@ -115,6 +116,39 @@ def create_dev_auth_router(
             )
         return JSONResponse(status_code=400, content={"error": "unsupported_grant_type"})
 
+    @router.get("/oauth/authorize")
+    def authorize(
+        response_type: str,
+        client_id: str,
+        redirect_uri: str,
+        code_challenge: str,
+        state: str = "",
+        scope: str = "",
+        code_challenge_method: str = "S256",
+        settings: AuthSettings = Depends(get_settings),  # noqa: B008
+        store: DevClientStore = Depends(get_store),  # noqa: B008
+    ) -> RedirectResponse:
+        _require_dev(settings)
+        client = store.get(client_id)
+        if client is None or redirect_uri not in client.redirect_uris:
+            raise HTTPException(status_code=400, detail="invalid client or redirect_uri")
+        if response_type != "code" or code_challenge_method != "S256":
+            raise HTTPException(status_code=400, detail="unsupported authorize request")
+        granted = _intersect(scope, client.allowed_scopes)
+        code = secrets.token_urlsafe(24)
+        store.put_code(
+            code,
+            _PendingCode(
+                client_id=client_id,
+                scopes=granted,
+                code_challenge=code_challenge,
+                redirect_uri=redirect_uri,
+                expires_at=time.time() + 300,
+            ),
+        )
+        sep = "&" if "?" in redirect_uri else "?"
+        return RedirectResponse(url=f"{redirect_uri}{sep}code={code}&state={state}")
+
     def _client_credentials(
         settings: AuthSettings,
         store: DevClientStore,
@@ -144,7 +178,21 @@ def create_dev_auth_router(
         code_verifier: str,
         redirect_uri: str,
     ) -> JSONResponse:
-        # Real implementation (PKCE) lands in Task 6.
-        return JSONResponse(status_code=400, content={"error": "unsupported_grant_type"})
+        pending = store.pop_code(code)  # single use
+        if pending is None or pending.expires_at < time.time():
+            return JSONResponse(status_code=400, content={"error": "invalid_grant"})
+        if pending.client_id != client_id or pending.redirect_uri != redirect_uri:
+            return JSONResponse(status_code=400, content={"error": "invalid_grant"})
+        if s256_challenge(code_verifier) != pending.code_challenge:
+            return JSONResponse(status_code=400, content={"error": "invalid_grant"})
+        access = issue_token(settings, sub=client_id, client_id=client_id, scopes=pending.scopes)
+        return JSONResponse(
+            content={
+                "access_token": access,
+                "token_type": "Bearer",
+                "expires_in": settings.access_token_ttl,
+                "scope": " ".join(sorted(pending.scopes)),
+            }
+        )
 
     return router
