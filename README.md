@@ -37,6 +37,7 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
   - [Claude Code](#claude-code)
   - [Hermes](#hermes)
   - [OpenClaw](#openclaw)
+- [Multi-tool workflows](#multi-tool-workflows)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
 - [Spec versioning](#spec-versioning)
@@ -386,6 +387,69 @@ Whichever client you use, the agent sees the same eight tools:
 Over stdio everything is available locally; over HTTP each tool requires its
 scope on the bearer token. `generate_document` needs `ANTHROPIC_API_KEY` set on
 the **server** and returns a clear error if it is missing.
+
+## Multi-tool workflows
+
+ForgeLab is designed to sit next to tool-specific MCP servers (KiCad MCP,
+Blender MCP, FreeCAD MCP, Unreal MCP): ForgeLab generates and compiles the
+design, the tool MCP opens it. The handoff is a file on disk:
+
+- `export_document` takes an optional **`output_path`**. When provided,
+  ForgeLab writes the exported file to disk and returns
+  `{"tool", "path", "bytes_written"}` instead of inline content — the agent
+  passes `path` straight to the tool MCP.
+- **`FORGELAB_OUTPUT_DIR`** sets the default output directory: a bare filename
+  (`"blinky.kicad_pcb"`) is written there. Unset, bare filenames go to the
+  current working directory. Absolute paths and paths containing directories
+  are used as-is.
+
+A single `.mcp.json` wiring ForgeLab together with tool MCPs into one shared
+folder:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-...",
+        "FORGELAB_OUTPUT_DIR": "/home/you/designs"
+      }
+    },
+    "kicad": {
+      "command": "kicad-mcp",
+      "env": { "KICAD_PROJECT_DIR": "/home/you/designs" }
+    },
+    "blender": { "command": "blender-mcp" },
+    "freecad": { "command": "freecad-mcp" },
+    "unreal":  { "command": "unreal-mcp" }
+  }
+}
+```
+
+(The tool-MCP commands and env vars above are placeholders — use the install
+instructions of whichever KiCad/Blender/FreeCAD/Unreal MCP server you run, and
+point it at the same directory as `FORGELAB_OUTPUT_DIR`.)
+
+Example prompt to Claude Code:
+
+> "Design a blinky LED board with one resistor and one LED, then open it in
+> KiCad."
+
+The agent's tool-call chain:
+
+1. `forgelab.generate_document(prompt="a blinky LED board…", domain="hardware")`
+   → validated ForgeDocument (JSON).
+2. `forgelab.export_document(document=…, tool="kicad", output_path="blinky.kicad_pcb")`
+   → `{"path": "/home/you/designs/blinky.kicad_pcb", "bytes_written": …}`.
+3. `kicad.open_project(path="/home/you/designs/blinky.kicad_pcb")` (or the
+   equivalent tool on your KiCad MCP) — the board opens in KiCad.
+
+The same chain works for the other domains: `domain="threed"` +
+`tool="gltf"` → Blender MCP imports the `.gltf`; `domain="mechanical"` +
+`tool="freecad"` → FreeCAD MCP opens the `.FCStd`; Unreal consumes glTF
+exports the same way.
 
 ## How it works
 
