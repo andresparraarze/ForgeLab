@@ -29,3 +29,14 @@ class Registry:
             return self._exporters[tool_name]
         except KeyError:
             raise UnknownToolError(f"No exporter registered for tool {tool_name!r}") from None
+
+    def tool_names(self) -> dict[str, dict[str, bool]]:
+        """Map every registered tool to its import/export availability."""
+        names = set(self._importers) | set(self._exporters)
+        return {
+            name: {
+                "import": name in self._importers,
+                "export": name in self._exporters,
+            }
+            for name in sorted(names)
+        }
