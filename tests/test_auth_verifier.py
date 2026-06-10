@@ -55,3 +55,70 @@ def test_expired_token_rejected():
     )
     with pytest.raises(ExpiredToken):
         DevVerifier(s).verify(expired)
+
+
+def _rsa_keypair():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    return priv_pem, key.public_key()
+
+
+def _jwks_settings():
+    return AuthSettings(
+        enabled=True,
+        mode="jwks",
+        issuer="https://idp.example",
+        audience="forge-api",
+        jwks_url="https://idp.example/jwks.json",
+    )
+
+
+def test_jwks_verifier_accepts_valid_rs256_token():
+    from forgelab.auth.verifier import JwksVerifier
+
+    priv, pub = _rsa_keypair()
+    s = _jwks_settings()
+    token = jwt.encode(
+        {
+            "iss": s.issuer,
+            "aud": s.audience,
+            "sub": "user-1",
+            "scope": "forge:read",
+            "exp": int(time.time()) + 60,
+        },
+        priv,
+        algorithm="RS256",
+    )
+    verifier = JwksVerifier(s, key_resolver=lambda _tok: pub)
+    principal = verifier.verify(token)
+    assert principal.sub == "user-1"
+    assert principal.scopes == frozenset({"forge:read"})
+
+
+def test_jwks_verifier_rejects_token_signed_by_other_key():
+    from forgelab.auth.verifier import JwksVerifier
+
+    priv, _ = _rsa_keypair()
+    _, other_pub = _rsa_keypair()
+    s = _jwks_settings()
+    token = jwt.encode(
+        {"iss": s.issuer, "aud": s.audience, "sub": "u", "exp": int(time.time()) + 60},
+        priv,
+        algorithm="RS256",
+    )
+    with pytest.raises(InvalidToken):
+        JwksVerifier(s, key_resolver=lambda _tok: other_pub).verify(token)
+
+
+def test_build_verifier_selects_impl():
+    from forgelab.auth.verifier import DevVerifier, JwksVerifier, build_verifier
+
+    assert isinstance(build_verifier(AuthSettings(mode="dev")), DevVerifier)
+    assert isinstance(build_verifier(_jwks_settings()), JwksVerifier)
