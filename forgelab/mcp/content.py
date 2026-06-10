@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 
 
 def encode_bytes(data: bytes) -> dict[str, str]:
@@ -21,5 +22,8 @@ def decode_content(content: str, encoding: str) -> bytes:
     if encoding == "utf-8":
         return content.encode("utf-8")
     if encoding == "base64":
-        return base64.b64decode(content)
+        try:
+            return base64.b64decode(content, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError(f"invalid base64 content: {exc}") from exc
     raise ValueError(f"unsupported encoding: {encoding!r} (expected 'utf-8' or 'base64')")

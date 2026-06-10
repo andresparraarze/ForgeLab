@@ -20,3 +20,8 @@ def test_binary_round_trips_as_base64():
 def test_decode_rejects_unknown_encoding():
     with pytest.raises(ValueError, match="unsupported encoding"):
         decode_content("x", "rot13")
+
+
+def test_decode_rejects_malformed_base64():
+    with pytest.raises(ValueError, match="invalid base64"):
+        decode_content("not!valid!base64!", "base64")

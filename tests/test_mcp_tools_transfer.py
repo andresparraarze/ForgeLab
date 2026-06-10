@@ -76,3 +76,8 @@ def test_export_invalid_document_is_clear():
     bad["forgelab_version"] = "999.0.0"
     with pytest.raises(ValueError, match="invalid document"):
         tools.export_document(bad, "kicad")
+
+
+def test_import_malformed_base64_is_clear():
+    with pytest.raises(ValueError, match="invalid base64"):
+        tools.import_file("freecad", "not!valid!base64!", "base64")
