@@ -9,7 +9,7 @@ from forgelab.auth.verifier import DevVerifier, issue_token
 
 
 def _settings():
-    return AuthSettings(enabled=True, mode="dev", dev_secret="test-secret")
+    return AuthSettings(enabled=True, mode="dev", dev_secret="a" * 32)
 
 
 def test_dev_issue_and_verify_round_trip():
@@ -30,7 +30,7 @@ def test_tampered_token_rejected():
 
 def test_wrong_secret_rejected():
     token = issue_token(_settings(), sub="svc", client_id="svc", scopes=set())
-    other = AuthSettings(enabled=True, mode="dev", dev_secret="different")
+    other = AuthSettings(enabled=True, mode="dev", dev_secret="b" * 32)
     with pytest.raises(InvalidToken):
         DevVerifier(other).verify(token)
 
