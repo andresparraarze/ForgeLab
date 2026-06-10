@@ -32,6 +32,11 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
   - [Round-trip a FreeCAD model](#round-trip-a-freecad-model)
   - [Run the compiler service](#run-the-compiler-service)
   - [Authentication (optional)](#authentication-optional)
+  - [MCP server (optional)](#mcp-server-optional)
+- [Use ForgeLab from your agent](#use-forgelab-from-your-agent)
+  - [Claude Code](#claude-code)
+  - [Hermes](#hermes)
+  - [OpenClaw](#openclaw)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
 - [Spec versioning](#spec-versioning)
@@ -78,7 +83,21 @@ pip install -e ".[dev,api]"
 ```
 
 ForgeLab has no heavy runtime dependencies — just Pydantic and FastAPI. The KiCad support parses the
-`.kicad_pcb` S-expression format directly, so **no KiCad installation is required**.
+`.kicad_pcb` S-expression format directly, so **no KiCad installation is required** (same for
+FreeCAD: `.FCStd` is parsed with the standard library).
+
+Optional extras, install what you need:
+
+| Extra | Enables | Pulls in |
+| --- | --- | --- |
+| `agent` | `ForgeAgent` (natural language → ForgeDocument) | `anthropic` |
+| `api` | running the REST service | `uvicorn` |
+| `auth` | OAuth 2.0 protection for the REST API / MCP HTTP | `pyjwt`, `cryptography`, `python-multipart` |
+| `mcp` | the MCP server (`forgelab-mcp`) | `mcp` |
+
+```bash
+pip install -e ".[mcp,agent]"   # e.g. everything an MCP-connected agent needs
+```
 
 ## Quickstart
 
@@ -215,7 +234,7 @@ uvicorn forgelab.api.app:app --reload
 
 ### Authentication (optional)
 
-The REST API (and the upcoming MCP server) can be protected with OAuth 2.0.
+The REST API and the MCP server's HTTP transport can be protected with OAuth 2.0.
 It is **off by default**. Enable it with environment variables:
 
 ```bash
@@ -268,6 +287,106 @@ error if it is unset. For HTTP discovery metadata you may also set
 `FORGELAB_MCP_ISSUER_URL` (the OAuth authorization server) and
 `FORGELAB_MCP_RESOURCE_URL` (this server's public URL).
 
+## Use ForgeLab from your agent
+
+The MCP server is the fastest way to put ForgeLab in an agent's hands. One-time
+setup:
+
+```bash
+git clone https://github.com/andresparraarze/ForgeLab
+cd ForgeLab
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[mcp,agent]"   # [agent] is only needed for generate_document
+export ANTHROPIC_API_KEY=sk-...  # only needed for generate_document
+```
+
+The examples below use stdio (local, no auth). For a shared/remote server, run
+`forgelab-mcp --transport streamable-http` behind OAuth as shown
+[above](#mcp-server-optional) and register it as an HTTP MCP server instead.
+
+### Claude Code
+
+Register the server with the `claude mcp` CLI (use the venv's absolute path so
+it works regardless of the shell's environment):
+
+```bash
+claude mcp add forgelab -- /path/to/ForgeLab/.venv/bin/forgelab-mcp --transport stdio
+```
+
+Or add it to `.mcp.json` in your project to share it with your team:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+Then ask Claude Code things like *"generate a blinky LED board and export it to
+KiCad"* — it will chain `generate_document` → `export_document` and hand you the
+`.kicad_pcb` content.
+
+### Hermes
+
+Hermes speaks MCP over Streamable HTTP. Run the server with auth enabled,
+mint a token from the built-in dev authorization server (or your IdP), and
+point Hermes at the endpoint:
+
+```bash
+FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
+```
+
+Configure the Hermes MCP connection with:
+
+- **URL:** `http://your-host:8001/mcp`
+- **Authorization:** `Bearer <token>` — get one via
+  `POST /oauth/token` on the REST API (see [Authentication](#authentication-optional)),
+  requesting the scopes the agent needs (`forge:read forge:export forge:generate`).
+
+For local/trusted Hermes deployments that support stdio servers, the
+`forgelab-mcp --transport stdio` command works there too.
+
+### OpenClaw
+
+OpenClaw consumes MCP servers via its standard MCP configuration. For a local
+setup, register the stdio command:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+For a remote OpenClaw deployment, use the OAuth-protected HTTP endpoint exactly
+as in the Hermes setup: URL `http://your-host:8001/mcp` plus a bearer token with
+the appropriate `forge:*` scopes.
+
+### What the agent gets
+
+Whichever client you use, the agent sees the same eight tools:
+
+| Tool | What it does | Scope (HTTP) |
+| --- | --- | --- |
+| `list_domains`, `list_formats` | discover supported domains and format tools | `forge:read` |
+| `get_domain_schema`, `get_prompt` | JSON Schema + prompt templates per domain | `forge:read` |
+| `validate_document` | validate a ForgeLab document | `forge:read` |
+| `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD) | `forge:export` |
+| `generate_document` | natural language → validated ForgeDocument | `forge:generate` |
+
+Over stdio everything is available locally; over HTTP each tool requires its
+scope on the bearer token. `generate_document` needs `ANTHROPIC_API_KEY` set on
+the **server** and returns a clear error if it is missing.
+
 ## How it works
 
 A ForgeLab document is a small typed envelope — `forgelab_version`, `domain`, `meta` — wrapping a
@@ -288,12 +407,14 @@ testable plugin and makes adding the next one a contained change.
 
 ```
 forgelab/
-├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, hardware vocabulary
+├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, domain vocabularies
 ├── core/        # validate(), registry, compiler pipeline, errors
 ├── formats/     # shared, zero-dependency format primitives (S-expression, glTF, FCStd)
 ├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
 ├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
-├── sdk/         # AI agent helpers
+├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
+├── auth/        # shared OAuth 2.0 (token verification, dev authorization server, scopes)
+├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
 └── api/         # FastAPI compiler-as-a-service
 examples/        # real sample designs (e.g. hardware/blinky.kicad_pcb + its ForgeLab JSON)
 tests/           # pytest suite, including the KiCad round-trip guarantee
@@ -310,9 +431,10 @@ vocabulary bumps the version — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CHA
 
 **Pre-alpha (v0.1 of the library, v0.5.0 of the spec).** The IR, validator, compiler pipeline, API,
 three end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware), the **glTF `.gltf`** (3D /
-game), and the **FreeCAD `.FCStd`** (mechanical CAD) importer/exporter pairs — and the **AI SDK**
-(schema export, prompt templates, output validation, and a Claude-backed `ForgeAgent`) all work and
-are covered by tests. The remaining tool integrations are scaffolded stubs awaiting implementation.
+game), and the **FreeCAD `.FCStd`** (mechanical CAD) importer/exporter pairs — the **AI SDK**
+(schema export, prompt templates, output validation, and a Claude-backed `ForgeAgent`), the
+**OAuth 2.0 auth module**, and the **MCP server** (stdio + Streamable HTTP) all work and are
+covered by tests. The remaining tool integrations are scaffolded stubs awaiting implementation.
 APIs may change before 1.0.
 
 ## Roadmap
@@ -324,6 +446,8 @@ APIs may change before 1.0.
 - [x] 3D / Game: Blender via glTF round-trip (meshes, materials, scene hierarchy)
 - [ ] Hardware: Gerber and Altium
 - [x] Mechanical CAD: FreeCAD `.FCStd` importer/exporter round-trip
+- [x] Shared OAuth 2.0 auth (scopes, dev authorization server, JWKS verification)
+- [x] MCP server (stdio + OAuth-protected Streamable HTTP) for Claude Code / Hermes / OpenClaw
 - [ ] Mechanical CAD: Fusion 360
 - [ ] 3D / Game: Unreal Engine, glTF textures/animations, and `.glb` binary container
 - [ ] Transform passes (e.g. design-rule checks, layer remaps) over the IR
