@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from forgelab.core import default_registry, validate
+from forgelab.core import UnknownToolError, default_registry, validate
 from forgelab.mcp.auth_bridge import require_scope
+from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.sdk import DOMAIN_VOCAB, domain_schema, few_shot, system_prompt
 
 _registry = default_registry()
@@ -54,3 +55,36 @@ def list_formats() -> dict[str, dict[str, bool]]:
     """List registered format tools and their import/export availability."""
     require_scope("forge:read")
     return _registry.tool_names()
+
+
+def export_document(document: dict[str, Any], tool: str) -> dict[str, Any]:
+    """Export a ForgeLab document to a format tool's native file.
+
+    Returns {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
+    """
+    require_scope("forge:export")
+    try:
+        doc = validate(document)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    try:
+        exporter = _registry.get_exporter(tool)
+    except UnknownToolError as exc:
+        raise ValueError(str(exc)) from exc
+    try:
+        data = exporter().from_ir(doc)
+    except NotImplementedError as exc:
+        raise ValueError(f"export not implemented for {tool!r}: {exc}") from exc
+    return {"tool": tool, **encode_bytes(data)}
+
+
+def import_file(tool: str, content: str, encoding: str = "utf-8") -> dict[str, Any]:
+    """Import a format tool's native file into a ForgeLab document (as a dict)."""
+    require_scope("forge:export")
+    try:
+        importer = _registry.get_importer(tool)
+    except UnknownToolError as exc:
+        raise ValueError(str(exc)) from exc
+    source = decode_content(content, encoding)
+    document = importer().to_ir(source)
+    return document.model_dump(mode="json")
