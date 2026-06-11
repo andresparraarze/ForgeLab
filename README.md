@@ -129,6 +129,14 @@ forgelab init
 Hermes, OpenClaw, and any MCP-compatible agent that install ForgeLab, register
 the server, and verify the tools with `list_domains`.
 
+**Updating:** once installed, upgrade to the latest version with one command —
+it refreshes the `~/.forgelab` install from GitHub and prints the new spec
+version:
+
+```bash
+forgelab update
+```
+
 For manual setup, the per-client details follow. The examples use stdio
 (local, no auth); for a shared/remote server, run
 `forgelab-mcp --transport streamable-http` behind OAuth (see

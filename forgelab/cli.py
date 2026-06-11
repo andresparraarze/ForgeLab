@@ -16,6 +16,9 @@ from pathlib import Path
 
 _AGENTS = ["claude-code", "hermes", "openclaw", "other"]
 
+_REPO_URL = "https://github.com/andresparraarze/ForgeLab"
+_FORGELAB_VENV = Path.home() / ".forgelab" / "venv"
+
 _CONFIG_HINTS = {
     "hermes": "Add this to your Hermes MCP configuration (the mcpServers section):",
     "openclaw": "Add this to your OpenClaw MCP configuration (the mcpServers section):",
@@ -96,18 +99,44 @@ def _init(agent: str, output_dir: str) -> None:
     print("mechanical, threed).")
 
 
+def _update() -> None:
+    """Upgrade the ~/.forgelab/venv install from the GitHub repo."""
+    pip = _FORGELAB_VENV / "bin" / "pip"
+    python = _FORGELAB_VENV / "bin" / "python"
+    if not pip.exists():
+        print(f"No ForgeLab install found at {_FORGELAB_VENV}.")
+        print("Run the installer first:")
+        print(f"  curl -fsSL {_REPO_URL}/raw/main/scripts/install-claude-code.sh | bash")
+        raise SystemExit(1)
+    print("→ Upgrading ForgeLab from GitHub…")
+    subprocess.run(
+        [str(pip), "install", "--upgrade", f"forgelab[mcp,agent] @ git+{_REPO_URL}"],
+        check=True,
+    )
+    result = subprocess.run(
+        [str(python), "-c", "from forgelab.spec import SPEC_VERSION; print(SPEC_VERSION)"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    print(f"✔ ForgeLab updated — spec version {result.stdout.strip()}.")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="forgelab", description="ForgeLab CLI")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="connect ForgeLab to your AI agent")
     init.add_argument("--agent", choices=_AGENTS, help="skip the interactive question")
     init.add_argument("--output-dir", help="skip the interactive question")
+    sub.add_parser("update", help="upgrade the ~/.forgelab install from GitHub")
     args = parser.parse_args(argv)
 
     if args.command == "init":
         agent = args.agent or _ask_agent()
         output_dir = args.output_dir or _ask_output_dir()
         _init(agent, output_dir)
+    elif args.command == "update":
+        _update()
 
 
 if __name__ == "__main__":
