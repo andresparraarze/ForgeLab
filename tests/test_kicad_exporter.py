@@ -69,3 +69,61 @@ def test_export_resolves_pad_net_codes():
         pad_nets[pad[1]] = (net[1], net[2])
     assert pad_nets["1"] == (2, "LED_A")
     assert pad_nets["2"] == (1, "GND")
+
+
+def _tree():
+    from forgelab.formats import parse
+
+    return parse(KiCadExporter().from_ir(_doc()).decode())
+
+
+def _blocks(tree, tag):
+    return [e for e in tree if isinstance(e, list) and e and str(e[0]) == tag]
+
+
+def test_design_rules_live_in_net_class_not_setup():
+    # KiCad 9 rejects rule keys inside (setup ...); they belong in net classes.
+    tree = _tree()
+    setup = _blocks(tree, "setup")[0]
+    setup_keys = {str(e[0]) for e in setup if isinstance(e, list) and e}
+    assert not {"clearance", "trace_width", "via_diameter", "via_dia", "via_drill"} & setup_keys
+    (net_class,) = _blocks(tree, "net_class")
+    assert str(net_class[1]) == "Default"
+    nc_keys = {str(e[0]): e[1] for e in net_class if isinstance(e, list) and e}
+    assert nc_keys["clearance"] == 0.2
+    assert nc_keys["trace_width"] == 0.25
+    assert nc_keys["via_dia"] == 0.8
+    assert nc_keys["via_drill"] == 0.4
+    added = [e[1] for e in net_class if isinstance(e, list) and str(e[0]) == "add_net"]
+    assert set(added) == {"GND", "LED_A"}
+
+
+def test_pads_have_at_and_size():
+    tree = _tree()
+    footprints = _blocks(tree, "footprint")
+    pads = [e for fp in footprints for e in fp if isinstance(e, list) and str(e[0]) == "pad"]
+    assert pads
+    for pad in pads:
+        sub = {str(e[0]): e for e in pad if isinstance(e, list) and e}
+        assert sub["at"][1:3] == [0, 0]
+        assert sub["size"][1:3] == [1.6, 1.6]
+
+
+def test_outline_uses_stroke_syntax():
+    from forgelab.formats import parse
+    from forgelab.spec import OutlineSegment
+
+    doc = _doc()
+    board_node = next(n for n in doc.nodes if n.type == "board")
+    board = BoardConstraints.model_validate(board_node.props)
+    board.outline = [OutlineSegment(start=[0, 0], end=[10, 0])]
+    board_node.props = board.model_dump()
+    tree = parse(KiCadExporter().from_ir(doc).decode())
+    lines = _blocks(tree, "gr_line")
+    assert lines
+    for line in lines:
+        sub = {str(e[0]): e for e in line if isinstance(e, list) and e}
+        assert "width" not in sub, "pre-KiCad-6 bare (width ...) is rejected by KiCad 9"
+        stroke = {str(e[0]): e for e in sub["stroke"] if isinstance(e, list)}
+        assert stroke["width"][1] == 0.1
+        assert str(stroke["type"][1]) == "solid"

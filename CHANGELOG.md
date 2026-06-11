@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- KiCad 9 compatibility (live-testing fixes): design rules moved from
+  `(setup ...)` into a `(net_class Default ...)` block with `(add_net ...)`
+  entries (importer reads both, so old boards still import); every exported pad
+  now carries required `(at 0 0)` and `(size 1.6 1.6)` fields; board-outline
+  `gr_line` uses `(stroke (width ...) (type solid))` instead of the
+  pre-KiCad-6 bare `(width ...)`. Verified with `kicad-cli pcb export svg`
+  (exit 0). `examples/hardware/blinky.kicad_pcb` regenerated at format
+  version 20240108.
 - glTF exporter now also exports object nodes nested as children of the scene
   node (previously only top-level objects were emitted; nested ones were
   silently dropped).

@@ -52,7 +52,7 @@ def test_import_board_constraints():
     doc = _import()
     board = next(n for n in doc.nodes if n.type == NODE_BOARD)
     bc = BoardConstraints.model_validate(board.props)
-    assert bc.kicad_version == "20221018"
+    assert bc.kicad_version == "20240108"
     assert bc.design_rules.clearance == 0.2
     assert bc.design_rules.track_width == 0.25
     assert len(bc.outline) == 4  # rectangle
