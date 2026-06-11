@@ -25,6 +25,11 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 - [Why ForgeLab](#why-forgelab)
 - [Tool support](#tool-support)
 - [Install](#install)
+- [Use ForgeLab from your agent](#use-forgelab-from-your-agent)
+  - [Claude Code](#claude-code)
+  - [Hermes](#hermes)
+  - [OpenClaw](#openclaw)
+- [Multi-tool workflows](#multi-tool-workflows)
 - [Quickstart](#quickstart)
   - [Build IR with the AI SDK](#build-ir-with-the-ai-sdk)
   - [Round-trip a KiCad board](#round-trip-a-kicad-board)
@@ -33,11 +38,6 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
   - [Run the compiler service](#run-the-compiler-service)
   - [Authentication (optional)](#authentication-optional)
   - [MCP server (optional)](#mcp-server-optional)
-- [Use ForgeLab from your agent](#use-forgelab-from-your-agent)
-  - [Claude Code](#claude-code)
-  - [Hermes](#hermes)
-  - [OpenClaw](#openclaw)
-- [Multi-tool workflows](#multi-tool-workflows)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
 - [Spec versioning](#spec-versioning)
@@ -99,6 +99,188 @@ Optional extras, install what you need:
 ```bash
 pip install -e ".[mcp,agent]"   # e.g. everything an MCP-connected agent needs
 ```
+
+## Use ForgeLab from your agent
+
+The MCP server is the fastest way to put ForgeLab in an agent's hands. Three
+ways to connect, from easiest to most manual:
+
+**1. One line (Claude Code):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
+```
+
+Checks Python, creates a venv in `~/.forgelab`, installs `forgelab[mcp,agent]`,
+registers the MCP server with Claude Code, and sets up `~/forgelab-output` as
+the export directory. Done.
+
+**2. `forgelab init` (any agent):** if you already have ForgeLab installed,
+run the interactive setup — it asks which agent you use and where exports
+should go, then registers the server (Claude Code) or prints the exact config
+block to paste (Hermes / OpenClaw / anything else):
+
+```bash
+forgelab init
+```
+
+**3. Paste a bootstrap prompt:** let your agent set itself up.
+[docs/agent-bootstrap.md](docs/agent-bootstrap.md) has copy-paste prompts for
+Hermes, OpenClaw, and any MCP-compatible agent that install ForgeLab, register
+the server, and verify the tools with `list_domains`.
+
+For manual setup, the per-client details follow. The examples use stdio
+(local, no auth); for a shared/remote server, run
+`forgelab-mcp --transport streamable-http` behind OAuth (see
+[MCP server](#mcp-server-optional)) and register it as an HTTP MCP server instead.
+`generate_document` needs `ANTHROPIC_API_KEY` in the server's environment;
+everything else works without it.
+
+### Claude Code
+
+Register the server with the `claude mcp` CLI (use the venv's absolute path so
+it works regardless of the shell's environment):
+
+```bash
+claude mcp add forgelab -- /path/to/ForgeLab/.venv/bin/forgelab-mcp --transport stdio
+```
+
+Or add it to `.mcp.json` in your project to share it with your team:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+Then ask Claude Code things like *"generate a blinky LED board and export it to
+KiCad"* — it will chain `generate_document` → `export_document` and hand you the
+`.kicad_pcb` content.
+
+### Hermes
+
+Hermes speaks MCP over Streamable HTTP. Run the server with auth enabled,
+mint a token from the built-in dev authorization server (or your IdP), and
+point Hermes at the endpoint:
+
+```bash
+FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
+```
+
+Configure the Hermes MCP connection with:
+
+- **URL:** `http://your-host:8001/mcp`
+- **Authorization:** `Bearer <token>` — get one via
+  `POST /oauth/token` on the REST API (see [Authentication](#authentication-optional)),
+  requesting the scopes the agent needs (`forge:read forge:export forge:generate`).
+
+For local/trusted Hermes deployments that support stdio servers, the
+`forgelab-mcp --transport stdio` command works there too.
+
+### OpenClaw
+
+OpenClaw consumes MCP servers via its standard MCP configuration. For a local
+setup, register the stdio command:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+For a remote OpenClaw deployment, use the OAuth-protected HTTP endpoint exactly
+as in the Hermes setup: URL `http://your-host:8001/mcp` plus a bearer token with
+the appropriate `forge:*` scopes.
+
+### What the agent gets
+
+Whichever client you use, the agent sees the same eight tools:
+
+| Tool | What it does | Scope (HTTP) |
+| --- | --- | --- |
+| `list_domains`, `list_formats` | discover supported domains and format tools | `forge:read` |
+| `get_domain_schema`, `get_prompt` | JSON Schema + prompt templates per domain | `forge:read` |
+| `validate_document` | validate a ForgeLab document | `forge:read` |
+| `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD) | `forge:export` |
+| `generate_document` | natural language → validated ForgeDocument | `forge:generate` |
+
+Over stdio everything is available locally; over HTTP each tool requires its
+scope on the bearer token. `generate_document` needs `ANTHROPIC_API_KEY` set on
+the **server** and returns a clear error if it is missing.
+
+## Multi-tool workflows
+
+ForgeLab is designed to sit next to tool-specific MCP servers (KiCad MCP,
+Blender MCP, FreeCAD MCP, Unreal MCP): ForgeLab generates and compiles the
+design, the tool MCP opens it. The handoff is a file on disk:
+
+- `export_document` takes an optional **`output_path`**. When provided,
+  ForgeLab writes the exported file to disk and returns
+  `{"tool", "path", "bytes_written"}` instead of inline content — the agent
+  passes `path` straight to the tool MCP.
+- **`FORGELAB_OUTPUT_DIR`** sets the default output directory: a bare filename
+  (`"blinky.kicad_pcb"`) is written there. Unset, bare filenames go to the
+  current working directory. Absolute paths and paths containing directories
+  are used as-is.
+
+A single `.mcp.json` wiring ForgeLab together with tool MCPs into one shared
+folder:
+
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-...",
+        "FORGELAB_OUTPUT_DIR": "/home/you/designs"
+      }
+    },
+    "kicad": {
+      "command": "kicad-mcp",
+      "env": { "KICAD_PROJECT_DIR": "/home/you/designs" }
+    },
+    "blender": { "command": "blender-mcp" },
+    "freecad": { "command": "freecad-mcp" },
+    "unreal":  { "command": "unreal-mcp" }
+  }
+}
+```
+
+(The tool-MCP commands and env vars above are placeholders — use the install
+instructions of whichever KiCad/Blender/FreeCAD/Unreal MCP server you run, and
+point it at the same directory as `FORGELAB_OUTPUT_DIR`.)
+
+Example prompt to Claude Code:
+
+> "Design a blinky LED board with one resistor and one LED, then open it in
+> KiCad."
+
+The agent's tool-call chain:
+
+1. `forgelab.generate_document(prompt="a blinky LED board…", domain="hardware")`
+   → validated ForgeDocument (JSON).
+2. `forgelab.export_document(document=…, tool="kicad", output_path="blinky.kicad_pcb")`
+   → `{"path": "/home/you/designs/blinky.kicad_pcb", "bytes_written": …}`.
+3. `kicad.open_project(path="/home/you/designs/blinky.kicad_pcb")` (or the
+   equivalent tool on your KiCad MCP) — the board opens in KiCad.
+
+The same chain works for the other domains: `domain="threed"` +
+`tool="gltf"` → Blender MCP imports the `.gltf`; `domain="mechanical"` +
+`tool="freecad"` → FreeCAD MCP opens the `.FCStd`; Unreal consumes glTF
+exports the same way.
 
 ## Quickstart
 
@@ -288,188 +470,6 @@ error if it is unset. For HTTP discovery metadata you may also set
 `FORGELAB_MCP_ISSUER_URL` (the OAuth authorization server) and
 `FORGELAB_MCP_RESOURCE_URL` (this server's public URL).
 
-## Use ForgeLab from your agent
-
-The MCP server is the fastest way to put ForgeLab in an agent's hands. Three
-ways to connect, from easiest to most manual:
-
-**1. One line (Claude Code):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
-```
-
-Checks Python, creates a venv in `~/.forgelab`, installs `forgelab[mcp,agent]`,
-registers the MCP server with Claude Code, and sets up `~/forgelab-output` as
-the export directory. Done.
-
-**2. `forgelab init` (any agent):** if you already have ForgeLab installed,
-run the interactive setup — it asks which agent you use and where exports
-should go, then registers the server (Claude Code) or prints the exact config
-block to paste (Hermes / OpenClaw / anything else):
-
-```bash
-forgelab init
-```
-
-**3. Paste a bootstrap prompt:** let your agent set itself up.
-[docs/agent-bootstrap.md](docs/agent-bootstrap.md) has copy-paste prompts for
-Hermes, OpenClaw, and any MCP-compatible agent that install ForgeLab, register
-the server, and verify the tools with `list_domains`.
-
-For manual setup, the per-client details follow. The examples use stdio
-(local, no auth); for a shared/remote server, run
-`forgelab-mcp --transport streamable-http` behind OAuth as shown
-[above](#mcp-server-optional) and register it as an HTTP MCP server instead.
-`generate_document` needs `ANTHROPIC_API_KEY` in the server's environment;
-everything else works without it.
-
-### Claude Code
-
-Register the server with the `claude mcp` CLI (use the venv's absolute path so
-it works regardless of the shell's environment):
-
-```bash
-claude mcp add forgelab -- /path/to/ForgeLab/.venv/bin/forgelab-mcp --transport stdio
-```
-
-Or add it to `.mcp.json` in your project to share it with your team:
-
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"],
-      "env": { "ANTHROPIC_API_KEY": "sk-..." }
-    }
-  }
-}
-```
-
-Then ask Claude Code things like *"generate a blinky LED board and export it to
-KiCad"* — it will chain `generate_document` → `export_document` and hand you the
-`.kicad_pcb` content.
-
-### Hermes
-
-Hermes speaks MCP over Streamable HTTP. Run the server with auth enabled,
-mint a token from the built-in dev authorization server (or your IdP), and
-point Hermes at the endpoint:
-
-```bash
-FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
-```
-
-Configure the Hermes MCP connection with:
-
-- **URL:** `http://your-host:8001/mcp`
-- **Authorization:** `Bearer <token>` — get one via
-  `POST /oauth/token` on the REST API (see [Authentication](#authentication-optional)),
-  requesting the scopes the agent needs (`forge:read forge:export forge:generate`).
-
-For local/trusted Hermes deployments that support stdio servers, the
-`forgelab-mcp --transport stdio` command works there too.
-
-### OpenClaw
-
-OpenClaw consumes MCP servers via its standard MCP configuration. For a local
-setup, register the stdio command:
-
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"]
-    }
-  }
-}
-```
-
-For a remote OpenClaw deployment, use the OAuth-protected HTTP endpoint exactly
-as in the Hermes setup: URL `http://your-host:8001/mcp` plus a bearer token with
-the appropriate `forge:*` scopes.
-
-### What the agent gets
-
-Whichever client you use, the agent sees the same eight tools:
-
-| Tool | What it does | Scope (HTTP) |
-| --- | --- | --- |
-| `list_domains`, `list_formats` | discover supported domains and format tools | `forge:read` |
-| `get_domain_schema`, `get_prompt` | JSON Schema + prompt templates per domain | `forge:read` |
-| `validate_document` | validate a ForgeLab document | `forge:read` |
-| `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD) | `forge:export` |
-| `generate_document` | natural language → validated ForgeDocument | `forge:generate` |
-
-Over stdio everything is available locally; over HTTP each tool requires its
-scope on the bearer token. `generate_document` needs `ANTHROPIC_API_KEY` set on
-the **server** and returns a clear error if it is missing.
-
-## Multi-tool workflows
-
-ForgeLab is designed to sit next to tool-specific MCP servers (KiCad MCP,
-Blender MCP, FreeCAD MCP, Unreal MCP): ForgeLab generates and compiles the
-design, the tool MCP opens it. The handoff is a file on disk:
-
-- `export_document` takes an optional **`output_path`**. When provided,
-  ForgeLab writes the exported file to disk and returns
-  `{"tool", "path", "bytes_written"}` instead of inline content — the agent
-  passes `path` straight to the tool MCP.
-- **`FORGELAB_OUTPUT_DIR`** sets the default output directory: a bare filename
-  (`"blinky.kicad_pcb"`) is written there. Unset, bare filenames go to the
-  current working directory. Absolute paths and paths containing directories
-  are used as-is.
-
-A single `.mcp.json` wiring ForgeLab together with tool MCPs into one shared
-folder:
-
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-...",
-        "FORGELAB_OUTPUT_DIR": "/home/you/designs"
-      }
-    },
-    "kicad": {
-      "command": "kicad-mcp",
-      "env": { "KICAD_PROJECT_DIR": "/home/you/designs" }
-    },
-    "blender": { "command": "blender-mcp" },
-    "freecad": { "command": "freecad-mcp" },
-    "unreal":  { "command": "unreal-mcp" }
-  }
-}
-```
-
-(The tool-MCP commands and env vars above are placeholders — use the install
-instructions of whichever KiCad/Blender/FreeCAD/Unreal MCP server you run, and
-point it at the same directory as `FORGELAB_OUTPUT_DIR`.)
-
-Example prompt to Claude Code:
-
-> "Design a blinky LED board with one resistor and one LED, then open it in
-> KiCad."
-
-The agent's tool-call chain:
-
-1. `forgelab.generate_document(prompt="a blinky LED board…", domain="hardware")`
-   → validated ForgeDocument (JSON).
-2. `forgelab.export_document(document=…, tool="kicad", output_path="blinky.kicad_pcb")`
-   → `{"path": "/home/you/designs/blinky.kicad_pcb", "bytes_written": …}`.
-3. `kicad.open_project(path="/home/you/designs/blinky.kicad_pcb")` (or the
-   equivalent tool on your KiCad MCP) — the board opens in KiCad.
-
-The same chain works for the other domains: `domain="threed"` +
-`tool="gltf"` → Blender MCP imports the `.gltf`; `domain="mechanical"` +
-`tool="freecad"` → FreeCAD MCP opens the `.FCStd`; Unreal consumes glTF
-exports the same way.
-
 ## How it works
 
 A ForgeLab document is a small typed envelope — `forgelab_version`, `domain`, `meta` — wrapping a
@@ -498,9 +498,12 @@ forgelab/
 ├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
 ├── auth/        # shared OAuth 2.0 (token verification, dev authorization server, scopes)
 ├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
-└── api/         # FastAPI compiler-as-a-service
-examples/        # real sample designs (e.g. hardware/blinky.kicad_pcb + its ForgeLab JSON)
-tests/           # pytest suite, including the KiCad round-trip guarantee
+├── api/         # FastAPI compiler-as-a-service
+└── cli.py       # `forgelab init` agent setup
+scripts/         # one-line Claude Code installer
+docs/            # agent bootstrap prompts, design specs and plans
+examples/        # real sample designs (one native file + generated .forge.json per domain)
+tests/           # pytest suite, including all three round-trip guarantees
 ```
 
 ## Spec versioning
