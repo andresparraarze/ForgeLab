@@ -62,6 +62,28 @@ claude mcp add forgelab --env "FORGELAB_OUTPUT_DIR=$OUTPUT_DIR" -- \
   || fail "claude mcp add failed."
 ok "registered as MCP server 'forgelab'"
 
+# 6. Put forgelab / forgelab-mcp / forgelab init on the PATH
+step "Adding $VENV/bin to your PATH"
+PATH_LINE="export PATH=\"$VENV/bin:\$PATH\""
+add_path() {
+  local rc="$1"
+  if grep -qsF "$PATH_LINE" "$rc"; then
+    ok "already in $rc"
+  else
+    printf '\n# Added by the ForgeLab installer\n%s\n' "$PATH_LINE" >> "$rc"
+    ok "added to $rc"
+  fi
+}
+touch "$HOME/.zshrc"
+add_path "$HOME/.zshrc"
+[ -f "$HOME/.bashrc" ] && add_path "$HOME/.bashrc"
+# Make the commands available to anything launched from this script's session.
+export PATH="$VENV/bin:$PATH"
+command -v forgelab >/dev/null 2>&1 || fail "forgelab not found on PATH after update."
+ok "PATH updated — 'forgelab', 'forgelab-mcp' are now global commands"
+echo "  (Current shell: run this once if the commands aren't found yet:)"
+echo "    $PATH_LINE"
+
 echo
 ok "Done! Restart Claude Code (or run /mcp) and try:"
 echo "    \"Generate a blinky LED board and export it to KiCad as blinky.kicad_pcb\""
