@@ -1,8 +1,10 @@
 """Retrievable prompt templates that instruct any LLM to emit ForgeLab JSON."""
 
+import json
 from pathlib import Path
 
 from forgelab.sdk.schema import DOMAIN_VOCAB
+from forgelab.spec.version import SPEC_VERSION
 
 _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
 
@@ -37,7 +39,7 @@ def system_prompt(domain: str) -> str:
         "interchange format. You emit ForgeLab documents that downstream tools "
         "compile into native design files.\n\n"
         "A ForgeLab document is a JSON object with these top-level keys:\n"
-        '  - "forgelab_version": the spec version string\n'
+        f'  - "forgelab_version": must be "{SPEC_VERSION}" (the installed spec version)\n'
         f'  - "domain": must be exactly "{domain}"\n'
         '  - "meta": an object with at least a "name"\n'
         '  - "nodes": a list of nodes, each {"id", "type", "props", '
@@ -59,5 +61,8 @@ def few_shot(domain: str) -> list[tuple[str, str]]:
     """
     _check_domain(domain)
     user, rel_path = _FEW_SHOT[domain]
-    assistant = (_EXAMPLES_DIR / rel_path).read_text()
-    return [(user, assistant)]
+    document = json.loads((_EXAMPLES_DIR / rel_path).read_text())
+    # The shipped file carries the version it was generated at; always show
+    # the installed library's version so agents never copy a stale one.
+    document["forgelab_version"] = SPEC_VERSION
+    return [(user, json.dumps(document, indent=2))]

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- glTF exporter now also exports object nodes nested as children of the scene
+  node (previously only top-level objects were emitted; nested ones were
+  silently dropped).
+- `system_prompt()` states the installed `SPEC_VERSION` and `few_shot()`
+  rewrites its example's `forgelab_version` to it, so agents never copy a
+  stale hardcoded version from shipped example files.
+
 ### Added
 - One-command agent setup: `scripts/install-claude-code.sh` (one-line Claude
   Code installer), a `forgelab init` CLI that registers the MCP server with

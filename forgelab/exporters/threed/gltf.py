@@ -36,7 +36,12 @@ class GltfExporter(Exporter):
         material_nodes = [n for n in document.nodes if n.type == NODE_MATERIAL]
         mesh_nodes = [n for n in document.nodes if n.type == NODE_MESH]
         scene_nodes = [n for n in document.nodes if n.type == NODE_SCENE]
+        # Root objects live at the document top level (canonical importer
+        # output), but agents also nest them under the scene node — accept both.
         root_objects = [n for n in document.nodes if n.type == NODE_OBJECT]
+        root_objects += [
+            c for scene in scene_nodes for c in scene.children if c.type == NODE_OBJECT
+        ]
 
         mat_index = {n.id: i for i, n in enumerate(material_nodes)}
         mesh_index = {n.id: i for i, n in enumerate(mesh_nodes)}
