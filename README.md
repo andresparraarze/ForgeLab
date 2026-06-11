@@ -534,6 +534,9 @@ APIs may change before 1.0.
 - [x] Mechanical CAD: FreeCAD `.FCStd` importer/exporter round-trip
 - [x] Shared OAuth 2.0 auth (scopes, dev authorization server, JWKS verification)
 - [x] MCP server (stdio + OAuth-protected Streamable HTTP) for Claude Code / Hermes / OpenClaw
+- [x] Multi-tool workflow support (`export_document` `output_path` + `FORGELAB_OUTPUT_DIR`)
+- [x] Zero-friction agent setup (one-line installer, `forgelab init` CLI, agent bootstrap prompts)
+- [ ] Publish to PyPI so `pip install forgelab` works without cloning the repo
 - [ ] Mechanical CAD: Fusion 360
 - [ ] 3D / Game: Unreal Engine, glTF textures/animations, and `.glb` binary container
 - [ ] Transform passes (e.g. design-rule checks, layer remaps) over the IR
