@@ -48,3 +48,43 @@ def test_export_buffer_decodes_back_to_cube():
     assert len(positions) == 24
     assert len(indices) == 36
     assert positions[:3] == [-0.5, -0.5, -0.5]
+
+
+def test_objects_nested_under_scene_node_are_exported():
+    # Live-testing regression (Blender): object nodes supplied as children of
+    # the scene node — instead of at the document top level — were dropped.
+    import json
+
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "threed",
+            "meta": {"name": "scene", "generator": "test"},
+            "nodes": [
+                {
+                    "id": "scene",
+                    "type": "scene",
+                    "props": {"name": "scene"},
+                    "children": [
+                        {
+                            "id": "Cube",
+                            "type": "object",
+                            "props": {
+                                "name": "Cube",
+                                "transform": {
+                                    "translation": [0, 0, 0],
+                                    "rotation": [0, 0, 0, 1],
+                                    "scale": [1, 1, 1],
+                                },
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    gltf = json.loads(GltfExporter().from_ir(doc))
+    assert [n["name"] for n in gltf.get("nodes", [])] == ["Cube"]
+    assert gltf["scenes"][0]["nodes"] == [0]

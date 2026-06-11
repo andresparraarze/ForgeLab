@@ -29,3 +29,19 @@ def test_system_prompt_unknown_domain_raises():
 def test_few_shot_unknown_domain_raises():
     with pytest.raises(KeyError):
         few_shot("nope")
+
+
+def test_system_prompt_states_installed_spec_version():
+    from forgelab.spec import SPEC_VERSION
+
+    assert SPEC_VERSION in system_prompt("threed")
+
+
+def test_few_shot_version_comes_from_library_not_file(monkeypatch):
+    import json
+
+    from forgelab.sdk import prompts
+
+    monkeypatch.setattr(prompts, "SPEC_VERSION", "9.9.9")
+    _, assistant = prompts.few_shot("threed")[0]
+    assert json.loads(assistant)["forgelab_version"] == "9.9.9"
