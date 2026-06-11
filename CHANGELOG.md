@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- One-command agent setup: `scripts/install-claude-code.sh` (one-line Claude
+  Code installer), a `forgelab init` CLI that registers the MCP server with
+  Claude Code or prints the config for Hermes/OpenClaw/other agents, and
+  copy-paste bootstrap prompts in `docs/agent-bootstrap.md`.
+- `export_document` gained an optional `output_path` (writes the exported file
+  to disk and returns its path) and the `FORGELAB_OUTPUT_DIR` default output
+  directory for multi-MCP workflows.
 - MCP server (`forgelab/mcp/`): exposes ForgeLab as MCP tools over stdio (local)
   and OAuth-protected Streamable HTTP (remote) using the official MCP SDK. Tools:
   `validate_document`, `get_domain_schema`, `get_prompt`, `list_domains`,
