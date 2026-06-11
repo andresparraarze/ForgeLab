@@ -52,3 +52,39 @@ def test_init_interactive_prompts(tmp_path, capsys, monkeypatch):
     out = _run(capsys, "init")
     assert (tmp_path / "picked").is_dir()
     assert "mcpServers" in out  # hermes (option 2) prints a config block
+
+
+def test_update_runs_pip_upgrade_and_prints_version(tmp_path, capsys, monkeypatch):
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "pip").touch()
+    (venv / "bin" / "python").touch()
+    monkeypatch.setattr(cli, "_FORGELAB_VENV", venv)
+    calls = []
+
+    def fake_run(cmd, check, capture_output=False, text=False):
+        calls.append(cmd)
+
+        class R:
+            stdout = "0.5.0\n"
+
+        return R()
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    out = _run(capsys, "update")
+    assert calls[0][:3] == [str(venv / "bin" / "pip"), "install", "--upgrade"]
+    assert "git+https://github.com/andresparraarze/ForgeLab" in calls[0][3]
+    assert str(venv / "bin" / "python") in calls[1]
+    assert "0.5.0" in out
+    assert "updated" in out.lower()
+
+
+def test_update_without_install_prints_guidance(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_FORGELAB_VENV", tmp_path / "missing")
+    called = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: called.append(a))
+    with pytest.raises(SystemExit):
+        cli.main(["update"])
+    out = capsys.readouterr().out
+    assert "install" in out.lower()
+    assert not called

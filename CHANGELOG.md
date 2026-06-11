@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format is based on
   stale hardcoded version from shipped example files.
 
 ### Added
+- `forgelab update` CLI command: upgrades the `~/.forgelab` install from
+  GitHub and prints the new spec version.
 - One-command agent setup: `scripts/install-claude-code.sh` (one-line Claude
   Code installer), a `forgelab init` CLI that registers the MCP server with
   Claude Code or prints the config for Hermes/OpenClaw/other agents, and
