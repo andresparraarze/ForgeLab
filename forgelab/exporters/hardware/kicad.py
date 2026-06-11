@@ -61,6 +61,7 @@ class KiCadExporter(Exporter):
         tree.append(self._setup_block(board.design_rules))
         for net in sorted(nets, key=lambda n: n.code):
             tree.append(_s("net", net.code, net.name))
+        tree.append(self._net_class_block(board.design_rules, nets))
         for comp in components:
             tree.append(self._footprint(comp, name_to_code))
         for seg in board.outline:
@@ -69,8 +70,8 @@ class KiCadExporter(Exporter):
                     "gr_line",
                     _s("start", _num(seg.start[0]), _num(seg.start[1])),
                     _s("end", _num(seg.end[0]), _num(seg.end[1])),
+                    _s("stroke", _s("width", 0.1), _s("type", Symbol("solid"))),
                     _s("layer", "Edge.Cuts"),
-                    _s("width", 0.1),
                 )
             )
 
@@ -81,7 +82,7 @@ class KiCadExporter(Exporter):
             if node.type == NODE_BOARD:
                 return BoardConstraints.model_validate(node.props)
         return BoardConstraints(
-            kicad_version="20221018",
+            kicad_version="20240108",
             generator="forgelab",
             layers=[],
             outline=[],
@@ -119,14 +120,24 @@ class KiCadExporter(Exporter):
         return entries
 
     def _setup_block(self, rules: DesignRules) -> list:
-        return _s(
-            "setup",
-            _s("pad_to_mask_clearance", 0),
+        # KiCad 9 rejects design-rule keys inside (setup ...); they live in
+        # net classes instead (see _net_class_block).
+        return _s("setup", _s("pad_to_mask_clearance", 0))
+
+    def _net_class_block(self, rules: DesignRules, nets: list[Net]) -> list:
+        block = _s(
+            "net_class",
+            "Default",
+            "ForgeLab default net class",
             _s("clearance", _num(rules.clearance)),
             _s("trace_width", _num(rules.track_width)),
-            _s("via_diameter", _num(rules.via_diameter)),
+            _s("via_dia", _num(rules.via_diameter)),
             _s("via_drill", _num(rules.via_drill)),
         )
+        for net in sorted(nets, key=lambda n: n.code):
+            if net.name:
+                block.append(_s("add_net", net.name))
+        return block
 
     def _footprint(self, comp: Component, name_to_code: dict[str, int]) -> list:
         fp: list = [Symbol("footprint"), comp.footprint, _s("layer", comp.layer)]
@@ -143,6 +154,10 @@ class KiCadExporter(Exporter):
                     pad.number,
                     Symbol("smd"),
                     Symbol("roundrect"),
+                    # KiCad requires at/size on every pad; the IR doesn't model
+                    # pad geometry yet, so emit standard 0805 defaults.
+                    _s("at", 0, 0),
+                    _s("size", 1.6, 1.6),
                     _s("layers", "F.Cu"),
                     _s("net", code, pad.net),
                 )

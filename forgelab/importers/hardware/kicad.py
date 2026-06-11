@@ -102,12 +102,19 @@ class KiCadImporter(Importer):
                         )
                     )
 
+        # Design rules live in the Default net class (KiCad 6+ / our exporter);
+        # fall back to legacy (setup ...) keys for older boards.
+        net_class = next(
+            (nc for nc in _find_all(tree, "net_class") if len(nc) > 1 and str(nc[1]) == "Default"),
+            None,
+        )
         setup = _find(tree, "setup") or []
+        source = net_class if net_class is not None else setup
         rules = DesignRules(
-            clearance=float(_value(setup, "clearance", 0.2)),
-            track_width=float(_value(setup, "trace_width", 0.25)),
-            via_diameter=float(_value(setup, "via_diameter", 0.8)),
-            via_drill=float(_value(setup, "via_drill", 0.4)),
+            clearance=float(_value(source, "clearance", 0.2)),
+            track_width=float(_value(source, "trace_width", 0.25)),
+            via_diameter=float(_value(source, "via_dia", _value(source, "via_diameter", 0.8))),
+            via_drill=float(_value(source, "via_drill", 0.4)),
         )
 
         outline: list[OutlineSegment] = []
