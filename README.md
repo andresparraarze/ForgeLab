@@ -290,20 +290,39 @@ error if it is unset. For HTTP discovery metadata you may also set
 
 ## Use ForgeLab from your agent
 
-The MCP server is the fastest way to put ForgeLab in an agent's hands. One-time
-setup:
+The MCP server is the fastest way to put ForgeLab in an agent's hands. Three
+ways to connect, from easiest to most manual:
+
+**1. One line (Claude Code):**
 
 ```bash
-git clone https://github.com/andresparraarze/ForgeLab
-cd ForgeLab
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[mcp,agent]"   # [agent] is only needed for generate_document
-export ANTHROPIC_API_KEY=sk-...  # only needed for generate_document
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
 ```
 
-The examples below use stdio (local, no auth). For a shared/remote server, run
+Checks Python, creates a venv in `~/.forgelab`, installs `forgelab[mcp,agent]`,
+registers the MCP server with Claude Code, and sets up `~/forgelab-output` as
+the export directory. Done.
+
+**2. `forgelab init` (any agent):** if you already have ForgeLab installed,
+run the interactive setup — it asks which agent you use and where exports
+should go, then registers the server (Claude Code) or prints the exact config
+block to paste (Hermes / OpenClaw / anything else):
+
+```bash
+forgelab init
+```
+
+**3. Paste a bootstrap prompt:** let your agent set itself up.
+[docs/agent-bootstrap.md](docs/agent-bootstrap.md) has copy-paste prompts for
+Hermes, OpenClaw, and any MCP-compatible agent that install ForgeLab, register
+the server, and verify the tools with `list_domains`.
+
+For manual setup, the per-client details follow. The examples use stdio
+(local, no auth); for a shared/remote server, run
 `forgelab-mcp --transport streamable-http` behind OAuth as shown
 [above](#mcp-server-optional) and register it as an HTTP MCP server instead.
+`generate_document` needs `ANTHROPIC_API_KEY` in the server's environment;
+everything else works without it.
 
 ### Claude Code
 
