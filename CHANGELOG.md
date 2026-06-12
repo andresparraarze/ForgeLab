@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- Exported FCStd objects are now marked `Touched="1"`, so FreeCAD rebuilds
+  all geometry on a plain open + recompute — previously nothing rendered until
+  every object was manually touched (live-testing report: features appeared
+  missing because no shape was ever computed).
 - FreeCAD exporter now writes genuine FreeCAD-schema `.FCStd` files that open
   directly in FreeCAD (validated with FreeCAD 1.1: all objects restore and
   recompute, pocket cut verified by volume). Real `App::Part`/`App::Origin`/
