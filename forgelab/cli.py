@@ -109,8 +109,17 @@ def _update() -> None:
         print(f"  curl -fsSL {_REPO_URL}/raw/main/scripts/install-claude-code.sh | bash")
         raise SystemExit(1)
     print("→ Upgrading ForgeLab from GitHub…")
+    # The library version string rarely changes between git commits, so pip
+    # would say "Requirement already satisfied"; force a fresh install.
     subprocess.run(
-        [str(pip), "install", "--upgrade", f"forgelab[mcp,agent] @ git+{_REPO_URL}"],
+        [
+            str(pip),
+            "install",
+            "--upgrade",
+            "--force-reinstall",
+            "--no-cache-dir",
+            f"forgelab[mcp,agent] @ git+{_REPO_URL}",
+        ],
         check=True,
     )
     result = subprocess.run(
