@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- `forgelab update` now passes `--force-reinstall --no-cache-dir` to pip, so
+  it always pulls the latest code from git instead of reporting "Requirement
+  already satisfied" when the version string is unchanged.
 - Exported FCStd objects are now marked `Touched="1"`, so FreeCAD rebuilds
   all geometry on a plain open + recompute — previously nothing rendered until
   every object was manually touched (live-testing report: features appeared

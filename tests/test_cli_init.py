@@ -72,8 +72,14 @@ def test_update_runs_pip_upgrade_and_prints_version(tmp_path, capsys, monkeypatc
 
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
     out = _run(capsys, "update")
-    assert calls[0][:3] == [str(venv / "bin" / "pip"), "install", "--upgrade"]
-    assert "git+https://github.com/andresparraarze/ForgeLab" in calls[0][3]
+    assert calls[0][:5] == [
+        str(venv / "bin" / "pip"),
+        "install",
+        "--upgrade",
+        "--force-reinstall",
+        "--no-cache-dir",
+    ]
+    assert "git+https://github.com/andresparraarze/ForgeLab" in calls[0][-1]
     assert str(venv / "bin" / "python") in calls[1]
     assert "0.5.0" in out
     assert "updated" in out.lower()
