@@ -94,3 +94,17 @@ def test_export_body_without_optional_part_does_not_keyerror():
     )
     data = FreeCADExporter().from_ir(doc)  # must not raise KeyError('part')
     assert data[:2] == b"PK"
+
+
+def test_objects_are_marked_touched_for_recompute_on_open():
+    # Without stored .brp shapes, FreeCAD only rebuilds geometry for objects
+    # marked dirty; Touched="1" makes a plain doc.recompute() do the work.
+    import re
+    import zipfile
+    from io import BytesIO
+
+    data = FreeCADExporter().from_ir(_doc())
+    real = zipfile.ZipFile(BytesIO(data)).read("Document.xml").decode()
+    decls = re.findall(r"<Object type=\"[^\"]+\"[^>]*/>", real)
+    assert decls
+    assert all('Touched="1"' in d for d in decls)

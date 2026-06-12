@@ -241,7 +241,9 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
     extra_objects: list[tuple[str, str, list[str]]] = []
     for nid, ntype, model in items:
         fcname = name_of[nid]
-        decls.append(f'<Object type="{_FCTYPE[ntype]}" name="{fcname}" />')
+        # Touched="1": with no stored .brp shapes, FreeCAD only rebuilds
+        # geometry for dirty objects — this makes recompute-on-open work.
+        decls.append(f'<Object type="{_FCTYPE[ntype]}" name="{fcname}" Touched="1" />')
         props: list[str]
         if isinstance(model, Part):
             origin_objs = _origin_objects(fcname)
@@ -282,7 +284,7 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         )
 
     for fcname, fctype, props in extra_objects:
-        decls.append(f'<Object type="{fctype}" name="{fcname}" />')
+        decls.append(f'<Object type="{fctype}" name="{fcname}" Touched="1" />')
         datas.append(
             f'<Object name="{fcname}"><Properties Count="{len(props)}" TransientCount="0">'
             f"{''.join(props)}</Properties></Object>"
