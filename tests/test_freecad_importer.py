@@ -99,3 +99,32 @@ def test_import_handles_sketch_and_pocket_types():
     assert [(n.id, n.type) for n in doc.nodes] == [("Sketch", "sketch"), ("Pocket", "pocket")]
     assert doc.nodes[0].props["geometry"][0]["radius"] == 4.0
     assert doc.nodes[1].props["through_all"] is True
+
+
+def test_imports_real_schema_when_sidecar_absent():
+    import zipfile
+    from io import BytesIO
+    from pathlib import Path
+
+    from forgelab.exporters.mechanical import FreeCADExporter
+    from forgelab.sdk import load
+
+    doc = load(Path("examples/mechanical/box-with-hole.forge.json").read_text())
+    data = FreeCADExporter().from_ir(doc)
+    # Rebuild the archive with ONLY the real FreeCAD Document.xml.
+    src = zipfile.ZipFile(BytesIO(data))
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as out:
+        out.writestr("Document.xml", src.read("Document.xml"))
+    imported = FreeCADImporter().to_ir(buf.getvalue())
+
+    by_id = {n.id: n for n in imported.nodes}
+    assert set(by_id) == {n.id for n in doc.nodes}  # origin helpers are skipped
+    assert by_id["Pad"].props["length"] == 10.0
+    assert by_id["Pocket"].props["through_all"] is True
+    assert by_id["Pocket"].props["reversed"] is True
+    circle = by_id["Sketch001"].props["geometry"][0]
+    assert circle["geo_type"] == "circle"
+    assert circle["center"] == [20.0, 10.0]
+    assert circle["radius"] == 4.0
+    assert by_id["Body"].props["part"] == "Part"

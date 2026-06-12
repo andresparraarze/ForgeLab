@@ -5,8 +5,10 @@ from forgelab.formats.fcstd import (
     FcObject,
     FcProperty,
     FcstdError,
+    read_archive_entry,
     read_document,
     read_objects,
+    write_archive,
     write_fcstd,
 )
 from forgelab.formats.gltf import (
@@ -39,7 +41,9 @@ __all__ = [
     "FcObject",
     "FcProperty",
     "FcstdError",
+    "read_archive_entry",
     "read_document",
     "read_objects",
+    "write_archive",
     "write_fcstd",
 ]

@@ -187,17 +187,40 @@ def write_fcstd(document: FcDocument) -> bytes:
     return buffer.getvalue()
 
 
-def read_document(data: bytes) -> FcDocument:
-    """Parse FCStd bytes into an FcDocument. Raises FcstdError on bad input."""
+def write_archive(entries: dict[str, str | bytes]) -> bytes:
+    """Write a deterministic FCStd ZIP from named entries.
+
+    ``Document.xml`` is always stored first (FreeCAD reads the archive
+    sequentially); remaining entries follow in the given order.
+    """
+    ordered = sorted(entries, key=lambda n: (n != _DOCUMENT_XML,))
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        for name in ordered:
+            info = zipfile.ZipInfo(name, date_time=_ZIP_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, entries[name])
+    return buffer.getvalue()
+
+
+def read_archive_entry(data: bytes, name: str) -> bytes | None:
+    """Return one entry of an FCStd archive, or None if absent."""
     try:
         archive = zipfile.ZipFile(BytesIO(data))
     except zipfile.BadZipFile as exc:
         raise FcstdError("Not a valid FCStd (ZIP) archive") from exc
     with archive:
         try:
-            document_xml = archive.read(_DOCUMENT_XML)
-        except KeyError as exc:
-            raise FcstdError("FCStd archive has no Document.xml") from exc
+            return archive.read(name)
+        except KeyError:
+            return None
+
+
+def read_document(data: bytes, member: str = _DOCUMENT_XML) -> FcDocument:
+    """Parse FCStd bytes into an FcDocument. Raises FcstdError on bad input."""
+    document_xml = read_archive_entry(data, member)
+    if document_xml is None:
+        raise FcstdError(f"FCStd archive has no {member}")
 
     try:
         root = ET.fromstring(document_xml)

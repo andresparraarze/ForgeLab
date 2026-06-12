@@ -71,3 +71,10 @@ def test_all_internal_refs_resolve(domain):
         assert ref.startswith("#/$defs/"), ref
         name = ref[len("#/$defs/") :]
         assert name in defs, f"unresolved $ref {ref!r}; available: {sorted(defs)}"
+
+
+def test_schema_pins_forgelab_version_to_installed_spec():
+    from forgelab.spec import SPEC_VERSION
+
+    schema = domain_schema("mechanical")
+    assert schema["properties"]["forgelab_version"] == {"const": SPEC_VERSION}

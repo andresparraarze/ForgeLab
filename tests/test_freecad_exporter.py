@@ -24,7 +24,7 @@ def _doc():
 
 def test_export_produces_readable_fcstd():
     data = FreeCADExporter().from_ir(_doc())
-    fc_doc = read_document(data)
+    fc_doc = read_document(data, member="ForgeLab.Document.xml")
     assert fc_doc.name == "box"
     assert [(o.name, o.obj_type) for o in fc_doc.objects] == [
         ("Part", "App::Part"),
@@ -35,7 +35,7 @@ def test_export_produces_readable_fcstd():
 
 def test_exported_pad_carries_length_and_links():
     data = FreeCADExporter().from_ir(_doc())
-    fc_doc = read_document(data)
+    fc_doc = read_document(data, member="ForgeLab.Document.xml")
     pad = next(o for o in fc_doc.objects if o.name == "Pad")
     by_name = {p.name: p for p in pad.properties}
     assert by_name["length"].value == 10.0
@@ -57,3 +57,40 @@ def test_unknown_node_type_raises():
     )
     with pytest.raises(ValueError):
         FreeCADExporter().from_ir(doc)
+
+
+def test_archive_contains_real_schema_gui_and_sidecar():
+    import zipfile
+    from io import BytesIO
+    from pathlib import Path
+
+    from forgelab.sdk import load
+
+    example = load(Path("examples/mechanical/box-with-hole.forge.json").read_text())
+    data = FreeCADExporter().from_ir(example)
+    archive = zipfile.ZipFile(BytesIO(data))
+    names = archive.namelist()
+    assert names[0] == "Document.xml"  # FreeCAD reads the archive sequentially
+    assert "GuiDocument.xml" in names
+    assert "ForgeLab.Document.xml" in names
+    real = archive.read("Document.xml").decode()
+    assert "PartDesign::Body" in real
+    assert "Part::GeomLineSegment" in real
+    assert "App::PropertyPlacement" in real
+    assert 'Property name="Tip"' in real
+    assert "BaseFeature" in real  # pocket cuts need the base link
+
+
+def test_export_body_without_optional_part_does_not_keyerror():
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "sparse", "generator": "test"},
+            "nodes": [{"id": "B", "type": "body", "props": {"name": "B"}}],
+        }
+    )
+    data = FreeCADExporter().from_ir(doc)  # must not raise KeyError('part')
+    assert data[:2] == b"PK"
