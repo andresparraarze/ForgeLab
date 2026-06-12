@@ -38,6 +38,7 @@ from forgelab.spec.mechanical import (
     Pocket,
     Sketch,
 )
+from forgelab.spec.version import SPEC_VERSION
 
 DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
     "hardware": {
@@ -103,7 +104,7 @@ def domain_schema(domain: str) -> dict[str, Any]:
         "type": "object",
         "$defs": defs,
         "properties": {
-            "forgelab_version": {"type": "string"},
+            "forgelab_version": {"const": SPEC_VERSION},
             "domain": {"const": domain},
             "meta": {
                 "type": "object",

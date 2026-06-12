@@ -194,7 +194,7 @@
         "profile": "Sketch001",
         "length": 0.0,
         "through_all": true,
-        "reversed": false,
+        "reversed": true,
         "midplane": false
       },
       "children": []

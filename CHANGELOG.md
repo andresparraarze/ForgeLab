@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter now writes genuine FreeCAD-schema `.FCStd` files that open
+  directly in FreeCAD (validated with FreeCAD 1.1: all objects restore and
+  recompute, pocket cut verified by volume). Real `App::Part`/`App::Origin`/
+  `PartDesign::Body`/`Sketcher::SketchObject` (GeomLineSegment/GeomCircle)/
+  `PartDesign::Pad`/`PartDesign::Pocket` serialization plus a minimal
+  `GuiDocument.xml`; shapes recompute on load (no `.brp` files needed). The IR
+  round-trip identity is preserved via a `ForgeLab.Document.xml` sidecar.
+- FreeCAD importer now also reads genuine FreeCAD-authored files (canonical
+  subset; Origin helpers and unmodeled object types are skipped) in addition
+  to the sidecar and legacy ForgeLab-dialect files.
+- AI SDK JSON Schema now pins `forgelab_version` to the installed
+  `SPEC_VERSION` (`const`), so models cannot invent versions like "1.0".
+- Mechanical FreeCAD export no longer raises `KeyError` when optional IR
+  fields (e.g. a body's `part`) are omitted — props are validated through the
+  domain models first, filling defaults.
 - KiCad 9 compatibility (live-testing fixes): design rules moved from
   `(setup ...)` into a `(net_class Default ...)` block with `(add_net ...)`
   entries (importer reads both, so old boards still import); every exported pad

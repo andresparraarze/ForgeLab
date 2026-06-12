@@ -42,7 +42,9 @@ def _box_with_hole_doc():
         geometry=[SketchGeometry(geo_type="circle", center=[20.0, 10.0], radius=4.0)],
         constraints=[Constraint(ctype="Radius", value=4.0, name="HoleRadius")],
     )
-    pocket = Pocket(name="Pocket", body="Body", profile="Sketch001", through_all=True)
+    pocket = Pocket(
+        name="Pocket", body="Body", profile="Sketch001", through_all=True, reversed=True
+    )
     pairs = [
         (part, "part"),
         (body, "body"),

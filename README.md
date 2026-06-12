@@ -403,10 +403,14 @@ references, so an agent can read and edit the model directly. Parsing uses only
 the standard library (`zipfile` + `xml.etree`), so **no FreeCAD installation is
 required**.
 
-The importer targets ForgeLab's canonical `.FCStd` subset (the feature tree the
-exporter writes); the round-trip guarantee is an identity over the IR. Full
-FreeCAD-authored files carry additional object types and properties that this
-subset does not yet model.
+Exported `.FCStd` files use FreeCAD's real document schema and **open directly
+in FreeCAD** — shapes recompute from the parametric definitions on load
+(validated against FreeCAD 1.1). The importer also reads genuine
+FreeCAD-authored files (canonical subset: parts, bodies, sketches with
+line/circle geometry and dimensional constraints, pads, pockets — Origin
+planes/axes and other unmodeled objects are skipped). The IR round-trip
+identity is preserved via a `ForgeLab.Document.xml` sidecar entry that FreeCAD
+ignores.
 
 ### Run the compiler service
 
