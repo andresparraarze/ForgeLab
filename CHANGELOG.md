@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: sketches on non-XY datum planes (XZ/YZ) now orient
+  correctly. Each body emits its own `App::Origin` and every sketch attaches to
+  the body's datum plane via `AttachmentSupport` + `MapMode` (FlatFace) —
+  FreeCAD ignores a plain `Placement` on an in-body sketch, which had left all
+  sketches flat in XY and made pocket/pad profiles appear unlinked. Rotations
+  are now written in the axis-angle form FreeCAD actually reads (a hardcoded
+  `A="0"` had silently flattened every non-identity rotation). Validated with
+  FreeCAD 1.1: a vertical-face pocket recomputes and cuts on plain open.
+- FreeCAD importer recovers a sketch's datum plane from `AttachmentSupport`
+  when reading genuine FreeCAD files.
 - `forgelab update` now passes `--force-reinstall --no-cache-dir` to pip, so
   it always pulls the latest code from git instead of reporting "Requirement
   already satisfied" when the version string is unchanged.

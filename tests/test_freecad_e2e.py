@@ -100,3 +100,77 @@ def test_fresh_export_recomputes_without_manual_touch(tmp_path):
     )
     assert "RECOMPUTED: 0" not in result.stdout, result.stdout
     assert "PAD_VOLUME: 2250.0" in result.stdout  # 30 * 15 * 5
+
+
+def test_non_xy_sketch_pocket_cuts_in_freecad(tmp_path):
+    # Bug fix: a pocket whose sketch is on a vertical (XZ) plane must orient and
+    # cut on plain recompute — previously the sketch landed flat in XY and the
+    # pocket removed nothing (which also made the Profile look unlinked).
+    from forgelab.exporters.mechanical import FreeCADExporter
+    from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+    from forgelab.spec.mechanical import Body, Pad, Pocket, Sketch, SketchGeometry
+
+    base = Sketch(
+        name="Base",
+        body="Body",
+        geometry=[
+            SketchGeometry(geo_type="line", points=[0, 0, 40, 0]),
+            SketchGeometry(geo_type="line", points=[40, 0, 40, 20]),
+            SketchGeometry(geo_type="line", points=[40, 20, 0, 20]),
+            SketchGeometry(geo_type="line", points=[0, 20, 0, 0]),
+        ],
+    )
+    hole = Sketch(
+        name="Hole",
+        body="Body",
+        plane="XZ_Plane",
+        geometry=[SketchGeometry(geo_type="circle", center=[20, 15], radius=5.0)],
+    )
+    doc = ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.MECHANICAL,
+        meta=DocumentMeta(name="vpart", generator="test"),
+        nodes=[
+            Node(id="Body", type="body", props=Body(name="Body").model_dump()),
+            Node(id="Base", type="sketch", props=base.model_dump()),
+            Node(
+                id="Pad",
+                type="pad",
+                props=Pad(name="Pad", body="Body", profile="Base", length=30.0).model_dump(),
+            ),
+            Node(id="Hole", type="sketch", props=hole.model_dump()),
+            Node(
+                id="Pocket",
+                type="pocket",
+                props=Pocket(
+                    name="Pocket", body="Body", profile="Hole", through_all=True
+                ).model_dump(),
+            ),
+        ],
+    )
+    fcstd = tmp_path / "vpart.FCStd"
+    fcstd.write_bytes(FreeCADExporter().from_ir(doc))
+    script = tmp_path / "check.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import FreeCAD as App
+            doc = App.openDocument({str(fcstd)!r})
+            n = doc.recompute()
+            pad = doc.getObject("Pad")
+            pk = doc.getObject("Pocket")
+            print("RECOMPUTED:", n)
+            print("PROFILE_OK:", pk.Profile[0].Name == "Hole")
+            print("PAD_VOLUME:", round(pad.Shape.Volume, 2))
+            print("POCKET_VOLUME:", round(pk.Shape.Volume, 2))
+            """
+        )
+    )
+    out = subprocess.run(
+        ["freecadcmd", str(script)], capture_output=True, text=True, timeout=120
+    ).stdout
+    assert "RECOMPUTED: 0" not in out, out
+    assert "PROFILE_OK: True" in out, out  # Bug 1: Profile resolves on open
+    assert "PAD_VOLUME: 24000.0" in out, out
+    # Bug 2: the vertical pocket actually removed material (40*20*30 - pi*25*20).
+    assert "POCKET_VOLUME: 22429.2" in out, out

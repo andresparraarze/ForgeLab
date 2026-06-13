@@ -141,6 +141,22 @@ def _geometry(obj: ET.Element) -> list[dict[str, Any]]:
     return out
 
 
+_STANDARD_PLANES = ("XY_Plane", "XZ_Plane", "YZ_Plane")
+
+
+def _sketch_plane(obj: ET.Element) -> str:
+    """Datum plane the sketch attaches to (from AttachmentSupport), else XY."""
+    p = _prop_el(obj, "AttachmentSupport")
+    sub_list = p.find("LinkSubList") if p is not None else None
+    if sub_list is not None:
+        link = sub_list.find("Link")
+        target = link.get("obj", "") if link is not None else ""
+        for plane in _STANDARD_PLANES:
+            if target.endswith(plane):
+                return plane
+    return "XY_Plane"
+
+
 def _constraints(obj: ET.Element) -> list[dict[str, Any]]:
     p = _prop_el(obj, "Constraints")
     cl = p.find("ConstraintList") if p is not None else None
@@ -204,7 +220,7 @@ def parse_real_document(root: ET.Element) -> list[tuple[str, str, dict[str, Any]
             props = {
                 "name": label,
                 "body": body_of.get(name, ""),
-                "plane": "XY_Plane",
+                "plane": _sketch_plane(obj),
                 "placement": _placement(obj),
                 "geometry": _geometry(obj),
                 "constraints": _constraints(obj),
