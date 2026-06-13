@@ -9,15 +9,22 @@ load. Notes pinned down experimentally:
 
 - ``Properties Count`` counts only ``<Property>`` elements (``_Property``
   declarations are counted by ``TransientCount``); a mismatch aborts parsing.
-- ``App::Origin`` objects are optional; sketches position via ``Placement``.
+- FreeCAD ignores a plain ``Placement`` on a sketch inside a Body, so each
+  body owns an ``App::Origin`` and sketches attach to its datum planes via
+  ``AttachmentSupport`` + ``MapMode`` (FlatFace); orientation is written into
+  the axis-angle form FreeCAD reads, not just the quaternion.
 - A feature's ``BaseFeature`` link is required for cuts to apply.
+- Object declarations are marked ``Touched="1"`` so a plain recompute on open
+  rebuilds geometry (no ``.brp`` shapes are stored).
 
 Depends only on ``forgelab.spec`` (boundary rule).
 """
 
 from __future__ import annotations
 
+import math
 import re
+from collections.abc import Sequence
 
 from forgelab.spec.mechanical import (
     NODE_BODY,
@@ -46,9 +53,31 @@ _SOLID_FEATURES = (NODE_PAD, NODE_POCKET)
 
 AnyModel = Part | Body | Sketch | Pad | Pocket
 
+# Quaternion (x, y, z, w) for each datum plane, taken from FreeCAD 1.1 output.
+_PLANE_QUAT: dict[str, tuple[float, float, float, float]] = {
+    "XY_Plane": (0.0, 0.0, 0.0, 1.0),
+    "XZ_Plane": (0.7071067811865475, 0.0, 0.0, 0.7071067811865476),
+    "YZ_Plane": (0.5, 0.5, 0.5, 0.5000000000000001),
+}
+_IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
+
 
 def _f(value: float) -> str:
     return f"{float(value):.16f}"
+
+
+def _axis_angle(x: float, y: float, z: float, w: float) -> tuple[float, float, float, float]:
+    """Quaternion (x, y, z, w) -> (angle, axis_x, axis_y, axis_z).
+
+    FreeCAD reads the axis-angle form of a placement, so it must be written
+    consistently with the quaternion or non-identity rotations are dropped.
+    """
+    w = max(-1.0, min(1.0, w))
+    angle = 2.0 * math.acos(w)
+    sin_half = math.sqrt(max(0.0, 1.0 - w * w))
+    if sin_half < 1e-12:
+        return 0.0, 1.0, 0.0, 0.0
+    return angle, x / sin_half, y / sin_half, z / sin_half
 
 
 def fc_name(node_id: str) -> str:
@@ -63,15 +92,46 @@ def _prop(name: str, ptype: str, body: str) -> str:
     return f'<Property name="{name}" type="{ptype}">{body}</Property>'
 
 
-def _placement(placement: Placement) -> str:
-    px, py, pz = placement.position
-    q0, q1, q2, q3 = placement.rotation
+def _placement_xml(position: Sequence[float], rotation: Sequence[float]) -> str:
+    px, py, pz = position
+    q0, q1, q2, q3 = rotation
+    angle, ox, oy, oz = _axis_angle(q0, q1, q2, q3)
     return _prop(
         "Placement",
         "App::PropertyPlacement",
         f'<PropertyPlacement Px="{_f(px)}" Py="{_f(py)}" Pz="{_f(pz)}" '
         f'Q0="{_f(q0)}" Q1="{_f(q1)}" Q2="{_f(q2)}" Q3="{_f(q3)}" '
-        f'A="{_f(0)}" Ox="{_f(0)}" Oy="{_f(0)}" Oz="{_f(1)}"/>',
+        f'A="{_f(angle)}" Ox="{_f(ox)}" Oy="{_f(oy)}" Oz="{_f(oz)}"/>',
+    )
+
+
+def _placement(placement: Placement) -> str:
+    return _placement_xml(placement.position, placement.rotation)
+
+
+def _sketch_placement(sketch: Sketch) -> str:
+    """Orient a sketch by its explicit rotation, else by its named datum plane.
+
+    FreeCAD recomputes an attached sketch's Placement from its attachment, so
+    this is the pre-recompute value; it still matters for sketches that aren't
+    attached (non-standard plane).
+    """
+    rotation = tuple(sketch.placement.rotation)
+    if rotation == _IDENTITY_QUAT:
+        rotation = _PLANE_QUAT.get(sketch.plane, _IDENTITY_QUAT)
+    return _placement_xml(sketch.placement.position, rotation)
+
+
+def _attachment_offset(placement: Placement) -> str:
+    px, py, pz = placement.position
+    q0, q1, q2, q3 = placement.rotation
+    angle, ox, oy, oz = _axis_angle(q0, q1, q2, q3)
+    return _prop(
+        "AttachmentOffset",
+        "App::PropertyPlacement",
+        f'<PropertyPlacement Px="{_f(px)}" Py="{_f(py)}" Pz="{_f(pz)}" '
+        f'Q0="{_f(q0)}" Q1="{_f(q1)}" Q2="{_f(q2)}" Q3="{_f(q3)}" '
+        f'A="{_f(angle)}" Ox="{_f(ox)}" Oy="{_f(oy)}" Oz="{_f(oz)}"/>',
     )
 
 
@@ -172,14 +232,7 @@ _ORIGIN_FEATURES = [
 
 
 def _raw_placement(q: tuple[str, str, str, str]) -> str:
-    return _prop(
-        "Placement",
-        "App::PropertyPlacement",
-        f'<PropertyPlacement Px="{_f(0)}" Py="{_f(0)}" Pz="{_f(0)}" '
-        f'Q0="{_f(float(q[0]))}" Q1="{_f(float(q[1]))}" '
-        f'Q2="{_f(float(q[2]))}" Q3="{_f(float(q[3]))}" '
-        f'A="{_f(0)}" Ox="{_f(0)}" Oy="{_f(0)}" Oz="{_f(1)}"/>',
-    )
+    return _placement_xml((0.0, 0.0, 0.0), [float(v) for v in q])
 
 
 def _origin_objects(part_fcname: str) -> list[tuple[str, str, list[str]]]:
@@ -257,15 +310,24 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 _link("Origin", origin_name),
             ]
         elif isinstance(model, Body):
+            # Each body owns an Origin; sketches attach to its datum planes.
+            origin_objs = _origin_objects(fcname)
+            extra_objects.extend(origin_objs)
+            body_origin_name = origin_objs[-1][0]
             group = [name_of[f] for f in features_of[nid]]
             tip = name_of[solids_of[nid][-1]] if solids_of[nid] else ""
-            props = [_label(model.name), _placement(model.placement), _link_list("Group", group)]
+            props = [
+                _label(model.name),
+                _placement(model.placement),
+                _link_list("Group", group),
+                _link("Origin", body_origin_name),
+            ]
             if tip:
                 props.append(_link("Tip", tip))
         elif isinstance(model, Sketch):
             props = [
                 _label(model.name),
-                _placement(model.placement),
+                _sketch_placement(model),
                 _geometry(model),
                 _prop(
                     "Constraints",
@@ -273,6 +335,20 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                     '<ConstraintList count="0"></ConstraintList>',
                 ),
             ]
+            # Attach to the owning body's datum plane so orientation survives
+            # (FreeCAD ignores a plain Placement on an in-body sketch).
+            body_fcname = name_of.get(model.body)
+            if body_fcname and model.plane in _PLANE_QUAT:
+                plane_obj = f"{body_fcname}_{model.plane}"
+                props.append(
+                    _prop(
+                        "AttachmentSupport",
+                        "App::PropertyLinkSubList",
+                        f'<LinkSubList count="1"><Link obj="{plane_obj}" sub=""/></LinkSubList>',
+                    )
+                )
+                props.append(_prop("MapMode", "App::PropertyEnumeration", '<Integer value="5"/>'))
+                props.append(_attachment_offset(model.placement))
         else:  # pad / pocket
             assert isinstance(model, Pad | Pocket)
             base = base_of.get(nid)

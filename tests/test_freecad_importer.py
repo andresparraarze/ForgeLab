@@ -128,3 +128,41 @@ def test_imports_real_schema_when_sidecar_absent():
     assert circle["center"] == [20.0, 10.0]
     assert circle["radius"] == 4.0
     assert by_id["Body"].props["part"] == "Part"
+
+
+def test_real_schema_import_recovers_non_xy_plane():
+    # When only the real FreeCAD Document.xml is present (no sidecar), the
+    # importer recovers a sketch's datum plane from its AttachmentSupport.
+    import zipfile
+    from io import BytesIO
+
+    from forgelab.exporters.mechanical import FreeCADExporter
+    from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+    from forgelab.spec.mechanical import Body, Sketch, SketchGeometry
+
+    doc = ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.MECHANICAL,
+        meta=DocumentMeta(name="v", generator="test"),
+        nodes=[
+            Node(id="Body", type="body", props=Body(name="Body").model_dump()),
+            Node(
+                id="S",
+                type="sketch",
+                props=Sketch(
+                    name="S",
+                    body="Body",
+                    plane="XZ_Plane",
+                    geometry=[SketchGeometry(geo_type="circle", center=[0, 0], radius=2.0)],
+                ).model_dump(),
+            ),
+        ],
+    )
+    data = FreeCADExporter().from_ir(doc)
+    src = zipfile.ZipFile(BytesIO(data))
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as out:  # real schema only, drop sidecar
+        out.writestr("Document.xml", src.read("Document.xml"))
+    imported = FreeCADImporter().to_ir(buf.getvalue())
+    sketch = next(n for n in imported.nodes if n.id == "S")
+    assert sketch.props["plane"] == "XZ_Plane"
