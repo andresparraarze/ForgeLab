@@ -62,6 +62,14 @@ _PLANE_QUAT: dict[str, tuple[float, float, float, float]] = {
 }
 _IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 
+# In-plane (u, v) basis + normal for each datum plane, used to lift 2D sketch
+# coordinates into world space when estimating the part's bounding box.
+_PLANE_BASIS: dict[str, tuple[tuple[float, float, float], ...]] = {
+    "XY_Plane": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+    "XZ_Plane": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+    "YZ_Plane": ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)),
+}
+
 # Agents spell the sketch plane many ways ("XY", "xy", "Front", "Top", a bare
 # "" default). FreeCAD's datum planes are named XY_Plane / XZ_Plane / YZ_Plane,
 # so normalize any reasonable spelling to one of those (FreeCAD UI view names
@@ -354,13 +362,13 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             base_of[nid] = prev
             prev = nid
 
-    # Which objects the GUI should show: each body and its tip (the last solid
-    # feature). Everything else — intermediate features, sketches, datum planes/
-    # axes/origins — is hidden, matching how FreeCAD displays a PartDesign body.
+    # The only visible object is each body's tip — the last solid feature in the
+    # chain, whose shape is the fully-cut solid (base pad minus every pocket).
+    # The body container, intermediate features, sketches and origin datums are
+    # all hidden. Making the body itself visible too left the part rendering as
+    # the bare base plate (the tip's cuts not shown) until visibility was reset
+    # by hand; showing only the tip makes the complete solid appear on recompute.
     visible_names: set[str] = set()
-    for nid, ntype, _ in items:
-        if ntype == NODE_BODY:
-            visible_names.add(name_of[nid])
     for solids in solids_of.values():
         if solids:
             visible_names.add(name_of[solids[-1]])
@@ -459,7 +467,8 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         f'<ObjectData Count="{count}">{"".join(datas)}</ObjectData>'
         f"</Document>\n"
     )
-    return RealDocument(document_xml, _gui_document_xml(object_names, visible_names))
+    gui_xml = _gui_document_xml(object_names, visible_names, _camera_settings(items))
+    return RealDocument(document_xml, gui_xml)
 
 
 class RealDocument(NamedTuple):
@@ -469,13 +478,72 @@ class RealDocument(NamedTuple):
     gui_document_xml: str
 
 
-def _gui_document_xml(object_names: list[str], visible: set[str]) -> str:
-    """A GuiDocument.xml giving every object a ViewProvider.
+def _estimate_bounds(
+    items: list[tuple[str, str, AnyModel]],
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """A conservative world-space AABB of the part.
+
+    Lifts every sketch's 2D geometry into world space via its datum plane and
+    extrudes it both ways along the plane normal by the largest feature length,
+    so the box safely contains the solid regardless of pad direction.
+    """
+    depth = max((abs(m.length) for _, _, m in items if isinstance(m, Pad | Pocket)), default=10.0)
+    depth = depth or 10.0
+    pts: list[tuple[float, float, float]] = []
+    for _nid, _ntype, model in items:
+        if not isinstance(model, Sketch):
+            continue
+        u, v, n = _PLANE_BASIS.get(_normalize_plane(model.plane), _PLANE_BASIS["XY_Plane"])
+        ox, oy, oz = model.placement.position
+        flat: list[tuple[float, float]] = []
+        for geo in model.geometry:
+            if geo.geo_type == "line":
+                x1, y1, x2, y2 = geo.points
+                flat += [(x1, y1), (x2, y2)]
+            else:
+                cx, cy = geo.center
+                flat += [(cx - geo.radius, cy - geo.radius), (cx + geo.radius, cy + geo.radius)]
+        for x, y in flat:
+            bx = ox + x * u[0] + y * v[0]
+            by = oy + x * u[1] + y * v[1]
+            bz = oz + x * u[2] + y * v[2]
+            for s in (0.0, depth, -depth):
+                pts.append((bx + s * n[0], by + s * n[1], bz + s * n[2]))
+    if not pts:
+        return (0.0, 0.0, 0.0), (depth, depth, depth)
+    lo = (min(p[0] for p in pts), min(p[1] for p in pts), min(p[2] for p in pts))
+    hi = (max(p[0] for p in pts), max(p[1] for p in pts), max(p[2] for p in pts))
+    return lo, hi
+
+
+def _camera_settings(items: list[tuple[str, str, AnyModel]]) -> str:
+    """An isometric orthographic camera framing the whole part on open."""
+    (x0, y0, z0), (x1, y1, z1) = _estimate_bounds(items)
+    cx, cy, cz = (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2
+    diag = math.dist((x0, y0, z0), (x1, y1, z1)) or 10.0
+    dist = diag * 1.5
+    off = dist / math.sqrt(3.0)  # camera sits along (+1, -1, +1) from the centre
+    return (
+        "OrthographicCamera {\n"
+        "  viewportMapping ADJUST_CAMERA\n"
+        f"  position {cx + off:.6f} {cy - off:.6f} {cz + off:.6f}\n"
+        "  orientation 0.7429061 0.3077218 0.5944728 1.2171160\n"
+        f"  nearDistance {max(0.1, dist - diag):.6f}\n"
+        f"  farDistance {dist + diag:.6f}\n"
+        "  aspectRatio 1\n"
+        f"  focalDistance {dist:.6f}\n"
+        f"  height {diag * 1.1:.6f}\n"
+        "}\n"
+    )
+
+
+def _gui_document_xml(object_names: list[str], visible: set[str], camera: str) -> str:
+    """A GuiDocument.xml giving every object a ViewProvider, plus a camera.
 
     A minimal ViewProvider (just ``Visibility``) is enough — FreeCAD fills the
     rest and ``DisplayMode`` defaults to the shaded "Flat Lines". Without this,
     the default view providers hide the solids and leave only the sketches
-    visible as wireframe.
+    visible as wireframe. The camera frames the part so it fits on open.
     """
     vps = []
     for name in object_names:
@@ -486,8 +554,9 @@ def _gui_document_xml(object_names: list[str], visible: set[str]) -> str:
             f'<Property name="Visibility" type="App::PropertyBool" status="1">'
             f'<Bool value="{value}"/></Property></Properties></ViewProvider>'
         )
+    camera_attr = _xml(camera).replace("\n", "&#10;")
     return (
         "<?xml version='1.0' encoding='utf-8'?>\n"
         f'<Document SchemaVersion="1"><ViewProviderData Count="{len(object_names)}">'
-        f'{"".join(vps)}</ViewProviderData><Camera settings=""/></Document>\n'
+        f'{"".join(vps)}</ViewProviderData><Camera settings="{camera_attr}"/></Document>\n'
     )
