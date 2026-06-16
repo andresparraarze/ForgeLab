@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: the body container is now visible on open (`Visibility=true`
+  in `GuiDocument.xml`) alongside its tip feature, matching FreeCAD's normal
+  PartDesign display state — the body node is no longer greyed-out requiring a
+  click of the eye icon. The body shows the tip's fully-cut solid (verified in
+  FreeCAD 1.1: the body renders the holed solid, not the bare base plate);
+  intermediate features, sketches and origin datums stay hidden.
 - FreeCAD exporter: a through-all pocket now actually cuts when `reversed` is
   not set. `Type=1` (ThroughAll) was already correct and the `Length` is ignored
   by FreeCAD for ThroughAll; the real cause was direction — a ThroughAll pocket
