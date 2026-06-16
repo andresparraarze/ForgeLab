@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- Installer: the PATH export now persists in new zsh sessions on Arch/
+  EndeavourOS. zsh relocates its dotfiles via `$ZDOTDIR` (commonly
+  `~/.config/zsh`), so writing to a bare `~/.zshrc` left the export in a file
+  zsh never reads — users had to `source ~/.zshrc` every session. The installer
+  now asks zsh where its dotfiles live and writes to `$ZDOTDIR/.zshrc`
+  (interactive shells) and `$ZDOTDIR/.zprofile` (login shells: terminal
+  emulators run as login shells, SSH, display managers), falling back to
+  `$HOME` when `$ZDOTDIR` is unset or zsh is absent.
 - FreeCAD exporter: every sketch with a body now emits `AttachmentSupport`
   regardless of how its plane is spelled. The attachment was gated on the plane
   being the exact string `XY_Plane`/`XZ_Plane`/`YZ_Plane`, so an agent writing
