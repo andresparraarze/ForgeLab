@@ -148,10 +148,12 @@ def _vp_visibility(gui_xml: str) -> dict[str, bool]:
     return out
 
 
-def test_gui_document_shows_solid_tip_and_hides_sketches():
+def test_gui_document_shows_only_tip_solid_and_hides_everything_else():
     # Bug fix: without a GuiDocument, FreeCAD's default view providers hide the
     # solids and show only the sketches as wireframe. The generated GuiDocument
-    # makes the body + tip feature visible (shaded) and hides everything else.
+    # makes ONLY the tip feature (last solid in the chain) visible and hides the
+    # body container, intermediate features, sketches, and origin datums — making
+    # the body visible too left the part rendering as the bare base plate.
     import re
     import zipfile
     from io import BytesIO
@@ -168,14 +170,75 @@ def test_gui_document_shows_solid_tip_and_hides_sketches():
     vis = _vp_visibility(gui)
     # Every document object gets a view provider (no object left without one).
     assert set(vis) == doc_objects
-    # Body and the tip (last solid = Pocket) are visible; intermediate Pad and
-    # the sketches are hidden; origin datums hidden.
-    assert vis["Body"] is True
-    assert vis["Pocket"] is True
+    # ONLY the tip (last solid = Pocket) is visible; the body, intermediate Pad,
+    # sketches and origin datums are all hidden.
+    assert [name for name, v in vis.items() if v] == ["Pocket"]
+    assert vis["Body"] is False
     assert vis["Pad"] is False
     assert vis["Sketch"] is False
-    assert vis["Sketch001"] is False
     assert vis["Body_XY_Plane"] is False
+
+
+def test_gui_document_tip_is_last_pocket_in_multi_pocket_body():
+    # The tip must be the final cut (last solid in the chain), so its shape is
+    # the fully-holed solid. With a base pad + several pockets, only the last
+    # pocket is visible — not the base plate.
+    import zipfile
+    from io import BytesIO
+
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    def rect(w, h):
+        return [
+            {"geo_type": "line", "points": [0, 0, w, 0]},
+            {"geo_type": "line", "points": [w, 0, w, h]},
+            {"geo_type": "line", "points": [w, h, 0, h]},
+            {"geo_type": "line", "points": [0, h, 0, 0]},
+        ]
+
+    def hole(cx, cy, r):
+        return [{"geo_type": "circle", "center": [cx, cy], "radius": r}]
+
+    nodes = [
+        {"id": "Body", "type": "body", "props": {"name": "Body"}},
+        {"id": "BaseSk", "type": "sketch", "props": {"name": "BaseSk", "body": "Body",
+            "plane": "XY_Plane", "geometry": rect(60, 30)}},
+        {"id": "BasePad", "type": "pad", "props": {"name": "BasePad", "body": "Body",
+            "profile": "BaseSk", "length": 10.0}},
+        {"id": "BoreSk", "type": "sketch", "props": {"name": "BoreSk", "body": "Body",
+            "plane": "XY_Plane", "geometry": hole(30, 15, 8)}},
+        {"id": "Bore", "type": "pocket", "props": {"name": "Bore", "body": "Body",
+            "profile": "BoreSk", "through_all": True, "reversed": True}},
+        {"id": "M4Sk", "type": "sketch", "props": {"name": "M4Sk", "body": "Body",
+            "plane": "XY_Plane", "geometry": hole(50, 20, 2)}},
+        {"id": "M4", "type": "pocket", "props": {"name": "M4", "body": "Body",
+            "profile": "M4Sk", "through_all": True, "reversed": True}},
+    ]  # fmt: skip
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "mm", "generator": "t"},
+            "nodes": nodes,
+        }
+    )
+    gui = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(doc))).read("GuiDocument.xml").decode()
+    vis = _vp_visibility(gui)
+    assert [name for name, v in vis.items() if v] == ["M4"]  # last pocket only
+    assert vis["BasePad"] is False  # base plate hidden
+
+
+def test_gui_document_has_camera_framing_the_part():
+    # The camera must frame the part so it fits the view on open (empty camera
+    # settings left the part out of frame).
+    import zipfile
+    from io import BytesIO
+
+    data = FreeCADExporter().from_ir(_doc())
+    gui = zipfile.ZipFile(BytesIO(data)).read("GuiDocument.xml").decode()
+    assert "OrthographicCamera" in gui
+    assert 'settings=""' not in gui  # not the empty placeholder
+    assert "height" in gui.replace("&#10;", "\n")
 
 
 def test_export_body_without_optional_part_does_not_keyerror():

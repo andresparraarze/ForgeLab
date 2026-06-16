@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: the generated `GuiDocument.xml` now makes **only** the body's
+  tip feature (the last solid in the chain — typically the final pocket) visible,
+  hiding the body container, intermediate features, sketches and origin datums.
+  Previously the body container was also marked visible, which could leave the
+  part rendering as the bare base plate with the pocket cuts not shown until
+  visibility was reset by hand in the Python console; showing only the tip makes
+  the complete holed solid appear after a single recompute. The `GuiDocument`
+  also now carries an isometric orthographic camera framed to the part's bounding
+  box, so the part fits the view on open instead of starting off-screen.
 - FreeCAD exporter: a Pad/Pocket `profile` now resolves when it references its
   sketch by the sketch's label/name (or is stale in a single-sketch body), not
   only by exact node id. Previously such a feature wrote an empty `Profile`
