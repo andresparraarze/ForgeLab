@@ -403,9 +403,13 @@ references, so an agent can read and edit the model directly. Parsing uses only
 the standard library (`zipfile` + `xml.etree`), so **no FreeCAD installation is
 required**.
 
-Exported `.FCStd` files use FreeCAD's real document schema and **open directly
-in FreeCAD** — shapes recompute from the parametric definitions on load
-(validated against FreeCAD 1.1). The importer also reads genuine
+Exported `.FCStd` files use FreeCAD's real document schema and **open in
+FreeCAD** with the part/body/feature tree intact and a `GuiDocument` that shows
+the solid shaded and hides the sketches. Because the files carry no precomputed
+OpenCASCADE shapes (they are generated without FreeCAD), press **Refresh**
+(`Ctrl+R`) once on open to build the geometry from the parametric definitions —
+no manual `touch()` is needed (validated against FreeCAD 1.1). The importer also
+reads genuine
 FreeCAD-authored files (canonical subset: parts, bodies, sketches with
 line/circle geometry and dimensional constraints, pads, pockets — Origin
 planes/axes and other unmodeled objects are skipped). The IR round-trip

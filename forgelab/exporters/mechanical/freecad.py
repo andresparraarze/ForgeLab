@@ -4,9 +4,11 @@ Writes an archive FreeCAD genuinely opens:
 
 - ``Document.xml`` — real FreeCAD schema (App::Part, PartDesign::Body,
   Sketcher::SketchObject with GeomLineSegment/GeomCircle, PartDesign::Pad,
-  PartDesign::Pocket). Shapes carry no ``.brp`` files; FreeCAD recomputes
-  them from the parametric definitions on load.
-- ``GuiDocument.xml`` — minimal view-provider stub.
+  PartDesign::Pocket). Shapes carry no ``.brp`` files; a single Refresh
+  (recompute) on open builds them from the parametric definitions.
+- ``GuiDocument.xml`` — view providers that show each body + its tip feature
+  shaded and hide intermediate features, sketches and origin datums (otherwise
+  FreeCAD's defaults render the solids as wireframe-only).
 - ``ForgeLab.Document.xml`` — the full ForgeLab property dialect (sidecar).
   FreeCAD ignores unknown archive entries; the importer prefers this entry,
   which is what preserves the exact IR round-trip identity (the real schema
@@ -15,7 +17,6 @@ Writes an archive FreeCAD genuinely opens:
 
 from forgelab.exporters.base import Exporter
 from forgelab.exporters.mechanical.realxml import (
-    GUI_DOCUMENT_XML,
     AnyModel,
     build_real_document_xml,
 )
@@ -129,11 +130,11 @@ class FreeCADExporter(Exporter):
         # Reuse the dialect writer, then lift its Document.xml into the sidecar.
         sidecar_zip = write_fcstd(fc_doc)
         sidecar_xml = read_archive_entry(sidecar_zip, "Document.xml") or b""
-        real_xml = build_real_document_xml(items, document.meta.name)
+        real = build_real_document_xml(items, document.meta.name)
         return write_archive(
             {
-                "Document.xml": real_xml,
-                "GuiDocument.xml": GUI_DOCUMENT_XML,
+                "Document.xml": real.document_xml,
+                "GuiDocument.xml": real.gui_document_xml,
                 _SIDECAR: sidecar_xml,
             }
         )

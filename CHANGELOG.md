@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: exported `.FCStd` files now render the solid shaded instead
+  of wireframe-only. Previously no `GuiDocument.xml` view providers were written,
+  so FreeCAD's defaults hid every solid and showed only the sketches as
+  wireframe. The exporter now generates a `GuiDocument.xml` that makes each body
+  and its tip feature visible (shaded "Flat Lines") and hides intermediate
+  features, sketches, and origin datums (validated in FreeCAD 1.1's GUI). Note:
+  the files carry no precomputed OpenCASCADE shapes, so a single **Refresh**
+  (`Ctrl+R`) on open builds the geometry and resolves the Pad/Pocket `Profile`
+  links — no manual `touch()` required.
 - FreeCAD exporter: nodes nested via `Node.children` are no longer dropped.
   Agents express the part→body→feature hierarchy either as a flat node list or
   by nesting children; the exporter only iterated top-level `document.nodes`, so

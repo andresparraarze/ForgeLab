@@ -81,6 +81,47 @@ def test_archive_contains_real_schema_gui_and_sidecar():
     assert "BaseFeature" in real  # pocket cuts need the base link
 
 
+def _vp_visibility(gui_xml: str) -> dict[str, bool]:
+    import re
+
+    out: dict[str, bool] = {}
+    for m in re.finditer(r'<ViewProvider name="([^"]+)".*?</ViewProvider>', gui_xml, re.S):
+        block = m.group(0)
+        vis = re.search(r'name="Visibility".*?<Bool value="(\w+)"', block, re.S)
+        out[m.group(1)] = vis is not None and vis.group(1) == "true"
+    return out
+
+
+def test_gui_document_shows_solid_tip_and_hides_sketches():
+    # Bug fix: without a GuiDocument, FreeCAD's default view providers hide the
+    # solids and show only the sketches as wireframe. The generated GuiDocument
+    # makes the body + tip feature visible (shaded) and hides everything else.
+    import re
+    import zipfile
+    from io import BytesIO
+    from pathlib import Path
+
+    from forgelab.sdk import load
+
+    example = load(Path("examples/mechanical/box-with-hole.forge.json").read_text())
+    archive = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(example)))
+    real = archive.read("Document.xml").decode()
+    gui = archive.read("GuiDocument.xml").decode()
+
+    doc_objects = set(re.findall(r'<Object type="[^"]+" name="([^"]+)"', real))
+    vis = _vp_visibility(gui)
+    # Every document object gets a view provider (no object left without one).
+    assert set(vis) == doc_objects
+    # Body and the tip (last solid = Pocket) are visible; intermediate Pad and
+    # the sketches are hidden; origin datums hidden.
+    assert vis["Body"] is True
+    assert vis["Pocket"] is True
+    assert vis["Pad"] is False
+    assert vis["Sketch"] is False
+    assert vis["Sketch001"] is False
+    assert vis["Body_XY_Plane"] is False
+
+
 def test_export_body_without_optional_part_does_not_keyerror():
     from forgelab.spec import SPEC_VERSION, ForgeDocument
 
