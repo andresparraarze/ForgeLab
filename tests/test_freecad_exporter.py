@@ -153,3 +153,63 @@ def test_non_xy_sketch_gets_attachment_and_real_rotation():
     assert 'A="1.5707963267948966"' in real
     sketch_block = real.split('name="S"')[1].split("</Object>")[0]
     assert 'A="0.0000000000000000" Ox="0.0000000000000000"' not in sketch_block
+
+
+def _sketch_doc(plane: str):
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+    from forgelab.spec.mechanical import Body, Sketch, SketchGeometry
+
+    return ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "v", "generator": "test"},
+            "nodes": [
+                {"id": "Body", "type": "body", "props": Body(name="Body").model_dump()},
+                {
+                    "id": "S",
+                    "type": "sketch",
+                    "props": Sketch(
+                        name="S",
+                        body="Body",
+                        plane=plane,
+                        geometry=[SketchGeometry(geo_type="circle", center=[0, 0], radius=2.0)],
+                    ).model_dump(),
+                },
+            ],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("plane", "datum"),
+    [
+        ("XY_Plane", "Body_XY_Plane"),
+        ("XY", "Body_XY_Plane"),
+        ("xy", "Body_XY_Plane"),
+        ("Top", "Body_XY_Plane"),
+        ("XZ_Plane", "Body_XZ_Plane"),
+        ("XZ", "Body_XZ_Plane"),
+        ("Front", "Body_XZ_Plane"),
+        ("YZ", "Body_YZ_Plane"),
+        ("Right", "Body_YZ_Plane"),
+        ("", "Body_XY_Plane"),  # unknown / empty falls back to XY
+        ("totally-bogus", "Body_XY_Plane"),
+    ],
+)
+def test_attachment_support_emitted_for_any_plane_spelling(plane, datum):
+    # Bug: AttachmentSupport was gated on plane being one of the exact strings
+    # XY_Plane/XZ_Plane/YZ_Plane, so an agent writing "XY", "Front", etc. got a
+    # sketch with NO attachment — it never oriented and the geometry never
+    # rendered. Every sketch with a body must attach to a datum plane.
+    import zipfile
+    from io import BytesIO
+
+    real = (
+        zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(_sketch_doc(plane))))
+        .read("Document.xml")
+        .decode()
+    )
+    assert "AttachmentSupport" in real
+    assert f'<Link obj="{datum}" sub=""/>' in real
+    assert 'name="MapMode"' in real

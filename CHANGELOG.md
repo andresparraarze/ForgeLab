@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: every sketch with a body now emits `AttachmentSupport`
+  regardless of how its plane is spelled. The attachment was gated on the plane
+  being the exact string `XY_Plane`/`XZ_Plane`/`YZ_Plane`, so an agent writing
+  `"XY"`, `"Front"`, `"Top"`, or leaving it blank produced an unattached sketch
+  that never oriented and whose geometry never rendered. Plane names are now
+  normalized (`XY`/`Top`→XY, `XZ`/`Front`→XZ, `YZ`/`Right`→YZ, unknown→XY).
+  Added a `motor-mount` example (vertical flange on the XZ plane via the short
+  `"XZ"` spelling); validated with FreeCAD 1.1 — plain recompute builds all
+  solids and the flange orients vertically.
 - FreeCAD exporter: sketches on non-XY datum planes (XZ/YZ) now orient
   correctly. Each body emits its own `App::Origin` and every sketch attaches to
   the body's datum plane via `AttachmentSupport` + `MapMode` (FlatFace) —

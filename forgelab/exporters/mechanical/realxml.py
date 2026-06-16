@@ -61,6 +61,28 @@ _PLANE_QUAT: dict[str, tuple[float, float, float, float]] = {
 }
 _IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 
+# Agents spell the sketch plane many ways ("XY", "xy", "Front", "Top", a bare
+# "" default). FreeCAD's datum planes are named XY_Plane / XZ_Plane / YZ_Plane,
+# so normalize any reasonable spelling to one of those (FreeCAD UI view names
+# map: Top->XY, Front->XZ, Right->YZ). Anything unrecognized falls back to XY
+# rather than silently dropping the sketch's attachment.
+_PLANE_ALIASES = {
+    "XY": "XY_Plane",
+    "XY_PLANE": "XY_Plane",
+    "TOP": "XY_Plane",
+    "XZ": "XZ_Plane",
+    "XZ_PLANE": "XZ_Plane",
+    "FRONT": "XZ_Plane",
+    "YZ": "YZ_Plane",
+    "YZ_PLANE": "YZ_Plane",
+    "RIGHT": "YZ_Plane",
+}
+
+
+def _normalize_plane(plane: str) -> str:
+    """Map any agent plane spelling to a FreeCAD datum plane (default XY)."""
+    return _PLANE_ALIASES.get(plane.strip().upper(), "XY_Plane")
+
 
 def _f(value: float) -> str:
     return f"{float(value):.16f}"
@@ -118,7 +140,7 @@ def _sketch_placement(sketch: Sketch) -> str:
     """
     rotation = tuple(sketch.placement.rotation)
     if rotation == _IDENTITY_QUAT:
-        rotation = _PLANE_QUAT.get(sketch.plane, _IDENTITY_QUAT)
+        rotation = _PLANE_QUAT.get(_normalize_plane(sketch.plane), _IDENTITY_QUAT)
     return _placement_xml(sketch.placement.position, rotation)
 
 
@@ -336,10 +358,12 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 ),
             ]
             # Attach to the owning body's datum plane so orientation survives
-            # (FreeCAD ignores a plain Placement on an in-body sketch).
+            # (FreeCAD ignores a plain Placement on an in-body sketch). Every
+            # sketch with a resolvable body attaches; the plane is normalized so
+            # any spelling ("XY", "Front", "") maps to a real datum plane.
             body_fcname = name_of.get(model.body)
-            if body_fcname and model.plane in _PLANE_QUAT:
-                plane_obj = f"{body_fcname}_{model.plane}"
+            if body_fcname:
+                plane_obj = f"{body_fcname}_{_normalize_plane(model.plane)}"
                 props.append(
                     _prop(
                         "AttachmentSupport",

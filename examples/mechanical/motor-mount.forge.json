@@ -1,0 +1,269 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "motor-mount",
+    "generator": "forgelab-freecad",
+    "description": null
+  },
+  "nodes": [
+    {
+      "id": "MotorMount",
+      "type": "part",
+      "props": {
+        "name": "MotorMount",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "Body",
+      "type": "body",
+      "props": {
+        "name": "Body",
+        "part": "MotorMount",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "BasePlate",
+      "type": "sketch",
+      "props": {
+        "name": "BasePlate",
+        "body": "Body",
+        "plane": "XY",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              0.0,
+              80.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              80.0,
+              0.0,
+              80.0,
+              60.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              80.0,
+              60.0,
+              0.0,
+              60.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              60.0,
+              0.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          }
+        ],
+        "constraints": []
+      },
+      "children": []
+    },
+    {
+      "id": "BasePad",
+      "type": "pad",
+      "props": {
+        "name": "BasePad",
+        "body": "Body",
+        "profile": "BasePlate",
+        "length": 6.0,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    },
+    {
+      "id": "ShaftBore",
+      "type": "sketch",
+      "props": {
+        "name": "ShaftBore",
+        "body": "Body",
+        "plane": "XY",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "points": [],
+            "center": [
+              40.0,
+              30.0
+            ],
+            "radius": 12.0
+          }
+        ],
+        "constraints": []
+      },
+      "children": []
+    },
+    {
+      "id": "ShaftHole",
+      "type": "pocket",
+      "props": {
+        "name": "ShaftHole",
+        "body": "Body",
+        "profile": "ShaftBore",
+        "length": 0.0,
+        "through_all": true,
+        "reversed": true,
+        "midplane": false
+      },
+      "children": []
+    },
+    {
+      "id": "Flange",
+      "type": "sketch",
+      "props": {
+        "name": "Flange",
+        "body": "Body",
+        "plane": "XZ",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              0.0,
+              80.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              80.0,
+              0.0,
+              80.0,
+              30.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              80.0,
+              30.0,
+              0.0,
+              30.0
+            ],
+            "center": [],
+            "radius": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              30.0,
+              0.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0
+          }
+        ],
+        "constraints": []
+      },
+      "children": []
+    },
+    {
+      "id": "FlangePad",
+      "type": "pad",
+      "props": {
+        "name": "FlangePad",
+        "body": "Body",
+        "profile": "Flange",
+        "length": 6.0,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    }
+  ]
+}
