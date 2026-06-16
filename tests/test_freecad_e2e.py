@@ -208,3 +208,71 @@ def test_non_xy_sketch_pocket_cuts_in_freecad(tmp_path):
     assert "PAD_VOLUME: 24000.0" in out, out
     # Bug 2: the vertical pocket actually removed material (40*20*30 - pi*25*20).
     assert "POCKET_VOLUME: 22429.2" in out, out
+
+
+def test_through_all_pocket_cuts_without_reversed(tmp_path):
+    # Live bug: a through-all pocket (Type=1) whose `reversed` is not set cut
+    # nothing — it cut away from the material, leaving the plate volume at 18000.
+    # Midplane=true (cut both directions) makes a through-hole cut regardless.
+    from forgelab.exporters.mechanical import FreeCADExporter
+    from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+    from forgelab.spec.mechanical import Body, Pad, Pocket, Sketch, SketchGeometry
+
+    plate = Sketch(
+        name="PlateSk",
+        body="Body",
+        geometry=[
+            SketchGeometry(geo_type="line", points=[0, 0, 60, 0]),
+            SketchGeometry(geo_type="line", points=[60, 0, 60, 30]),
+            SketchGeometry(geo_type="line", points=[60, 30, 0, 30]),
+            SketchGeometry(geo_type="line", points=[0, 30, 0, 0]),
+        ],
+    )
+    bore = Sketch(
+        name="BoreSk",
+        body="Body",
+        geometry=[SketchGeometry(geo_type="circle", center=[30, 15], radius=8.0)],
+    )
+    doc = ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.MECHANICAL,
+        meta=DocumentMeta(name="plate", generator="test"),
+        nodes=[
+            Node(id="Body", type="body", props=Body(name="Body").model_dump()),
+            Node(id="PlateSk", type="sketch", props=plate.model_dump()),
+            Node(
+                id="Plate",
+                type="pad",
+                props=Pad(name="Plate", body="Body", profile="PlateSk", length=10.0).model_dump(),
+            ),
+            Node(id="BoreSk", type="sketch", props=bore.model_dump()),
+            # through_all, reversed left at its default (False) — the failing case
+            Node(
+                id="cut_pocket",
+                type="pocket",
+                props=Pocket(
+                    name="cut_pocket", body="Body", profile="BoreSk", through_all=True
+                ).model_dump(),
+            ),
+        ],
+    )
+    fcstd = tmp_path / "plate.FCStd"
+    fcstd.write_bytes(FreeCADExporter().from_ir(doc))
+    script = tmp_path / "check.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import FreeCAD as App
+            doc = App.openDocument({str(fcstd)!r})
+            doc.recompute()
+            pk = doc.getObject("cut_pocket")
+            print("POCKET_VOLUME:", round(pk.Shape.Volume, 1))
+            print("CUTS:", pk.Shape.Volume < 18000)
+            """
+        )
+    )
+    out = subprocess.run(
+        ["freecadcmd", str(script)], capture_output=True, text=True, timeout=120
+    ).stdout
+    assert "CUTS: True" in out, out  # 18000 plate minus the bore
+    assert "POCKET_VOLUME: 15989.4" in out, out  # 18000 - pi*64*10

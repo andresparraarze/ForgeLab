@@ -43,6 +43,51 @@ def test_exported_pad_carries_length_and_links():
     assert by_name["profile"].ptype == "Link"
 
 
+def test_through_all_pocket_is_midplane_with_nonzero_length():
+    # Live bug: a through-all pocket (Type=1) with Length=0 and Reversed unset
+    # cut nothing — it cut away from the material. Type=1 is correct, Length is
+    # irrelevant for ThroughAll; the fix is Midplane=true (cut both directions)
+    # plus a non-zero fallback Length so the property is never 0.
+    import re
+    import zipfile
+    from io import BytesIO
+
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "v", "generator": "test"},
+            "nodes": [
+                {"id": "Body", "type": "body", "props": {"name": "Body"}},
+                {"id": "PlateSk", "type": "sketch", "props": {"name": "PlateSk", "body": "Body",
+                    "plane": "XY_Plane", "geometry": [
+                        {"geo_type": "line", "points": [0, 0, 40, 0]},
+                        {"geo_type": "line", "points": [40, 0, 40, 20]},
+                        {"geo_type": "line", "points": [40, 20, 0, 20]},
+                        {"geo_type": "line", "points": [0, 20, 0, 0]}]}},
+                {"id": "Plate", "type": "pad", "props": {"name": "Plate", "body": "Body",
+                    "profile": "PlateSk", "length": 10.0}},
+                {"id": "BoreSk", "type": "sketch", "props": {"name": "BoreSk", "body": "Body",
+                    "plane": "XY_Plane", "geometry": [
+                        {"geo_type": "circle", "center": [20, 10], "radius": 4.0}]}},
+                # through_all, no length, no reversed — the failing live case
+                {"id": "cut_pocket", "type": "pocket", "props": {"name": "cut_pocket",
+                    "body": "Body", "profile": "BoreSk", "through_all": True}},
+            ],
+        }
+    )  # fmt: skip
+    real = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(doc))).read("Document.xml").decode()
+    block = real.split('<Object name="cut_pocket">')[1].split("</Object>")[0]
+    type_int = re.search(r'name="Type".*?<Integer value="(\d+)"', block, re.S)
+    length = re.search(r'name="Length".*?<Float value="([\d.]+)"', block, re.S)
+    midplane = re.search(r'name="Midplane".*?<Bool value="(\w+)"', block, re.S)
+    assert type_int.group(1) == "1"  # ThroughAll
+    assert float(length.group(1)) > 0  # non-zero fallback, not 0.0
+    assert midplane.group(1) == "true"  # cuts both directions regardless of side
+
+
 def test_pad_profile_referenced_by_sketch_label_resolves():
     # Bug fix: a Pad/Pocket whose `profile` references its sketch by the sketch's
     # label/name (not its node id) wrote an empty Profile LinkSub — FreeCAD then
