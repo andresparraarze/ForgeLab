@@ -223,27 +223,36 @@ def _bool(name: str, value: bool) -> str:
     return _prop(name, "App::PropertyBool", f'<Bool value="{"true" if value else "false"}"/>')
 
 
-def _feature_props(model: Pad | Pocket, profile_fcname: str, base_feature: str | None) -> list[str]:
-    props = [
+def _feature_props(
+    model: Pad | Pocket, profile_fcname: str, base_feature: str | None, fallback_length: float
+) -> list[str]:
+    # PartDesign::Pocket Type enumeration (verified against FreeCAD 1.1):
+    # 0=Length, 1=ThroughAll, 2=UpToFirst, ... — so through-all is Type 1.
+    through_all = isinstance(model, Pocket) and model.through_all
+    type_value = 1 if through_all else 0
+    # FreeCAD never stores Length=0 for a feature; fall back to a part-scaled
+    # length so a length isn't required for a through-all (where it is ignored)
+    # and a degenerate length=0 still produces a real cut/extrude.
+    length = model.length if model.length > 0 else fallback_length
+    # A ThroughAll pocket cuts in ONE direction; if its sketch sits on the far
+    # side of the solid (Reversed not set), it removes nothing — the live bug
+    # where the bore left volume unchanged. Midplane makes it cut symmetrically
+    # through everything, so a through-hole always cuts regardless of pad
+    # direction. (Length is irrelevant for ThroughAll; verified in FreeCAD 1.1.)
+    midplane = model.midplane or through_all
+    return [
         _label(model.name),
         _prop(
             "Profile",
             "App::PropertyLinkSub",
             f'<LinkSub value="{profile_fcname}" count="0"></LinkSub>',
         ),
+        _prop("Length", "App::PropertyLength", f'<Float value="{_f(length)}"/>'),
+        _prop("Type", "App::PropertyEnumeration", f'<Integer value="{type_value}"/>'),
+        _bool("Reversed", model.reversed),
+        _bool("Midplane", midplane),
+        *([_link("BaseFeature", base_feature)] if base_feature else []),
     ]
-    if isinstance(model, Pocket):
-        type_value = 1 if model.through_all else 0
-        props.append(_prop("Length", "App::PropertyLength", f'<Float value="{_f(model.length)}"/>'))
-    else:
-        type_value = 0
-        props.append(_prop("Length", "App::PropertyLength", f'<Float value="{_f(model.length)}"/>'))
-    props.append(_prop("Type", "App::PropertyEnumeration", f'<Integer value="{type_value}"/>'))
-    props.append(_bool("Reversed", model.reversed))
-    props.append(_bool("Midplane", model.midplane))
-    if base_feature:
-        props.append(_link("BaseFeature", base_feature))
-    return props
 
 
 # App::Part requires a linked App::Origin to recompute; PartDesign::Body
@@ -295,6 +304,12 @@ def _origin_objects(part_fcname: str) -> list[tuple[str, str, list[str]]]:
 def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: str) -> RealDocument:
     """Render the FreeCAD-schema Document.xml + GuiDocument.xml for the items."""
     name_of = {node_id: fc_name(node_id) for node_id, _, _ in items}
+    # Part-scaled fallback for features that arrive with length=0 (e.g. a
+    # through-all pocket, where the length is ignored anyway).
+    fallback_length = max(
+        (m.length for _, _, m in items if isinstance(m, Pad | Pocket) and m.length > 0),
+        default=10.0,
+    )
 
     body_ids = [nid for nid, ntype, _ in items if ntype == NODE_BODY]
     # A feature's ``body`` may reference its body by node id, by the body's
@@ -441,7 +456,9 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         else:  # pad / pocket
             assert isinstance(model, Pad | Pocket)
             base = base_of.get(nid)
-            props = _feature_props(model, resolve_profile(model), name_of[base] if base else None)
+            props = _feature_props(
+                model, resolve_profile(model), name_of[base] if base else None, fallback_length
+            )
         body_xml = "".join(props)
         datas.append(
             f'<Object name="{fcname}"><Properties Count="{len(props)}" TransientCount="0">'

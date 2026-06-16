@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: a through-all pocket now actually cuts when `reversed` is
+  not set. `Type=1` (ThroughAll) was already correct and the `Length` is ignored
+  by FreeCAD for ThroughAll; the real cause was direction — a ThroughAll pocket
+  cuts one way, so when its sketch sat on the far side of the solid it removed
+  nothing (the bore left the plate volume unchanged). Through-all pockets are now
+  emitted with `Midplane=true` so they cut symmetrically through everything
+  regardless of pad direction. Features that arrive with `length=0` also get a
+  part-scaled fallback length so the `Length` property is never `0`. Validated in
+  FreeCAD 1.1: a 60×30×10 (18000mm³) plate with an unreversed through-bore now
+  recomputes to 15989.4mm³.
 - FreeCAD exporter: the generated `GuiDocument.xml` now makes **only** the body's
   tip feature (the last solid in the chain — typically the final pocket) visible,
   hiding the body container, intermediate features, sketches and origin datums.
