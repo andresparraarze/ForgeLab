@@ -17,6 +17,56 @@ ok()   { printf '\033[32m✔\033[0m %s\n' "$1"; }
 fail() { printf '\033[31m✘ %s\033[0m\n' "$1" >&2; exit 1; }
 step() { printf '\033[36m→ %s\033[0m\n' "$1"; }
 
+# --- PATH setup (kept above the install steps so the test suite can source
+#     this file and exercise it in isolation) ---------------------------------
+
+# Where zsh actually reads its dotfiles. Arch/EndeavourOS (and any setup using
+# grml or a relocated config) point $ZDOTDIR at e.g. ~/.config/zsh from
+# /etc/zsh/zshenv or ~/.zshenv, so a bare ~/.zshrc is never sourced. .zshenv is
+# read for every zsh invocation, so asking zsh itself resolves it reliably.
+forgelab_zsh_dir() {
+  if command -v zsh >/dev/null 2>&1; then
+    local d
+    d="$(zsh -c 'print -rn -- ${ZDOTDIR:-$HOME}' 2>/dev/null || true)"
+    if [ -n "$d" ]; then printf '%s' "$d"; return; fi
+  fi
+  printf '%s' "${ZDOTDIR:-$HOME}"
+}
+
+# Append a line to an rc file once (idempotent), creating it if needed.
+forgelab_add_path_line() {
+  local rc="$1" line="$2"
+  [ -n "$rc" ] || return 0
+  mkdir -p "$(dirname "$rc")" 2>/dev/null || true
+  if grep -qsF "$line" "$rc"; then
+    ok "already in $rc"
+  else
+    printf '\n# Added by the ForgeLab installer\n%s\n' "$line" >> "$rc"
+    ok "added to $rc"
+  fi
+}
+
+# Put a venv bin dir on PATH for future shells and the current one.
+forgelab_setup_path() {
+  local bindir="$1"
+  local line; line="export PATH=\"$bindir:\$PATH\""
+  local zdir; zdir="$(forgelab_zsh_dir)"
+  # Interactive zsh reads .zshrc; login zsh — terminal emulators set to run a
+  # login shell, SSH sessions, display managers — reads .zprofile. Write both
+  # so the PATH survives every kind of new session without a manual re-source.
+  forgelab_add_path_line "$zdir/.zshrc" "$line"
+  forgelab_add_path_line "$zdir/.zprofile" "$line"
+  # bash: interactive non-login reads .bashrc (only touch it if it exists, so
+  # we don't conjure a bashrc on a zsh-only machine).
+  [ -f "$HOME/.bashrc" ] && forgelab_add_path_line "$HOME/.bashrc" "$line"
+  export PATH="$bindir:$PATH"
+}
+
+# When sourced by the test suite, stop here — only the helpers above are wanted.
+if (return 0 2>/dev/null) && [ -n "${FORGELAB_INSTALLER_TEST:-}" ]; then
+  return 0
+fi
+
 # 1. Python 3.11+
 step "Checking Python"
 PYTHON="$(command -v python3 || true)"
@@ -65,22 +115,13 @@ ok "registered as MCP server 'forgelab'"
 # 6. Put forgelab / forgelab-mcp / forgelab init on the PATH
 step "Adding $VENV/bin to your PATH"
 PATH_LINE="export PATH=\"$VENV/bin:\$PATH\""
-add_path() {
-  local rc="$1"
-  if grep -qsF "$PATH_LINE" "$rc"; then
-    ok "already in $rc"
-  else
-    printf '\n# Added by the ForgeLab installer\n%s\n' "$PATH_LINE" >> "$rc"
-    ok "added to $rc"
-  fi
-}
-touch "$HOME/.zshrc"
-add_path "$HOME/.zshrc"
-[ -f "$HOME/.bashrc" ] && add_path "$HOME/.bashrc"
-# Make the commands available to anything launched from this script's session.
-export PATH="$VENV/bin:$PATH"
+forgelab_setup_path "$VENV/bin"
 command -v forgelab >/dev/null 2>&1 || fail "forgelab not found on PATH after update."
+ZSH_DIR="$(forgelab_zsh_dir)"
 ok "PATH updated — 'forgelab', 'forgelab-mcp' are now global commands"
+if [ "$ZSH_DIR" != "$HOME" ]; then
+  echo "  (zsh dotfiles live in $ZSH_DIR — updated $ZSH_DIR/.zshrc and .zprofile)"
+fi
 echo "  (Current shell: run this once if the commands aren't found yet:)"
 echo "    $PATH_LINE"
 
