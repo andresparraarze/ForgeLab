@@ -102,6 +102,40 @@ def test_fresh_export_recomputes_without_manual_touch(tmp_path):
     assert "PAD_VOLUME: 2250.0" in result.stdout  # 30 * 15 * 5
 
 
+def test_motor_mount_example_with_short_plane_names_recomputes(tmp_path):
+    # Bug fix: the motor-mount example spells its planes "XY"/"XZ" (not the exact
+    # "XY_Plane"/"XZ_Plane"). The exporter must still attach every sketch to a
+    # datum plane, so the vertical flange orients and all solids build on a plain
+    # recompute — the live-testing failure was AttachmentSupport silently dropped
+    # for any non-canonical plane spelling.
+    example = Path("examples/mechanical/motor-mount.FCStd").resolve()
+    script = tmp_path / "check.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import FreeCAD as App
+            doc = App.openDocument({str(example)!r})
+            n = doc.recompute()  # plain recompute, no touch()
+            flange = doc.getObject("Flange")
+            roll = round(flange.Placement.Rotation.toEuler()[2], 1)
+            print("RECOMPUTED:", n)
+            print("FLANGE_ROLL:", roll)
+            for name in ("BasePad", "ShaftHole", "FlangePad"):
+                o = doc.getObject(name)
+                print(name + "_VOLUME:", round(o.Shape.Volume, 2), o.Shape.isValid())
+            """
+        )
+    )
+    out = subprocess.run(
+        ["freecadcmd", str(script)], capture_output=True, text=True, timeout=120
+    ).stdout
+    assert "RECOMPUTED: 0" not in out, out
+    assert "FLANGE_ROLL: 90.0" in out, out  # flange genuinely vertical, not flat XY
+    assert "BasePad_VOLUME: 28800.0 True" in out, out
+    assert "ShaftHole_VOLUME: 26085.66 True" in out, out
+    assert "FlangePad_VOLUME: 40485.66 True" in out, out
+
+
 def test_non_xy_sketch_pocket_cuts_in_freecad(tmp_path):
     # Bug fix: a pocket whose sketch is on a vertical (XZ) plane must orient and
     # cut on plain recompute — previously the sketch landed flat in XY and the
