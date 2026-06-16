@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: a sketch now keeps its `AttachmentSupport` (and lands in its
+  body's group) when its `body` is referenced by the body's label or left blank
+  in a single-body part — not only when it exactly matches the body's node id.
+  Previously such a sketch silently lost its datum-plane attachment, so it never
+  oriented and the feature failed to build. The body is now resolved by node id,
+  then by label, then (in a single-body part) the sole body. The `plane` value
+  was always carried through correctly via the sidecar; the missing link was
+  body resolution, not the plane.
 - FreeCAD exporter: exported `.FCStd` files now render the solid shaded instead
   of wireframe-only. Previously no `GuiDocument.xml` view providers were written,
   so FreeCAD's defaults hid every solid and showed only the sketches as

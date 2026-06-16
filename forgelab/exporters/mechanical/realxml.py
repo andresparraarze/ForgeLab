@@ -291,12 +291,31 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
     name_of = {node_id: fc_name(node_id) for node_id, _, _ in items}
 
     body_ids = [nid for nid, ntype, _ in items if ntype == NODE_BODY]
+    # A feature's ``body`` may reference its body by node id, by the body's
+    # label/name, or (in a single-body part) be left blank/stale. Resolve all of
+    # these to a body node id so the feature is grouped and — for sketches —
+    # attached to that body's datum plane. Without this, a sketch whose body
+    # link does not match a node id silently loses its AttachmentSupport.
+    body_label_to_id: dict[str, str] = {}
+    for nid, ntype, model in items:
+        if ntype == NODE_BODY:
+            body_label_to_id.setdefault(getattr(model, "name", ""), nid)
+    body_id_set = set(body_ids)
+    only_body = body_ids[0] if len(body_ids) == 1 else None
+
+    def resolve_body(ref: str) -> str | None:
+        if ref in body_id_set:
+            return ref
+        if ref in body_label_to_id:
+            return body_label_to_id[ref]
+        return only_body  # single-body part: an unmatched ref must mean that body
+
     features_of: dict[str, list[str]] = {b: [] for b in body_ids}
     solids_of: dict[str, list[str]] = {b: [] for b in body_ids}
     for nid, ntype, model in items:
         if ntype in _FEATURES:
-            owner = getattr(model, "body", "")
-            if owner in features_of:
+            owner = resolve_body(getattr(model, "body", ""))
+            if owner is not None:
                 features_of[owner].append(nid)
                 if ntype in _SOLID_FEATURES:
                     solids_of[owner].append(nid)
@@ -372,11 +391,12 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 ),
             ]
             # Attach to the owning body's datum plane so orientation survives
-            # (FreeCAD ignores a plain Placement on an in-body sketch). Every
-            # sketch with a resolvable body attaches; the plane is normalized so
-            # any spelling ("XY", "Front", "") maps to a real datum plane.
-            body_fcname = name_of.get(model.body)
-            if body_fcname:
+            # (FreeCAD ignores a plain Placement on an in-body sketch). The body
+            # is resolved by id, label, or single-body fallback; the plane is
+            # normalized so any spelling ("XY", "Front", "") maps to a datum.
+            body_id = resolve_body(model.body)
+            if body_id is not None:
+                body_fcname = name_of[body_id]
                 plane_obj = f"{body_fcname}_{_normalize_plane(model.plane)}"
                 props.append(
                     _prop(
