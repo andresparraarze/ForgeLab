@@ -43,6 +43,62 @@ def test_exported_pad_carries_length_and_links():
     assert by_name["profile"].ptype == "Link"
 
 
+def test_pad_profile_referenced_by_sketch_label_resolves():
+    # Bug fix: a Pad/Pocket whose `profile` references its sketch by the sketch's
+    # label/name (not its node id) wrote an empty Profile LinkSub — FreeCAD then
+    # reports "<feature> no object linked" on open. Resolve the profile by id,
+    # then sketch label, then the body's sole sketch.
+    import re
+    import zipfile
+    from io import BytesIO
+
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    geometry = [
+        {"geo_type": "line", "points": [0, 0, 30, 0]},
+        {"geo_type": "line", "points": [30, 0, 30, 15]},
+        {"geo_type": "line", "points": [30, 15, 0, 15]},
+        {"geo_type": "line", "points": [0, 15, 0, 0]},
+    ]
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "v", "generator": "test"},
+            "nodes": [
+                {"id": "B", "type": "body", "props": {"name": "Body"}},
+                # node id "Sk", but its label/name is "PlateProfile"
+                {
+                    "id": "Sk",
+                    "type": "sketch",
+                    "props": {
+                        "name": "PlateProfile",
+                        "body": "B",
+                        "plane": "XY_Plane",
+                        "geometry": geometry,
+                    },
+                },
+                # profile refers to the sketch by its label, not its node id
+                {
+                    "id": "PlatePad",
+                    "type": "pad",
+                    "props": {
+                        "name": "PlatePad",
+                        "body": "B",
+                        "profile": "PlateProfile",
+                        "length": 5.0,
+                    },
+                },
+            ],
+        }
+    )
+    real = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(doc))).read("Document.xml").decode()
+    pad_block = real.split('<Object name="PlatePad">')[1].split("</Object>")[0]
+    profile = re.search(r'name="Profile".*?<LinkSub value="([^"]*)"', pad_block, re.S)
+    assert profile is not None
+    assert profile.group(1) == "Sk"  # resolved to the sketch's node-id name, not empty
+
+
 def test_export_is_byte_stable():
     doc = _doc()
     assert FreeCADExporter().from_ir(doc) == FreeCADExporter().from_ir(doc)

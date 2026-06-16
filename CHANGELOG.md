@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: a Pad/Pocket `profile` now resolves when it references its
+  sketch by the sketch's label/name (or is stale in a single-sketch body), not
+  only by exact node id. Previously such a feature wrote an empty `Profile`
+  link, so FreeCAD reported "<feature> no object linked" on open and built no
+  solid. The profile is resolved by node id, then sketch label, then the sole
+  sketch of the feature's body — the same lookup used for body references.
 - FreeCAD exporter: a sketch now keeps its `AttachmentSupport` (and lands in its
   body's group) when its `body` is referenced by the body's label or left blank
   in a single-body part — not only when it exactly matches the body's node id.
