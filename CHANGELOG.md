@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- FreeCAD exporter: nodes nested via `Node.children` are no longer dropped.
+  Agents express the part→body→feature hierarchy either as a flat node list or
+  by nesting children; the exporter only iterated top-level `document.nodes`, so
+  a nested document exported just the `App::Part` and its origin (`Count=9`) and
+  silently omitted every `PartDesign::Body` / `Sketcher::SketchObject` /
+  `PartDesign::Pad` / `PartDesign::Pocket`. Added `ForgeDocument.walk()` /
+  `Node.walk()` (depth-first, pre-order) and the exporter now walks the whole
+  tree. Flattening is lossless for the mechanical domain (body/part/feature
+  relationships live in node props, not the tree shape).
 - Installer: the PATH export now persists in new zsh sessions on Arch/
   EndeavourOS. zsh relocates its dotfiles via `$ZDOTDIR` (commonly
   `~/.config/zsh`), so writing to a bare `~/.zshrc` left the export in a file

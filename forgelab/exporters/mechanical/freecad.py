@@ -103,7 +103,10 @@ class FreeCADExporter(Exporter):
     def from_ir(self, document: ForgeDocument) -> bytes:
         objects: list[FcObject] = []
         items: list[tuple[str, str, AnyModel]] = []
-        for node in document.nodes:
+        # Walk the whole tree: agents express the part->body->feature hierarchy
+        # either as a flat node list or by nesting via Node.children. Iterating
+        # only document.nodes dropped every nested Body/Sketch/Pad/Pocket.
+        for node in document.walk():
             fc_type = _FCTYPE_BY_NODE.get(node.type)
             if fc_type is None:
                 raise ValueError(f"Cannot export node type {node.type!r} to FreeCAD")

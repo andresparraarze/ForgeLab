@@ -66,3 +66,37 @@ def test_spec_version_is_0_5_0():
     from forgelab.spec.version import SPEC_VERSION
 
     assert SPEC_VERSION == "0.5.0"
+
+
+def test_document_walk_yields_all_nodes_depth_first():
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "n"},
+            "nodes": [
+                {
+                    "id": "a",
+                    "type": "part",
+                    "children": [
+                        {"id": "b", "type": "body", "children": [{"id": "c", "type": "sketch"}]},
+                        {"id": "d", "type": "body"},
+                    ],
+                },
+                {"id": "e", "type": "part"},
+            ],
+        }
+    )
+    assert [n.id for n in doc.walk()] == ["a", "b", "c", "d", "e"]  # pre-order
+
+
+def test_document_walk_flat_matches_nodes():
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "n"},
+            "nodes": [{"id": "x", "type": "part"}, {"id": "y", "type": "body"}],
+        }
+    )
+    assert [n.id for n in doc.walk()] == ["x", "y"]
