@@ -171,45 +171,28 @@ Then ask Claude Code things like *"generate a blinky LED board and export it to
 KiCad"* — it will chain `generate_document` → `export_document` and hand you the
 `.kicad_pcb` content.
 
+Hermes and OpenClaw are smart agents — paste this prompt directly into your
+agent and it handles the installation automatically.
+
 ### Hermes
 
-Hermes speaks MCP over Streamable HTTP. Run the server with auth enabled,
-mint a token from the built-in dev authorization server (or your IdP), and
-point Hermes at the endpoint:
+Give Hermes this prompt:
 
-```bash
-FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
-```
-
-Configure the Hermes MCP connection with:
-
-- **URL:** `http://your-host:8001/mcp`
-- **Authorization:** `Bearer <token>` — get one via
-  `POST /oauth/token` on the REST API (see [Authentication](#authentication-optional)),
-  requesting the scopes the agent needs (`forge:read forge:export forge:generate`).
-
-For local/trusted Hermes deployments that support stdio servers, the
-`forgelab-mcp --transport stdio` command works there too.
+> Install ForgeLab on this machine. Clone
+> https://github.com/andresparraarze/ForgeLab, create a venv at
+> `~/.forgelab/venv`, install `forgelab[mcp,agent]` into it, start the MCP server
+> with streamable-http transport on port 8001, and confirm the tools are
+> available by calling `list_domains`. Then tell me what domains are supported.
 
 ### OpenClaw
 
-OpenClaw consumes MCP servers via its standard MCP configuration. For a local
-setup, register the stdio command:
+Give OpenClaw this prompt:
 
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"]
-    }
-  }
-}
-```
-
-For a remote OpenClaw deployment, use the OAuth-protected HTTP endpoint exactly
-as in the Hermes setup: URL `http://your-host:8001/mcp` plus a bearer token with
-the appropriate `forge:*` scopes.
+> Install ForgeLab and add it to your MCP configuration. Clone
+> https://github.com/andresparraarze/ForgeLab, create a venv at
+> `~/.forgelab/venv`, install `forgelab[mcp,agent]`, add the stdio MCP server to
+> your config at `~/.forgelab/venv/bin/forgelab-mcp --transport stdio`, verify by
+> calling `list_domains`, and confirm what design domains are available.
 
 ### What the agent gets
 
