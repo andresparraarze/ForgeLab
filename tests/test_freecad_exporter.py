@@ -213,3 +213,66 @@ def test_attachment_support_emitted_for_any_plane_spelling(plane, datum):
     assert "AttachmentSupport" in real
     assert f'<Link obj="{datum}" sub=""/>' in real
     assert 'name="MapMode"' in real
+
+
+def test_nested_children_nodes_are_all_exported():
+    # Bug: agents express the part->body->feature hierarchy with Node.children
+    # rather than a flat node list. The exporter only iterated document.nodes
+    # (top level), so a nested document exported just the Part + its origin
+    # (Count=9) and silently dropped the Body, Sketch, Pad and Pocket.
+    import zipfile
+    from io import BytesIO
+
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "mechanical",
+            "meta": {"name": "nested", "generator": "test"},
+            "nodes": [
+                {
+                    "id": "Part",
+                    "type": "part",
+                    "props": {"name": "Part"},
+                    "children": [
+                        {
+                            "id": "Body",
+                            "type": "body",
+                            "props": {"name": "Body", "part": "Part"},
+                            "children": [
+                                {
+                                    "id": "Sketch",
+                                    "type": "sketch",
+                                    "props": {
+                                        "name": "Sketch",
+                                        "body": "Body",
+                                        "plane": "XY",
+                                        "geometry": [
+                                            {"geo_type": "circle", "center": [0, 0], "radius": 4.0}
+                                        ],
+                                    },
+                                    "children": [],
+                                },
+                                {
+                                    "id": "Pad",
+                                    "type": "pad",
+                                    "props": {
+                                        "name": "Pad",
+                                        "body": "Body",
+                                        "profile": "Sketch",
+                                        "length": 10.0,
+                                    },
+                                    "children": [],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    real = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(doc))).read("Document.xml").decode()
+    assert "PartDesign::Body" in real
+    assert "Sketcher::SketchObject" in real
+    assert "PartDesign::Pad" in real

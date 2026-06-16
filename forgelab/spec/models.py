@@ -7,6 +7,7 @@ Domain-specific node vocabularies are layered on top in later work.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from enum import StrEnum
 from typing import Any
 
@@ -41,6 +42,12 @@ class Node(BaseModel):
     props: dict[str, Any] = Field(default_factory=dict)
     children: list[Node] = Field(default_factory=list)
 
+    def walk(self) -> Iterator[Node]:
+        """Yield this node then all descendants, depth-first (pre-order)."""
+        yield self
+        for child in self.children:
+            yield from child.walk()
+
 
 class ForgeDocument(BaseModel):
     """Root of a ForgeLab design document.
@@ -54,6 +61,17 @@ class ForgeDocument(BaseModel):
     domain: Domain
     meta: DocumentMeta
     nodes: list[Node] = Field(default_factory=list)
+
+    def walk(self) -> Iterator[Node]:
+        """Yield every node in the document tree, depth-first (pre-order).
+
+        Hierarchy may be expressed either as a flat ``nodes`` list or by nesting
+        via ``Node.children``; consumers that need every node (e.g. exporters)
+        should iterate ``walk()`` rather than ``nodes`` so nested nodes are not
+        silently dropped.
+        """
+        for node in self.nodes:
+            yield from node.walk()
 
 
 Node.model_rebuild()
