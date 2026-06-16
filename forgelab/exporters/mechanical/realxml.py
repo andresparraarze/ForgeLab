@@ -25,6 +25,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Sequence
+from typing import NamedTuple
 
 from forgelab.spec.mechanical import (
     NODE_BODY,
@@ -285,8 +286,8 @@ def _origin_objects(part_fcname: str) -> list[tuple[str, str, list[str]]]:
     return out
 
 
-def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: str) -> str:
-    """Render FreeCAD-schema Document.xml for (node_id, node_type, model) items."""
+def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: str) -> RealDocument:
+    """Render the FreeCAD-schema Document.xml + GuiDocument.xml for the items."""
     name_of = {node_id: fc_name(node_id) for node_id, _, _ in items}
 
     body_ids = [nid for nid, ntype, _ in items if ntype == NODE_BODY]
@@ -311,11 +312,24 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             base_of[nid] = prev
             prev = nid
 
+    # Which objects the GUI should show: each body and its tip (the last solid
+    # feature). Everything else — intermediate features, sketches, datum planes/
+    # axes/origins — is hidden, matching how FreeCAD displays a PartDesign body.
+    visible_names: set[str] = set()
+    for nid, ntype, _ in items:
+        if ntype == NODE_BODY:
+            visible_names.add(name_of[nid])
+    for solids in solids_of.values():
+        if solids:
+            visible_names.add(name_of[solids[-1]])
+    object_names: list[str] = []
+
     decls = []
     datas = []
     extra_objects: list[tuple[str, str, list[str]]] = []
     for nid, ntype, model in items:
         fcname = name_of[nid]
+        object_names.append(fcname)
         # Touched="1": with no stored .brp shapes, FreeCAD only rebuilds
         # geometry for dirty objects — this makes recompute-on-open work.
         decls.append(f'<Object type="{_FCTYPE[ntype]}" name="{fcname}" Touched="1" />')
@@ -385,6 +399,7 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
 
     for fcname, fctype, props in extra_objects:
         decls.append(f'<Object type="{fctype}" name="{fcname}" Touched="1" />')
+        object_names.append(fcname)
         datas.append(
             f'<Object name="{fcname}"><Properties Count="{len(props)}" TransientCount="0">'
             f"{''.join(props)}</Properties></Object>"
@@ -392,7 +407,7 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
 
     count = len(items) + len(extra_objects)
     label_prop = _prop("Label", "App::PropertyString", f'<String value="{_xml(doc_name)}"/>')
-    return (
+    document_xml = (
         "<?xml version='1.0' encoding='utf-8'?>\n"
         "<!--\n FreeCAD Document, see https://www.freecad.org for more information...\n-->\n"
         f'<Document SchemaVersion="4" ProgramVersion="ForgeLab" FileVersion="1">'
@@ -401,10 +416,35 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         f'<ObjectData Count="{count}">{"".join(datas)}</ObjectData>'
         f"</Document>\n"
     )
+    return RealDocument(document_xml, _gui_document_xml(object_names, visible_names))
 
 
-GUI_DOCUMENT_XML = (
-    "<?xml version='1.0' encoding='utf-8'?>\n"
-    '<Document SchemaVersion="1"><ViewProviderData Count="0"/>'
-    '<Camera settings=""/></Document>\n'
-)
+class RealDocument(NamedTuple):
+    """The two XML members of a FreeCAD .FCStd archive."""
+
+    document_xml: str
+    gui_document_xml: str
+
+
+def _gui_document_xml(object_names: list[str], visible: set[str]) -> str:
+    """A GuiDocument.xml giving every object a ViewProvider.
+
+    A minimal ViewProvider (just ``Visibility``) is enough — FreeCAD fills the
+    rest and ``DisplayMode`` defaults to the shaded "Flat Lines". Without this,
+    the default view providers hide the solids and leave only the sketches
+    visible as wireframe.
+    """
+    vps = []
+    for name in object_names:
+        value = "true" if name in visible else "false"
+        vps.append(
+            f'<ViewProvider name="{name}" expanded="0">'
+            f'<Properties Count="1" TransientCount="0">'
+            f'<Property name="Visibility" type="App::PropertyBool" status="1">'
+            f'<Bool value="{value}"/></Property></Properties></ViewProvider>'
+        )
+    return (
+        "<?xml version='1.0' encoding='utf-8'?>\n"
+        f'<Document SchemaVersion="1"><ViewProviderData Count="{len(object_names)}">'
+        f'{"".join(vps)}</ViewProviderData><Camera settings=""/></Document>\n'
+    )
