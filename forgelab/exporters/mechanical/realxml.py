@@ -377,13 +377,15 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             base_of[nid] = prev
             prev = nid
 
-    # The only visible object is each body's tip — the last solid feature in the
-    # chain, whose shape is the fully-cut solid (base pad minus every pocket).
-    # The body container, intermediate features, sketches and origin datums are
-    # all hidden. Making the body itself visible too left the part rendering as
-    # the bare base plate (the tip's cuts not shown) until visibility was reset
-    # by hand; showing only the tip makes the complete solid appear on recompute.
+    # Visible on open: each body container and its tip — the last solid feature
+    # in the chain, whose shape is the fully-cut solid (base pad minus every
+    # pocket). This is FreeCAD's normal PartDesign display state: the body shows
+    # the tip shape and the body node isn't greyed-out in the tree. Intermediate
+    # features, sketches and origin datums stay hidden.
     visible_names: set[str] = set()
+    for nid, ntype, _ in items:
+        if ntype == NODE_BODY:
+            visible_names.add(name_of[nid])
     for solids in solids_of.values():
         if solids:
             visible_names.add(name_of[solids[-1]])

@@ -193,12 +193,11 @@ def _vp_visibility(gui_xml: str) -> dict[str, bool]:
     return out
 
 
-def test_gui_document_shows_only_tip_solid_and_hides_everything_else():
-    # Bug fix: without a GuiDocument, FreeCAD's default view providers hide the
-    # solids and show only the sketches as wireframe. The generated GuiDocument
-    # makes ONLY the tip feature (last solid in the chain) visible and hides the
-    # body container, intermediate features, sketches, and origin datums — making
-    # the body visible too left the part rendering as the bare base plate.
+def test_gui_document_shows_body_and_tip_hides_everything_else():
+    # The GuiDocument makes the body container AND its tip feature (last solid in
+    # the chain) visible — FreeCAD's normal PartDesign state, so the body node is
+    # not greyed-out on open and the tip's fully-cut solid renders. Intermediate
+    # features, sketches and origin datums stay hidden.
     import re
     import zipfile
     from io import BytesIO
@@ -215,10 +214,9 @@ def test_gui_document_shows_only_tip_solid_and_hides_everything_else():
     vis = _vp_visibility(gui)
     # Every document object gets a view provider (no object left without one).
     assert set(vis) == doc_objects
-    # ONLY the tip (last solid = Pocket) is visible; the body, intermediate Pad,
+    # The body and the tip (last solid = Pocket) are visible; intermediate Pad,
     # sketches and origin datums are all hidden.
-    assert [name for name, v in vis.items() if v] == ["Pocket"]
-    assert vis["Body"] is False
+    assert {name for name, v in vis.items() if v} == {"Body", "Pocket"}
     assert vis["Pad"] is False
     assert vis["Sketch"] is False
     assert vis["Body_XY_Plane"] is False
@@ -269,8 +267,11 @@ def test_gui_document_tip_is_last_pocket_in_multi_pocket_body():
     )
     gui = zipfile.ZipFile(BytesIO(FreeCADExporter().from_ir(doc))).read("GuiDocument.xml").decode()
     vis = _vp_visibility(gui)
-    assert [name for name, v in vis.items() if v] == ["M4"]  # last pocket only
+    # Body + the last pocket (tip) are visible; the base plate / earlier features
+    # are hidden so the rendered solid is the fully-holed tip.
+    assert {name for name, v in vis.items() if v} == {"Body", "M4"}
     assert vis["BasePad"] is False  # base plate hidden
+    assert vis["Bore"] is False
 
 
 def test_gui_document_has_camera_framing_the_part():
