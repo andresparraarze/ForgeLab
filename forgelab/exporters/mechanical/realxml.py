@@ -215,15 +215,13 @@ def _bool(name: str, value: bool) -> str:
     return _prop(name, "App::PropertyBool", f'<Bool value="{"true" if value else "false"}"/>')
 
 
-def _feature_props(
-    model: Pad | Pocket, name_of: dict[str, str], base_feature: str | None
-) -> list[str]:
+def _feature_props(model: Pad | Pocket, profile_fcname: str, base_feature: str | None) -> list[str]:
     props = [
         _label(model.name),
         _prop(
             "Profile",
             "App::PropertyLinkSub",
-            f'<LinkSub value="{name_of.get(model.profile, "")}" count="0"></LinkSub>',
+            f'<LinkSub value="{profile_fcname}" count="0"></LinkSub>',
         ),
     ]
     if isinstance(model, Pocket):
@@ -312,13 +310,38 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
 
     features_of: dict[str, list[str]] = {b: [] for b in body_ids}
     solids_of: dict[str, list[str]] = {b: [] for b in body_ids}
+    sketches_of: dict[str, list[str]] = {b: [] for b in body_ids}
     for nid, ntype, model in items:
         if ntype in _FEATURES:
             owner = resolve_body(getattr(model, "body", ""))
             if owner is not None:
                 features_of[owner].append(nid)
+                if ntype == NODE_SKETCH:
+                    sketches_of[owner].append(nid)
                 if ntype in _SOLID_FEATURES:
                     solids_of[owner].append(nid)
+
+    # A Pad/Pocket ``profile`` may reference its sketch by node id, by the
+    # sketch's label/name, or be stale; resolve the same way the body link is
+    # (id -> label -> the sole sketch of the feature's body) so the Profile link
+    # is never written empty ("PlatePad no object linked" on open otherwise).
+    sketch_ids = {nid for nid, ntype, _ in items if ntype == NODE_SKETCH}
+    sketch_label_to_id: dict[str, str] = {}
+    for nid, ntype, model in items:
+        if ntype == NODE_SKETCH:
+            sketch_label_to_id.setdefault(getattr(model, "name", ""), nid)
+
+    def resolve_profile(model: Pad | Pocket) -> str:
+        ref = model.profile
+        if ref in sketch_ids:
+            return name_of[ref]
+        if ref in sketch_label_to_id:
+            return name_of[sketch_label_to_id[ref]]
+        body = resolve_body(getattr(model, "body", ""))
+        if body is not None and len(sketches_of[body]) == 1:
+            return name_of[sketches_of[body][0]]
+        return ""
+
     bodies_of_part: dict[str, list[str]] = {}
     for nid, _ntype, model in items:
         if isinstance(model, Body) and model.part:
@@ -410,7 +433,7 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         else:  # pad / pocket
             assert isinstance(model, Pad | Pocket)
             base = base_of.get(nid)
-            props = _feature_props(model, name_of, name_of[base] if base else None)
+            props = _feature_props(model, resolve_profile(model), name_of[base] if base else None)
         body_xml = "".join(props)
         datas.append(
             f'<Object name="{fcname}"><Properties Count="{len(props)}" TransientCount="0">'
