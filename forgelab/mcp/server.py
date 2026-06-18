@@ -19,6 +19,7 @@ _TOOLS = [
     tools.export_document,
     tools.import_file,
     tools.generate_document,
+    tools.generation_status,
 ]
 
 

@@ -48,6 +48,11 @@ def system_prompt(domain: str) -> str:
         'Each node\'s "props" must use only the exact field names defined by '
         "that type's schema — never invent fields. Scene hierarchy, when "
         'present, is expressed via a node\'s "children" list.\n\n'
+        "Build the complete document in a single pass: decide on every node and "
+        "all of its props up front and assemble the full design before you "
+        "finish. Do not construct the document incrementally or call "
+        "validate_document repeatedly to discover the shape — consult the schema "
+        "first, then validate once at the end.\n\n"
         "Respond with ONLY a single JSON object conforming to the provided "
         "schema. No prose, no Markdown fences."
     )

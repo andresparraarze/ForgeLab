@@ -12,6 +12,7 @@ _EXPECTED = {
     "export_document",
     "import_file",
     "generate_document",
+    "generation_status",
 }
 
 

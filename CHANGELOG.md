@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- MCP server: new `generation_status` tool reports whether `generate_document`
+  is usable on this server (needs both `ANTHROPIC_API_KEY` set and the `agent`
+  extra installed) without calling it. When unavailable it returns a `reason`
+  and an `alternative` telling the agent to build against the schema
+  (`get_domain_schema` + `get_prompt`) and validate once — so agents can skip a
+  wasted `generate_document` round trip that would only fail.
+
+### Changed
+- SDK prompts: each domain's `system_prompt` now instructs the agent to build
+  the complete document in a single pass — consult the schema first, assemble
+  every node and prop, then call `validate_document` once — rather than
+  iterating with repeated validation calls. Surfaced to external agents through
+  the MCP `get_prompt` tool.
+
 ### Fixed
 - FreeCAD exporter: the body container is now visible on open (`Visibility=true`
   in `GuiDocument.xml`) alongside its tip feature, matching FreeCAD's normal
