@@ -168,7 +168,21 @@ class KiCadImporter(Importer):
                 number = str(pad[1]) if len(pad) > 1 else ""
                 net_node = _find(pad, "net")
                 net_name = str(net_node[2]) if net_node and len(net_node) >= 3 else ""
-                pads.append(Pad(number=number, net=net_name))
+                at_node = _find(pad, "at")
+                pad_at = _floats(at_node[1:3]) if at_node and len(at_node) >= 3 else None
+                size_node = _find(pad, "size")
+                pad_size = _floats(size_node[1:3]) if size_node and len(size_node) >= 3 else None
+                # (pad "1" smd roundrect ...) — type at [2], shape at [3].
+                shape = str(pad[3]) if len(pad) > 3 and not isinstance(pad[3], list) else None
+                pads.append(
+                    Pad(
+                        number=number,
+                        net=net_name,
+                        at=pad_at,
+                        size=pad_size,
+                        shape=shape,
+                    )
+                )
 
             components.append(
                 Component(

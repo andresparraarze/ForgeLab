@@ -7,6 +7,8 @@ complete, functional ``kicad_pcb`` S-expression. Depends only on
 
 from __future__ import annotations
 
+import math
+
 from forgelab.exporters.base import Exporter
 from forgelab.formats import Symbol, dumps
 from forgelab.spec import (
@@ -35,6 +37,24 @@ def _num(value: float) -> int | float:
 def _s(tag: str, *args: object) -> list:
     """Build an S-expression list headed by a bare ``tag`` symbol."""
     return [Symbol(tag), *args]
+
+
+_PAD_GRID_PITCH = 2.0
+
+
+def _grid_offset(index: int, total: int) -> tuple[float, float]:
+    """Deterministic (x, y) for a pad that carries no explicit ``at``.
+
+    Lays pads out on a centred square-ish grid so a multi-pin part never
+    collapses onto the footprint origin. Purely a visual fallback — agents
+    should supply real offsets via ``Pad.at`` when the package geometry is known.
+    """
+    cols = max(1, math.ceil(math.sqrt(total)))
+    row, col = divmod(index, cols)
+    rows = math.ceil(total / cols)
+    x = (col - (cols - 1) / 2) * _PAD_GRID_PITCH
+    y = (row - (rows - 1) / 2) * _PAD_GRID_PITCH
+    return x, y
 
 
 class KiCadExporter(Exporter):
@@ -146,18 +166,25 @@ class KiCadExporter(Exporter):
         fp.append(_s("at", _num(comp.at[0]), _num(comp.at[1]), _num(comp.at[2])))
         fp.append(_s("property", "Reference", comp.reference))
         fp.append(_s("property", "Value", comp.value))
-        for pad in comp.pads:
+        total = len(comp.pads)
+        for index, pad in enumerate(comp.pads):
             code = name_to_code.get(pad.net, 0)
+            # Honor an explicit pad offset; otherwise spread pads on a grid so
+            # a multi-pin part doesn't collapse onto the footprint origin.
+            if pad.at is not None:
+                x, y = pad.at[0], pad.at[1]
+            else:
+                x, y = _grid_offset(index, total)
+            width, height = (pad.size[0], pad.size[1]) if pad.size else (1.6, 1.6)
+            shape = pad.shape if pad.shape else "roundrect"
             fp.append(
                 _s(
                     "pad",
                     pad.number,
                     Symbol("smd"),
-                    Symbol("roundrect"),
-                    # KiCad requires at/size on every pad; the IR doesn't model
-                    # pad geometry yet, so emit standard 0805 defaults.
-                    _s("at", 0, 0),
-                    _s("size", 1.6, 1.6),
+                    Symbol(shape),
+                    _s("at", _num(x), _num(y)),
+                    _s("size", _num(width), _num(height)),
                     _s("layers", "F.Cu"),
                     _s("net", code, pad.net),
                 )

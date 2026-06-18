@@ -49,6 +49,13 @@ def test_threed_system_prompt_says_y_is_up_axis():
     assert "z" in low
 
 
+def test_hardware_system_prompt_mentions_pad_at_offset():
+    prompt = system_prompt("hardware").lower()
+    # Agents should give each pad its physical offset so pads don't collapse.
+    assert "pad" in prompt
+    assert "at" in prompt and ("offset" in prompt or "position" in prompt)
+
+
 def test_system_prompt_unknown_domain_raises():
     with pytest.raises(KeyError):
         system_prompt("nope")

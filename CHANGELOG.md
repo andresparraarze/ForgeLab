@@ -39,6 +39,15 @@ All notable changes to this project are documented here. The format is based on
   directory.
 
 ### Fixed
+- KiCad exporter: pads no longer stack at the footprint origin. Every pad was
+  emitted with `(at 0 0)`, so a multi-pin part (e.g. a 29-pad HTSSOP-28) visually
+  collapsed onto a single point. The `Pad` model gained an optional `at` ([x, y]
+  offset from the footprint origin) plus optional `size`/`shape`; the exporter
+  now emits each pad's real `at` when provided, and when it is omitted spreads
+  pads on a centred deterministic grid so they never overlap. The importer reads
+  pad `at`/`size`/`shape` back (round-trip stable). `system_prompt('hardware')`
+  (via `get_prompt`) and the `Pad.at` JSON-schema description (via
+  `get_domain_schema`) now tell agents to set each pad's physical offset.
 - glTF exporter: a `mesh`/`material` reference that doesn't match a node id
   (commonly a display name used by mistake) now raises a clear error naming the
   bad reference and listing the valid ids, instead of a cryptic `KeyError` that
