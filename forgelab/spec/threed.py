@@ -5,6 +5,13 @@ primitives, transforms, and scene objects. Like the hardware vocabulary they are
 not a new document root: they serialize into the generic ``Node`` graph. Scene
 hierarchy is expressed with ``Node.children`` (objects nest inside objects);
 meshes and materials are flat, id-referenced top-level nodes.
+
+Coordinate convention: the threed domain is **Y-up**, matching glTF's native
+axis convention. Author geometry with the Y axis as up (an object's height goes
+on the Y component), never Z. The glTF exporter passes coordinates straight
+through, and Blender's glTF importer converts Y-up back to its own Z-up world,
+so Y-up authoring imports upright; a Z-up document would be double-converted and
+land tipped on its side.
 """
 
 from __future__ import annotations

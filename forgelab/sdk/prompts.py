@@ -36,7 +36,12 @@ _REFERENCE_HINTS: dict[str, str] = {
         '{"id": "mat_red", "type": "material", "props": {"name": "vermilion", '
         '...}}, reference it as "material": "mat_red" (its id) — never '
         '"material": "vermilion" (its name). A reference that uses the display '
-        "name will not resolve and the export will fail."
+        "name will not resolve and the export will fail.\n\n"
+        "Up axis: the threed domain is Y-up (the glTF convention). Author all "
+        "geometry with the Y axis as up — put an object's height on the Y "
+        "position/translation component, not Z. Do NOT use Z as up: glTF is "
+        "Y-up and Blender's importer converts Y-up back to its own Z-up world, "
+        "so a Z-up document gets double-converted and lands tipped on its side."
     ),
 }
 

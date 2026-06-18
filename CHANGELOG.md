@@ -25,6 +25,18 @@ All notable changes to this project are documented here. The format is based on
   state explicitly that references must use the target node's `id`, not its
   display `name`, with a `mat_red` (id) vs `vermilion` (name) example — so
   agents stop referencing materials/meshes by name.
+- threed domain: documented the **Y-up** coordinate convention (matching glTF's
+  native axis) in the spec, the glTF exporter, and `system_prompt` (via
+  `get_prompt`). Agents are now told to author height on the Y axis, not Z —
+  a Z-up document gets double-converted by Blender's Y-up→Z-up importer and
+  lands tipped 90°. The exporter already passes coordinates straight through
+  (no rotation); the fix is making the contract explicit so geometry imports
+  upright.
+- `export_document`: the `output_path` description now tells agents to prefer a
+  bare filename (e.g. `"castle.gltf"`) so output lands in the configured
+  `FORGELAB_OUTPUT_DIR`, and to pass an absolute path only when writing
+  elsewhere — agents were passing absolute paths and bypassing the configured
+  directory.
 
 ### Fixed
 - glTF exporter: a `mesh`/`material` reference that doesn't match a node id
