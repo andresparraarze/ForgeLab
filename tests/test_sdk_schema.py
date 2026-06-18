@@ -42,6 +42,22 @@ def test_component_props_field_names_match_model():
     assert "footprint" in props
 
 
+def test_object_mesh_ref_description_says_use_id_not_name():
+    schema = domain_schema("threed")
+    obj = next(v for v in _variants(schema) if v["properties"]["type"]["const"] == "object")
+    mesh_field = obj["properties"]["props"]["properties"]["mesh"]
+    desc = mesh_field["description"].lower()
+    assert "id" in desc and "name" in desc
+
+
+def test_primitive_material_ref_description_says_use_id_not_name():
+    schema = domain_schema("threed")
+    # Primitive is a sub-model of Mesh, hoisted into the document-level $defs.
+    material_field = schema["$defs"]["Primitive"]["properties"]["material"]
+    desc = material_field["description"].lower()
+    assert "id" in desc and "name" in desc
+
+
 def test_unknown_domain_raises():
     with pytest.raises(KeyError):
         domain_schema("nope")

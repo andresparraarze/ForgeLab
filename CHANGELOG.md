@@ -20,8 +20,21 @@ All notable changes to this project are documented here. The format is based on
   every node and prop, then call `validate_document` once — rather than
   iterating with repeated validation calls. Surfaced to external agents through
   the MCP `get_prompt` tool.
+- threed domain: `system_prompt` (via `get_prompt`) and the `mesh`/`material`
+  reference field descriptions in the JSON schema (via `get_domain_schema`) now
+  state explicitly that references must use the target node's `id`, not its
+  display `name`, with a `mat_red` (id) vs `vermilion` (name) example — so
+  agents stop referencing materials/meshes by name.
 
 ### Fixed
+- glTF exporter: a `mesh`/`material` reference that doesn't match a node id
+  (commonly a display name used by mistake) now raises a clear error naming the
+  bad reference and listing the valid ids, instead of a cryptic `KeyError` that
+  silently failed the export. Surfaced through `export_document` as
+  `export failed for 'gltf': ...`.
+- Blender export: the unimplemented-`.blend` error now tells the agent to use
+  `tool='gltf'` instead (Blender imports glTF natively), rather than a bare
+  "not implemented" that left the agent to discover the alternative by trial.
 - FreeCAD exporter: the body container is now visible on open (`Visibility=true`
   in `GuiDocument.xml`) alongside its tip feature, matching FreeCAD's normal
   PartDesign display state — the body node is no longer greyed-out requiring a

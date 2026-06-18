@@ -51,6 +51,41 @@ def test_list_formats_reports_registered_tools():
     assert formats["freecad"]["import"] is True
 
 
+def _threed_doc(material_ref="mat_red"):
+    return {
+        "forgelab_version": SPEC_VERSION,
+        "domain": "threed",
+        "meta": {"name": "scene", "generator": "test"},
+        "nodes": [
+            {
+                "id": "mat_red",
+                "type": "material",
+                "props": {"name": "vermilion", "base_color": [1.0, 0.0, 0.0, 1.0]},
+            },
+            {
+                "id": "mesh_cube",
+                "type": "mesh",
+                "props": {
+                    "name": "cube",
+                    "primitives": [{"positions": [0.0, 0.0, 0.0], "material": material_ref}],
+                },
+            },
+        ],
+    }
+
+
+def test_export_blender_suggests_gltf():
+    with pytest.raises(ValueError, match="gltf"):
+        tools.export_document(_threed_doc(), "blender")
+
+
+def test_export_bad_material_ref_surfaces_id_hint():
+    with pytest.raises(ValueError) as exc:
+        tools.export_document(_threed_doc(material_ref="vermilion"), "gltf")
+    msg = str(exc.value)
+    assert "vermilion" in msg and "id" in msg
+
+
 def test_generation_status_available_when_key_and_extra(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     monkeypatch.setattr(tools, "_agent_extra_installed", lambda: True)

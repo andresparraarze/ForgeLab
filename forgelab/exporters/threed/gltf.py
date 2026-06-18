@@ -27,6 +27,24 @@ from forgelab.spec import (
 )
 
 
+def _resolve_ref(ref: str, index: dict[str, int], kind: str) -> int:
+    """Map a node-id reference to its glTF array index, or fail clearly.
+
+    A reference that doesn't match a node id (a common mistake is using the
+    target's display ``name`` instead of its ``id``) raises a ``ValueError`` that
+    names the bad reference and lists the valid ids, instead of a cryptic KeyError.
+    """
+    try:
+        return index[ref]
+    except KeyError:
+        available = ", ".join(index) or "(none)"
+        raise ValueError(
+            f"{kind} reference {ref!r} does not match any {kind} node id. "
+            f"References must use the target node's id field, not its display "
+            f"name. Available {kind} ids: {available}."
+        ) from None
+
+
 class GltfExporter(Exporter):
     """Convert a ForgeDocument into glTF bytes."""
 
@@ -76,7 +94,7 @@ class GltfExporter(Exporter):
                 if prim.indices:
                     entry["indices"] = builder.add_scalar_uint(prim.indices)
                 if prim.material:
-                    entry["material"] = mat_index[prim.material]
+                    entry["material"] = _resolve_ref(prim.material, mat_index, "material")
                 prims.append(entry)
             meshes.append({"name": mesh.name, "primitives": prims})
         if meshes:
@@ -93,7 +111,7 @@ class GltfExporter(Exporter):
                 "scale": obj.transform.scale,
             }
             if obj.mesh:
-                entry["mesh"] = mesh_index[obj.mesh]
+                entry["mesh"] = _resolve_ref(obj.mesh, mesh_index, "mesh")
             my_index = len(gltf_nodes)
             gltf_nodes.append(entry)
             child_indices = [add_object(c) for c in node.children if c.type == NODE_OBJECT]

@@ -25,6 +25,22 @@ _FEW_SHOT: dict[str, tuple[str, str]] = {
 }
 
 
+# domain -> extra guidance appended to the system prompt (reference conventions,
+# etc.). Keyed by domain so only the relevant note ships with each prompt.
+_REFERENCE_HINTS: dict[str, str] = {
+    "threed": (
+        'References between nodes always use the target node\'s top-level "id", '
+        'never its display "name". An object\'s "mesh" prop must be a mesh '
+        "node's id, and a primitive's \"material\" must be a material node's id. "
+        "For example, given a material node "
+        '{"id": "mat_red", "type": "material", "props": {"name": "vermilion", '
+        '...}}, reference it as "material": "mat_red" (its id) — never '
+        '"material": "vermilion" (its name). A reference that uses the display '
+        "name will not resolve and the export will fail."
+    ),
+}
+
+
 def _check_domain(domain: str) -> None:
     if domain not in DOMAIN_VOCAB:
         raise KeyError(f"Unknown domain {domain!r}; valid domains: {sorted(DOMAIN_VOCAB)}")
@@ -34,6 +50,8 @@ def system_prompt(domain: str) -> str:
     """Return a system prompt instructing an LLM to emit valid ForgeLab JSON."""
     _check_domain(domain)
     node_types = ", ".join(sorted(DOMAIN_VOCAB[domain]))
+    reference_hint = _REFERENCE_HINTS.get(domain)
+    reference_block = f"{reference_hint}\n\n" if reference_hint else ""
     return (
         "You are a design agent for ForgeLab, a universal JSON design "
         "interchange format. You emit ForgeLab documents that downstream tools "
@@ -48,6 +66,7 @@ def system_prompt(domain: str) -> str:
         'Each node\'s "props" must use only the exact field names defined by '
         "that type's schema — never invent fields. Scene hierarchy, when "
         'present, is expressed via a node\'s "children" list.\n\n'
+        f"{reference_block}"
         "Build the complete document in a single pass: decide on every node and "
         "all of its props up front and assemble the full design before you "
         "finish. Do not construct the document incrementally or call "
