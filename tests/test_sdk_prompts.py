@@ -21,6 +21,16 @@ def test_few_shot_examples_are_valid(domain):
         assert document.domain.value == domain
 
 
+@pytest.mark.parametrize("domain", ["hardware", "threed", "mechanical"])
+def test_system_prompt_instructs_single_pass_build(domain):
+    prompt = system_prompt(domain).lower()
+    # The agent should assemble the whole document then validate once, rather
+    # than iterating with repeated validate_document calls.
+    assert "validate_document" in prompt
+    assert "once" in prompt
+    assert "single pass" in prompt or "one pass" in prompt
+
+
 def test_system_prompt_unknown_domain_raises():
     with pytest.raises(KeyError):
         system_prompt("nope")

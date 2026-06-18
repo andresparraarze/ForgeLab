@@ -49,3 +49,29 @@ def test_list_formats_reports_registered_tools():
     formats = tools.list_formats()
     assert formats["kicad"]["export"] is True
     assert formats["freecad"]["import"] is True
+
+
+def test_generation_status_available_when_key_and_extra(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setattr(tools, "_agent_extra_installed", lambda: True)
+    status = tools.generation_status()
+    assert status["available"] is True
+    assert "reason" not in status
+
+
+def test_generation_status_unavailable_without_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(tools, "_agent_extra_installed", lambda: True)
+    status = tools.generation_status()
+    assert status["available"] is False
+    assert "ANTHROPIC_API_KEY" in status["reason"]
+    # Tells the agent how to proceed without generate_document.
+    assert "get_domain_schema" in status["alternative"]
+
+
+def test_generation_status_unavailable_without_agent_extra(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setattr(tools, "_agent_extra_installed", lambda: False)
+    status = tools.generation_status()
+    assert status["available"] is False
+    assert "agent extra" in status["reason"]

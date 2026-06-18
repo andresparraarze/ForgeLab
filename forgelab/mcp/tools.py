@@ -61,6 +61,53 @@ def list_formats() -> dict[str, dict[str, bool]]:
     return _registry.tool_names()
 
 
+def _agent_extra_installed() -> bool:
+    """True if the Anthropic SDK (the ``agent`` extra) is importable."""
+    try:
+        import anthropic  # type: ignore  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _generation_availability() -> tuple[bool, str | None]:
+    """Whether ``generate_document`` can run, and if not, why.
+
+    Generation needs both ``ANTHROPIC_API_KEY`` set on the server and the
+    ``agent`` extra installed. Returns ``(available, reason)`` where ``reason``
+    is ``None`` when available.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return False, "ANTHROPIC_API_KEY is not set on the server"
+    if not _agent_extra_installed():
+        return False, 'the agent extra is not installed (pip install "forgelab[agent]")'
+    return True, None
+
+
+def generation_status() -> dict[str, Any]:
+    """Report whether ``generate_document`` is currently usable on this server.
+
+    Call this before ``generate_document`` to avoid a wasted round trip: when
+    generation is unavailable (no API key, or the agent extra is not installed),
+    skip ``generate_document`` and build the document yourself against the schema
+    instead. Returns ``{"available": bool}``; when unavailable, also ``"reason"``
+    and an ``"alternative"`` describing how to proceed without generation.
+    """
+    require_scope("forge:read")
+    available, reason = _generation_availability()
+    if available:
+        return {"available": True}
+    return {
+        "available": False,
+        "reason": reason,
+        "alternative": (
+            "Build the document yourself: call get_domain_schema and get_prompt "
+            "for the domain, construct the complete document in one pass, then "
+            "call validate_document once."
+        ),
+    }
+
+
 def _resolve_output_path(output_path: str) -> Path:
     """Bare filenames land in FORGELAB_OUTPUT_DIR (or the cwd); paths pass through."""
     path = Path(output_path)
