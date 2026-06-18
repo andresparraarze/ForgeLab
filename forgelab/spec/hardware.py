@@ -17,12 +17,43 @@ NODE_BOARD = "board"
 
 
 class Pad(BaseModel):
-    """A single pad on a component, and the net it connects to."""
+    """A single pad on a component: its net, and its physical placement.
+
+    ``at`` is the pad's [x, y] offset from the footprint origin (millimetres).
+    Real packages spread their pads across the footprint, so each pad of a
+    multi-pin component should carry a distinct ``at``; when it is omitted the
+    KiCad exporter lays pads out on a deterministic grid so they never collapse
+    onto the origin.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     number: str
     net: str = ""
+    at: list[float] | None = Field(
+        default=None,
+        description=(
+            "Physical [x, y] offset of this pad from the footprint origin, in "
+            "millimetres. Specify it whenever the package geometry is known so "
+            "pads land at their real positions; if omitted, the exporter spreads "
+            "pads on a grid so they do not stack at the origin."
+        ),
+    )
+    size: list[float] | None = Field(
+        default=None,
+        description="Optional [width, height] of the pad copper, in millimetres.",
+    )
+    shape: str | None = Field(
+        default=None,
+        description="Optional pad shape, e.g. 'roundrect', 'rect', 'circle', 'oval'.",
+    )
+
+    @field_validator("at", "size")
+    @classmethod
+    def _is_xy(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and len(value) != 2:
+            raise ValueError("pad at/size must be [x, y]")
+        return value
 
 
 class Component(BaseModel):

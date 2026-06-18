@@ -28,6 +28,16 @@ _FEW_SHOT: dict[str, tuple[str, str]] = {
 # domain -> extra guidance appended to the system prompt (reference conventions,
 # etc.). Keyed by domain so only the relevant note ships with each prompt.
 _REFERENCE_HINTS: dict[str, str] = {
+    "hardware": (
+        'Pad placement: give every pad on a component its physical "at" '
+        "offset — the pad's [x, y] position relative to the footprint origin in "
+        "millimetres — so a multi-pin part spreads across its real package "
+        'outline. For example a 4-pad SOIC: "at": [-1.5, -2.0], [1.5, -2.0], '
+        '[1.5, 2.0], [-1.5, 2.0]. A pad with no "at" is placed on a fallback '
+        "grid, so omitting it makes every pad collapse toward the origin instead "
+        'of matching the real layout. Optionally set each pad\'s "size" '
+        '([width, height]) and "shape" when known.'
+    ),
     "threed": (
         'References between nodes always use the target node\'s top-level "id", '
         'never its display "name". An object\'s "mesh" prop must be a mesh '

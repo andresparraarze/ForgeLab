@@ -43,3 +43,56 @@ def test_exported_file_is_valid_sexpr():
     out = KiCadExporter().from_ir(doc)
     tree = parse(out.decode("utf-8"))
     assert tree[0] == "kicad_pcb"
+
+
+def test_pad_positions_survive_roundtrip():
+    from forgelab.spec import (
+        NODE_BOARD,
+        NODE_COMPONENT,
+        BoardConstraints,
+        DesignRules,
+        DocumentMeta,
+        Domain,
+        ForgeDocument,
+        Net,
+        Node,
+        Pad,
+    )
+    from forgelab.spec.version import SPEC_VERSION
+
+    board = BoardConstraints(
+        kicad_version="20240108",
+        generator="forgelab",
+        layers=[],
+        outline=[],
+        design_rules=DesignRules(clearance=0.2, track_width=0.25, via_diameter=0.8, via_drill=0.4),
+    )
+    comp = Component(
+        reference="U1",
+        value="IC",
+        footprint="Package_SO:SOIC-4",
+        layer="F.Cu",
+        at=[10.0, 20.0, 0.0],
+        pads=[
+            Pad(number="1", net="", at=[-1.5, -2.0]),
+            Pad(number="2", net="", at=[1.5, -2.0]),
+            Pad(number="3", net="", at=[1.5, 2.0]),
+            Pad(number="4", net="", at=[-1.5, 2.0]),
+        ],
+    )
+    nodes = [
+        Node(id=NODE_BOARD, type=NODE_BOARD, props=board.model_dump()),
+        Node(id="net:0", type="net", props=Net(code=0, name="").model_dump()),
+        Node(id="U1", type=NODE_COMPONENT, props=comp.model_dump()),
+    ]
+    doc1 = ForgeDocument(
+        forgelab_version=SPEC_VERSION,
+        domain=Domain.HARDWARE,
+        meta=DocumentMeta(name="t", generator="test"),
+        nodes=nodes,
+    )
+    doc2 = KiCadImporter().to_ir(KiCadExporter().from_ir(doc1))
+    pads2 = next(
+        Component.model_validate(n.props).pads for n in doc2.nodes if n.type == NODE_COMPONENT
+    )
+    assert [p.at for p in pads2] == [[-1.5, -2.0], [1.5, -2.0], [1.5, 2.0], [-1.5, 2.0]]

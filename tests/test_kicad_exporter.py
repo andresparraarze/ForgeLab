@@ -98,6 +98,46 @@ def test_design_rules_live_in_net_class_not_setup():
     assert set(added) == {"GND", "LED_A"}
 
 
+def _pad_at(pad):
+    sub = {str(e[0]): e for e in pad if isinstance(e, list) and e}
+    return tuple(sub["at"][1:3])
+
+
+def _multi_pad_doc(n_pads: int, with_positions: bool = False):
+    pads = []
+    for i in range(n_pads):
+        kwargs = {"number": str(i + 1), "net": ""}
+        if with_positions:
+            kwargs["at"] = [float(i), float(i * 2)]
+        pads.append(Pad(**kwargs))
+    comp = Component(
+        reference="U1",
+        value="HTSSOP",
+        footprint="Package_SO:HTSSOP-28",
+        layer="F.Cu",
+        at=[100.0, 50.0, 0.0],
+        pads=pads,
+    )
+    board = BoardConstraints(
+        kicad_version="20221018",
+        generator="forgelab",
+        layers=[],
+        outline=[],
+        design_rules=DesignRules(clearance=0.2, track_width=0.25, via_diameter=0.8, via_drill=0.4),
+    )
+    nodes = [
+        Node(id=NODE_BOARD, type=NODE_BOARD, props=board.model_dump()),
+        Node(id="net:0", type=NODE_NET, props=Net(code=0, name="").model_dump()),
+        Node(id="U1", type=NODE_COMPONENT, props=comp.model_dump()),
+    ]
+    return ForgeDocument(
+        forgelab_version=SPEC_VERSION,
+        domain=Domain.HARDWARE,
+        meta=DocumentMeta(name="t", generator="test"),
+        nodes=nodes,
+    )
+
+
 def test_pads_have_at_and_size():
     tree = _tree()
     footprints = _blocks(tree, "footprint")
@@ -105,8 +145,28 @@ def test_pads_have_at_and_size():
     assert pads
     for pad in pads:
         sub = {str(e[0]): e for e in pad if isinstance(e, list) and e}
-        assert sub["at"][1:3] == [0, 0]
+        assert len(sub["at"]) >= 3  # (at x y)
         assert sub["size"][1:3] == [1.6, 1.6]
+
+
+def test_unpositioned_pads_do_not_stack_at_origin():
+    # The core bug: every pad got (at 0 0) and collapsed onto the footprint
+    # origin. Un-positioned pads must now be spread to distinct positions.
+    tree = parse(KiCadExporter().from_ir(_multi_pad_doc(8)).decode())
+    (fp,) = _blocks(tree, "footprint")
+    pads = [e for e in fp if isinstance(e, list) and str(e[0]) == "pad"]
+    assert len(pads) == 8
+    positions = [_pad_at(p) for p in pads]
+    assert len(set(positions)) == len(positions), positions
+
+
+def test_pad_at_offset_is_emitted_when_provided():
+    # Agent-supplied pad offsets are honored verbatim, not overwritten.
+    tree = parse(KiCadExporter().from_ir(_multi_pad_doc(4, with_positions=True)).decode())
+    (fp,) = _blocks(tree, "footprint")
+    pads = [e for e in fp if isinstance(e, list) and str(e[0]) == "pad"]
+    positions = [_pad_at(p) for p in pads]
+    assert positions == [(0, 0), (1, 2), (2, 4), (3, 6)]
 
 
 def test_outline_uses_stroke_syntax():

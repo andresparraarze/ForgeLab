@@ -42,6 +42,14 @@ def test_component_props_field_names_match_model():
     assert "footprint" in props
 
 
+def test_pad_at_field_description_mentions_offset():
+    schema = domain_schema("hardware")
+    # Pad is a sub-model of Component, hoisted into the document-level $defs.
+    at_field = schema["$defs"]["Pad"]["properties"]["at"]
+    desc = at_field["description"].lower()
+    assert "offset" in desc or "position" in desc
+
+
 def test_object_mesh_ref_description_says_use_id_not_name():
     schema = domain_schema("threed")
     obj = next(v for v in _variants(schema) if v["properties"]["type"]["const"] == "object")
