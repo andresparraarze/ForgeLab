@@ -127,7 +127,11 @@ def export_document(
 
     With ``output_path``, writes the file to disk and returns
     {"tool", "path", "bytes_written"} so another tool (e.g. a KiCad or Blender
-    MCP server) can open it directly. A bare filename is written into
+    MCP server) can open it directly.
+
+    output_path: Prefer a bare filename (e.g. "castle.gltf") so the file is
+    written to the configured FORGELAB_OUTPUT_DIR. Only pass an absolute path if
+    you need to write somewhere else. A bare filename is written into
     ``FORGELAB_OUTPUT_DIR`` when set, else the current working directory.
     """
     require_scope("forge:export")

@@ -40,6 +40,15 @@ def test_threed_system_prompt_says_references_use_node_id():
     assert "mat_red" in prompt and "vermilion" in prompt
 
 
+def test_threed_system_prompt_says_y_is_up_axis():
+    prompt = system_prompt("threed")
+    low = prompt.lower()
+    # ForgeLab threed is Y-up (glTF convention); agents must author height on Y.
+    assert "y-up" in low or "y is up" in low or "y axis as up" in low
+    # And it should warn against using Z as up (the double-conversion trap).
+    assert "z" in low
+
+
 def test_system_prompt_unknown_domain_raises():
     with pytest.raises(KeyError):
         system_prompt("nope")

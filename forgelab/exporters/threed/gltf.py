@@ -5,6 +5,11 @@ from the IR. Materials and meshes are emitted in document order and referenced b
 index; the object tree (Node.children) is flattened depth-first into the glTF
 node array. Because import assigns ids in that same depth-first order, the
 import -> export -> import cycle is an identity over the IR.
+
+Coordinates pass through unchanged: the threed IR is Y-up, the same axis
+convention glTF uses natively, so no up-axis conversion is applied on export.
+(Authoring Z-up would double-convert through Blender's Y-up->Z-up importer and
+land tipped — see ``forgelab.spec.threed``.)
 """
 
 from __future__ import annotations
