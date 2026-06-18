@@ -10,7 +10,10 @@ class BlenderExporter(Exporter):
     tool_name = "blender"
 
     def from_ir(self, document: ForgeDocument) -> bytes:
-        raise NotImplementedError("Blender native export is not implemented yet.")
+        raise NotImplementedError(
+            "Native .blend export is not implemented. Export with tool='gltf' "
+            "instead — Blender imports glTF natively (File > Import > glTF 2.0)."
+        )
 
 
 class UnrealExporter(Exporter):

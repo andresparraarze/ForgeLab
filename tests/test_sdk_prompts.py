@@ -31,6 +31,15 @@ def test_system_prompt_instructs_single_pass_build(domain):
     assert "single pass" in prompt or "one pass" in prompt
 
 
+def test_threed_system_prompt_says_references_use_node_id():
+    prompt = system_prompt("threed")
+    low = prompt.lower()
+    # References (object->mesh, primitive->material) must be node ids, not names.
+    assert "id" in low and "name" in low
+    # Concrete example contrasting an id with a display name.
+    assert "mat_red" in prompt and "vermilion" in prompt
+
+
 def test_system_prompt_unknown_domain_raises():
     with pytest.raises(KeyError):
         system_prompt("nope")

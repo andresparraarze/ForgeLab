@@ -50,7 +50,14 @@ class Primitive(BaseModel):
 
     positions: list[float] = Field(default_factory=list)
     indices: list[int] = Field(default_factory=list)
-    material: str = ""
+    material: str = Field(
+        default="",
+        description=(
+            "Node id of the material to apply — the referenced material node's "
+            "top-level 'id' field, e.g. 'mat_red'. Do NOT use the material's "
+            "display name (its props.name, e.g. 'vermilion')."
+        ),
+    )
 
     @field_validator("positions")
     @classmethod
@@ -100,4 +107,11 @@ class Object3D(BaseModel):
 
     name: str
     transform: Transform
-    mesh: str = ""
+    mesh: str = Field(
+        default="",
+        description=(
+            "Node id of the mesh to attach — the referenced mesh node's "
+            "top-level 'id' field, e.g. 'mesh_cube'. Do NOT use the mesh's "
+            "display name (its props.name)."
+        ),
+    )

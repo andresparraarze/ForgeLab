@@ -147,6 +147,10 @@ def export_document(
         # The IR validator is lenient about node props; exporters re-validate
         # them strictly against the domain models.
         raise ValueError(f"export failed for {tool!r}: document props are invalid: {exc}") from exc
+    except ValueError as exc:
+        # Exporters raise ValueError for actionable problems (e.g. a reference
+        # that names a node by display name instead of its id).
+        raise ValueError(f"export failed for {tool!r}: {exc}") from exc
     if output_path is not None:
         target = _resolve_output_path(output_path)
         try:
