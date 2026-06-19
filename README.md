@@ -1,17 +1,16 @@
 # ForgeLab
 
-> **The LLVM of design.** A universal, JSON-based design interchange format and compiler that lets AI agents create, read, and transform design files across tools and domains — without ever touching proprietary file formats.
+> **The LLVM of design.** A universal, JSON-based interchange format and compiler that lets AI agents create, read, and transform design files across tools and domains — without ever touching proprietary formats.
 
 [![CI](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml/badge.svg)](https://github.com/andresparraarze/ForgeLab/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 [![Spec](https://img.shields.io/badge/spec-v0.5.0-orange.svg)](forgelab/spec/version.py)
-[![Status](https://img.shields.io/badge/status-pre--alpha-red.svg)](#project-status)
+[![Status](https://img.shields.io/badge/status-pre--alpha-red.svg)](#status--roadmap)
 
-ForgeLab defines a JSON **intermediate representation (IR)** that sits between AI agents and design
-software. Any tool can *import* its native files into ForgeLab IR; any tool can *export* ForgeLab IR
-back to its native format. Agents operate **entirely in ForgeLab JSON** — no proprietary formats, no
-special training.
+ForgeLab defines a JSON **intermediate representation (IR)** between AI agents and design software. Any
+tool can *import* its native files into the IR and *export* the IR back. Agents work **entirely in
+ForgeLab JSON** — no proprietary formats, no special training.
 
 ```
 native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab IR ──export──▶ native file
@@ -20,42 +19,10 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
                                    (pure JSON, no proprietary formats)
 ```
 
-## Table of Contents
-
-- [Why ForgeLab](#why-forgelab)
-- [Tool support](#tool-support)
-- [Install](#install)
-- [Use ForgeLab from your agent](#use-forgelab-from-your-agent)
-  - [Claude Code](#claude-code)
-  - [Hermes](#hermes)
-  - [OpenClaw](#openclaw)
-- [Multi-tool workflows](#multi-tool-workflows)
-- [Quickstart](#quickstart)
-  - [Build IR with the AI SDK](#build-ir-with-the-ai-sdk)
-  - [Round-trip a KiCad board](#round-trip-a-kicad-board)
-  - [Round-trip a glTF scene](#round-trip-a-gltf-scene)
-  - [Round-trip a FreeCAD model](#round-trip-a-freecad-model)
-  - [Run the compiler service](#run-the-compiler-service)
-  - [Authentication (optional)](#authentication-optional)
-  - [MCP server (optional)](#mcp-server-optional)
-- [How it works](#how-it-works)
-- [Repository layout](#repository-layout)
-- [Spec versioning](#spec-versioning)
-- [Project status](#project-status)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Why ForgeLab
-
-- **JSON-native for AI.** The IR is plain JSON, so any LLM or agent can emit and consume it directly
-  — no custom file writers, no proprietary SDKs, no special training.
-- **Tool-agnostic.** Importers and exporters plug into a shared IR. Add a tool once and it
-  interoperates with every other tool ForgeLab supports.
-- **Versioned for the long haul.** Every document declares a `forgelab_version`, so tooling can
-  reason about compatibility as the spec evolves.
-- **Typed where it counts.** Domain vocabularies (e.g. hardware: components, nets, board
-  constraints) are validated Pydantic models that serialize into a generic, universal node graph.
+**Contents:** [Tool support](#tool-support) · [Install](#install) · [Connect an agent](#connect-an-agent) ·
+[Use from Python](#use-from-python) · [MCP tools](#mcp-tools) · [Multi-tool workflows](#multi-tool-workflows) ·
+[How it works](#how-it-works) · [REST service & auth](#rest-service--auth) · [Status & roadmap](#status--roadmap) ·
+[Contributing](#contributing)
 
 ## Tool support
 
@@ -64,9 +31,9 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board) |
 | Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
-| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketch dimensions) |
+| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
-| 3D / Game      | glTF (.gltf)  |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene hierarchy) |
+| 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
 | 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
 | 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
 
@@ -74,7 +41,7 @@ native file ──import──▶ ForgeLab IR ──transform──▶ ForgeLab 
 
 ## Install
 
-Requires Python 3.11+.
+Requires **Python 3.11+**. No KiCad or FreeCAD install needed — native files are parsed directly.
 
 ```bash
 git clone https://github.com/andresparraarze/ForgeLab
@@ -83,202 +50,50 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,api]"
 ```
 
-ForgeLab has no heavy runtime dependencies — just Pydantic and FastAPI. The KiCad support parses the
-`.kicad_pcb` S-expression format directly, so **no KiCad installation is required** (same for
-FreeCAD: `.FCStd` is parsed with the standard library).
+Optional extras — install what you need:
 
-Optional extras, install what you need:
-
-| Extra | Enables | Pulls in |
-| --- | --- | --- |
-| `agent` | `ForgeAgent` (natural language → ForgeDocument) | `anthropic` |
-| `api` | running the REST service | `uvicorn` |
-| `auth` | OAuth 2.0 protection for the REST API / MCP HTTP | `pyjwt`, `cryptography`, `python-multipart` |
-| `mcp` | the MCP server (`forgelab-mcp`) | `mcp` |
+| Extra   | Enables                                          | Pulls in                                   |
+| ------- | ------------------------------------------------ | ------------------------------------------ |
+| `agent` | `ForgeAgent` (natural language → ForgeDocument)  | `anthropic`                                |
+| `api`   | the REST service                                 | `uvicorn`                                  |
+| `auth`  | OAuth 2.0 for the REST API / MCP HTTP            | `pyjwt`, `cryptography`, `python-multipart`|
+| `mcp`   | the MCP server (`forgelab-mcp`)                  | `mcp`                                       |
 
 ```bash
 pip install -e ".[mcp,agent]"   # e.g. everything an MCP-connected agent needs
 ```
 
-## Use ForgeLab from your agent
+## Connect an agent
 
-The MCP server is the fastest way to put ForgeLab in an agent's hands. Three
-ways to connect, from easiest to most manual:
+The MCP server is the fastest way to put ForgeLab in an agent's hands.
 
-**1. One line (Claude Code):**
+**One line (Claude Code)** — installs into `~/.forgelab`, registers the server, sets up `~/forgelab-output`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
 ```
 
-Checks Python, creates a venv in `~/.forgelab`, installs `forgelab[mcp,agent]`,
-registers the MCP server with Claude Code, and sets up `~/forgelab-output` as
-the export directory. Done.
+**`forgelab init` (any agent)** — interactive setup that registers the server (Claude Code) or prints
+the config block to paste (Hermes, OpenClaw, any MCP client). Run `forgelab update` to upgrade later.
 
-**2. `forgelab init` (any agent):** if you already have ForgeLab installed,
-run the interactive setup — it asks which agent you use and where exports
-should go, then registers the server (Claude Code) or prints the exact config
-block to paste (Hermes / OpenClaw / anything else):
-
-```bash
-forgelab init
-```
-
-**3. Paste a bootstrap prompt:** let your agent set itself up.
-[docs/agent-bootstrap.md](docs/agent-bootstrap.md) has copy-paste prompts for
-Hermes, OpenClaw, and any MCP-compatible agent that install ForgeLab, register
-the server, and verify the tools with `list_domains`.
-
-**Updating:** once installed, upgrade to the latest version with one command —
-it refreshes the `~/.forgelab` install from GitHub and prints the new spec
-version:
-
-```bash
-forgelab update
-```
-
-For manual setup, the per-client details follow. The examples use stdio
-(local, no auth); for a shared/remote server, run
-`forgelab-mcp --transport streamable-http` behind OAuth (see
-[MCP server](#mcp-server-optional)) and register it as an HTTP MCP server instead.
-`generate_document` needs `ANTHROPIC_API_KEY` in the server's environment;
-everything else works without it.
-
-### Claude Code
-
-Register the server with the `claude mcp` CLI (use the venv's absolute path so
-it works regardless of the shell's environment):
+**Manual (Claude Code)** — register with an absolute venv path:
 
 ```bash
 claude mcp add forgelab -- /path/to/ForgeLab/.venv/bin/forgelab-mcp --transport stdio
 ```
 
-Or add it to `.mcp.json` in your project to share it with your team:
+For Hermes, OpenClaw, and other clients, [docs/agent-bootstrap.md](docs/agent-bootstrap.md) has
+copy-paste prompts that install, register, and verify the server.
 
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"],
-      "env": { "ANTHROPIC_API_KEY": "sk-..." }
-    }
-  }
-}
-```
+Then ask Claude Code: *"generate a blinky LED board and export it to KiCad"* — it chains
+`generate_document` → `export_document` and hands you the `.kicad_pcb`.
 
-Then ask Claude Code things like *"generate a blinky LED board and export it to
-KiCad"* — it will chain `generate_document` → `export_document` and hand you the
-`.kicad_pcb` content.
+> `generate_document` needs `ANTHROPIC_API_KEY` in the **server's** environment; everything else works
+> without it. Call `generation_status` to check before relying on it.
 
-Hermes and OpenClaw are smart agents — paste this prompt directly into your
-agent and it handles the installation automatically.
+## Use from Python
 
-### Hermes
-
-Give Hermes this prompt:
-
-> Install ForgeLab on this machine. Clone
-> https://github.com/andresparraarze/ForgeLab, create a venv at
-> `~/.forgelab/venv`, install `forgelab[mcp,agent]` into it, start the MCP server
-> with streamable-http transport on port 8001, and confirm the tools are
-> available by calling `list_domains`. Then tell me what domains are supported.
-
-### OpenClaw
-
-Give OpenClaw this prompt:
-
-> Install ForgeLab and add it to your MCP configuration. Clone
-> https://github.com/andresparraarze/ForgeLab, create a venv at
-> `~/.forgelab/venv`, install `forgelab[mcp,agent]`, add the stdio MCP server to
-> your config at `~/.forgelab/venv/bin/forgelab-mcp --transport stdio`, verify by
-> calling `list_domains`, and confirm what design domains are available.
-
-### What the agent gets
-
-Whichever client you use, the agent sees the same eight tools:
-
-| Tool | What it does | Scope (HTTP) |
-| --- | --- | --- |
-| `list_domains`, `list_formats` | discover supported domains and format tools | `forge:read` |
-| `get_domain_schema`, `get_prompt` | JSON Schema + prompt templates per domain | `forge:read` |
-| `validate_document` | validate a ForgeLab document | `forge:read` |
-| `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD) | `forge:export` |
-| `generate_document` | natural language → validated ForgeDocument | `forge:generate` |
-
-Over stdio everything is available locally; over HTTP each tool requires its
-scope on the bearer token. `generate_document` needs `ANTHROPIC_API_KEY` set on
-the **server** and returns a clear error if it is missing.
-
-## Multi-tool workflows
-
-ForgeLab is designed to sit next to tool-specific MCP servers (KiCad MCP,
-Blender MCP, FreeCAD MCP, Unreal MCP): ForgeLab generates and compiles the
-design, the tool MCP opens it. The handoff is a file on disk:
-
-- `export_document` takes an optional **`output_path`**. When provided,
-  ForgeLab writes the exported file to disk and returns
-  `{"tool", "path", "bytes_written"}` instead of inline content — the agent
-  passes `path` straight to the tool MCP.
-- **`FORGELAB_OUTPUT_DIR`** sets the default output directory: a bare filename
-  (`"blinky.kicad_pcb"`) is written there. Unset, bare filenames go to the
-  current working directory. Absolute paths and paths containing directories
-  are used as-is.
-
-A single `.mcp.json` wiring ForgeLab together with tool MCPs into one shared
-folder:
-
-```json
-{
-  "mcpServers": {
-    "forgelab": {
-      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
-      "args": ["--transport", "stdio"],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-...",
-        "FORGELAB_OUTPUT_DIR": "/home/you/designs"
-      }
-    },
-    "kicad": {
-      "command": "kicad-mcp",
-      "env": { "KICAD_PROJECT_DIR": "/home/you/designs" }
-    },
-    "blender": { "command": "blender-mcp" },
-    "freecad": { "command": "freecad-mcp" },
-    "unreal":  { "command": "unreal-mcp" }
-  }
-}
-```
-
-(The tool-MCP commands and env vars above are placeholders — use the install
-instructions of whichever KiCad/Blender/FreeCAD/Unreal MCP server you run, and
-point it at the same directory as `FORGELAB_OUTPUT_DIR`.)
-
-Example prompt to Claude Code:
-
-> "Design a blinky LED board with one resistor and one LED, then open it in
-> KiCad."
-
-The agent's tool-call chain:
-
-1. `forgelab.generate_document(prompt="a blinky LED board…", domain="hardware")`
-   → validated ForgeDocument (JSON).
-2. `forgelab.export_document(document=…, tool="kicad", output_path="blinky.kicad_pcb")`
-   → `{"path": "/home/you/designs/blinky.kicad_pcb", "bytes_written": …}`.
-3. `kicad.open_project(path="/home/you/designs/blinky.kicad_pcb")` (or the
-   equivalent tool on your KiCad MCP) — the board opens in KiCad.
-
-The same chain works for the other domains: `domain="threed"` +
-`tool="gltf"` → Blender MCP imports the `.gltf`; `domain="mechanical"` +
-`tool="freecad"` → FreeCAD MCP opens the `.FCStd`; Unreal consumes glTF
-exports the same way.
-
-## Quickstart
-
-### Build IR with the AI SDK
-
-The AI SDK takes a natural-language prompt to a validated, ready-to-compile
-`ForgeDocument` — natural language to a real KiCad file in ~10 lines:
+**Natural language → a real KiCad file** with the AI SDK (requires `pip install "forgelab[agent]"`):
 
 ```python
 from forgelab.sdk import ForgeAgent
@@ -291,148 +106,144 @@ with open("blinky.kicad_pcb", "wb") as f:
     f.write(KiCadExporter().from_ir(doc))               # -> real KiCad file
 ```
 
-`ForgeAgent` forces Claude to emit ForgeLab JSON through a per-domain JSON
-Schema, then validates it before returning. Requires the optional extra:
-`pip install "forgelab[agent]"`.
-
-The lower-level building blocks are independent and provider-agnostic:
+The lower-level, provider-agnostic building blocks:
 
 ```python
-from forgelab.sdk import domain_schema, system_prompt, few_shot, validate_llm_output
+from forgelab.sdk import domain_schema, system_prompt, few_shot, validate_llm_output, new_document, dump, load
 
-domain_schema("hardware")        # tight JSON Schema for structured-output / tools
-system_prompt("threed")          # ready-made system prompt for any LLM
-few_shot("threed")               # (request, valid-JSON) examples
+domain_schema("hardware")                         # tight JSON Schema for structured-output / tools
+system_prompt("threed")                           # ready-made system prompt for any LLM
+few_shot("threed")                                # (request, valid-JSON) examples
 validate_llm_output(raw_text, domain="hardware")  # clean + parse + validate, or raise
+load(dump(new_document(domain="hardware", name="blinky")))  # hand-build documents
 ```
 
-And the original primitives still work for hand-built documents:
-
-```python
-from forgelab.sdk import new_document, dump, load
-
-doc = new_document(domain="hardware", name="blinky")
-restored = load(dump(doc))
-assert restored == doc
-```
-
-### Round-trip a KiCad board
-
-Import a real `.kicad_pcb`, work with it as JSON, and export a functional board back out:
+**Round-trip any supported file.** Import to IR, edit as JSON, export back — and `import → export →
+import` is an identity over the IR:
 
 ```python
 from forgelab.importers.hardware.kicad import KiCadImporter
 from forgelab.exporters.hardware.kicad import KiCadExporter
 
-source = open("examples/hardware/blinky.kicad_pcb", "rb").read()
+doc = KiCadImporter().to_ir(open("examples/hardware/blinky.kicad_pcb", "rb").read())
+print([n.id for n in doc.nodes if n.type == "component"])   # ['R1', 'D1']
 
-doc = KiCadImporter().to_ir(source)          # .kicad_pcb -> ForgeDocument
-components = [n.id for n in doc.nodes if n.type == "component"]
-print(components)                            # ['R1', 'D1']
-
-kicad_bytes = KiCadExporter().from_ir(doc)   # ForgeDocument -> .kicad_pcb
-
-# The round-trip is stable: import -> export -> import is an identity over the IR.
-assert KiCadImporter().to_ir(kicad_bytes) == doc
+kicad_bytes = KiCadExporter().from_ir(doc)                  # ForgeDocument -> .kicad_pcb
+assert KiCadImporter().to_ir(kicad_bytes) == doc            # stable round-trip
 ```
 
-### Round-trip a glTF scene
+The same pattern works for the other domains:
 
-Import a `.gltf` 3D scene, work with the geometry as JSON, and export it back:
+- **glTF** — `GltfImporter` / `GltfExporter` (`forgelab.{importers,exporters}.threed.gltf`). Mesh
+  geometry is decoded into plain JSON arrays (positions, indices), so agents read and edit scenes
+  directly. The threed domain is **Y-up** (glTF's native axis).
+- **FreeCAD** — `FreeCADImporter` / `FreeCADExporter` (`forgelab.{importers,exporters}.mechanical`).
+  The parametric feature tree (parts, bodies, sketches with dimensions, pads, pockets) becomes plain
+  JSON nodes. Parsing uses only the standard library (`zipfile` + `xml.etree`). Exported `.FCStd`
+  files open in FreeCAD with the tree intact — press **Refresh** (`Ctrl+R`) once to build geometry
+  from the parametric definitions. Validated against FreeCAD 1.1.
 
-```python
-from forgelab.importers.threed.gltf import GltfImporter
-from forgelab.exporters.threed.gltf import GltfExporter
+Sample designs for each domain live in [`examples/`](examples/).
 
-source = open("examples/threed/cube.gltf", "rb").read()
+## MCP tools
 
-doc = GltfImporter().to_ir(source)           # .gltf -> ForgeDocument
-objects = [n.id for n in doc.nodes if n.type == "object"]
-print(objects)                               # ['Cube']
+Whichever client you connect, the agent sees the same nine tools. Over stdio all are available
+locally; over HTTP each requires its scope on the bearer token.
 
-gltf_bytes = GltfExporter().from_ir(doc)     # ForgeDocument -> .gltf
+| Tool | What it does | Scope |
+| --- | --- | --- |
+| `list_domains`, `list_formats`   | discover supported domains and format tools     | `forge:read` |
+| `get_domain_schema`, `get_prompt`| JSON Schema + prompt templates per domain       | `forge:read` |
+| `validate_document`              | validate a ForgeLab document                    | `forge:read` |
+| `generation_status`              | report whether `generate_document` is usable    | `forge:read` |
+| `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD)        | `forge:export` |
+| `generate_document`              | natural language → validated ForgeDocument      | `forge:generate` |
 
-# The round-trip is stable: import -> export -> import is an identity over the IR.
-assert GltfImporter().to_ir(gltf_bytes) == doc
+Run the server standalone (`pip install "forgelab[mcp]"`):
+
+```bash
+forgelab-mcp --transport stdio                                      # local, no auth
+FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001   # remote, OAuth
 ```
 
-Mesh geometry is fully decoded into plain JSON arrays (positions, indices) — no
-opaque binary buffers — so an agent can read and edit the scene directly.
+For HTTP discovery metadata, optionally set `FORGELAB_MCP_ISSUER_URL` (OAuth authorization server)
+and `FORGELAB_MCP_RESOURCE_URL` (this server's public URL).
 
-### Round-trip a FreeCAD model
+## Multi-tool workflows
 
-Import a FreeCAD `.FCStd` mechanical model, work with the feature tree as JSON,
-and export it back:
+ForgeLab sits next to tool-specific MCP servers (KiCad MCP, Blender MCP, FreeCAD MCP, Unreal MCP):
+ForgeLab generates and compiles the design, the tool MCP opens it. The handoff is a file on disk.
 
-```python
-from forgelab.importers.mechanical import FreeCADImporter
-from forgelab.exporters.mechanical import FreeCADExporter
+- `export_document` takes an optional **`output_path`**. When set, ForgeLab writes the file and
+  returns `{"tool", "path", "bytes_written"}` (instead of inline content) — pass `path` straight to
+  the tool MCP.
+- **`FORGELAB_OUTPUT_DIR`** is the default directory for bare filenames (`"blinky.kicad_pcb"`).
+  Absolute paths are used as-is.
 
-source = open("examples/mechanical/box-with-hole.FCStd", "rb").read()
+Wire ForgeLab and the tool MCPs to one shared folder in `.mcp.json`:
 
-doc = FreeCADImporter().to_ir(source)         # .FCStd -> ForgeDocument
-features = [n.id for n in doc.nodes if n.type in ("pad", "pocket")]
-print(features)                               # ['Pad', 'Pocket']
-
-fcstd_bytes = FreeCADExporter().from_ir(doc)  # ForgeDocument -> .FCStd
-
-# The round-trip is stable: import -> export -> import is an identity over the IR.
-assert FreeCADImporter().to_ir(fcstd_bytes) == doc
+```json
+{
+  "mcpServers": {
+    "forgelab": {
+      "command": "/path/to/ForgeLab/.venv/bin/forgelab-mcp",
+      "args": ["--transport", "stdio"],
+      "env": { "ANTHROPIC_API_KEY": "sk-...", "FORGELAB_OUTPUT_DIR": "/home/you/designs" }
+    },
+    "kicad": { "command": "kicad-mcp", "env": { "KICAD_PROJECT_DIR": "/home/you/designs" } }
+  }
+}
 ```
 
-The parametric feature tree — parts, bodies, sketches with dimensions, pads
-(extrusions) and pockets (cuts) — is captured as plain JSON nodes with link
-references, so an agent can read and edit the model directly. Parsing uses only
-the standard library (`zipfile` + `xml.etree`), so **no FreeCAD installation is
-required**.
+Prompt *"Design a blinky LED board, then open it in KiCad"* and the agent chains:
+`generate_document` → `export_document(tool="kicad", output_path="blinky.kicad_pcb")` →
+`kicad.open_project(path=…)`. The same chain works for `threed`+`gltf` (Blender/Unreal) and
+`mechanical`+`freecad` (FreeCAD). (Tool-MCP commands above are placeholders — use each server's own
+install instructions and point it at `FORGELAB_OUTPUT_DIR`.)
 
-Exported `.FCStd` files use FreeCAD's real document schema and **open in
-FreeCAD** with the part/body/feature tree intact. The generated `GuiDocument`
-shows the body and its tip feature shaded — hiding the sketches, intermediate
-features and origin datums — and frames the part with a fitted isometric camera.
-Because the files carry no precomputed OpenCASCADE shapes (they are generated
-without FreeCAD), press **Refresh** (`Ctrl+R`) once on open to build the
-geometry from the parametric definitions; no manual `touch()` is needed. All of
-this — orientation on non-XY datum planes, through-all pocket cuts, and the
-shaded render — is validated against FreeCAD 1.1.
+## How it works
 
-The importer reads genuine FreeCAD-authored files too (a canonical subset:
-parts, bodies, sketches with line/circle geometry and dimensional constraints,
-pads, pockets; Origin planes/axes and other unmodeled objects are skipped). The
-IR round-trip identity above is preserved via a `ForgeLab.Document.xml` sidecar
-entry that FreeCAD ignores.
+A ForgeLab document is a small typed envelope — `forgelab_version`, `domain`, `meta` — wrapping a
+generic graph of `Node` objects. Domain vocabularies layer on top: a hardware board is a `board` node
+plus `net` and `component` nodes, each carrying a validated typed payload in its `props`.
 
-### Run the compiler service
+Importers and exporters depend only on the spec and on shared format primitives (`forgelab.formats`,
+e.g. the S-expression parser) — never on each other. Every tool is an independent, testable plugin,
+so adding the next one is a contained change.
 
-ForgeLab also ships as a compiler-as-a-service so agents can call it over HTTP:
+```
+forgelab/
+├── spec/        # IR models (Pydantic v2), versioning, JSON Schema, domain vocabularies
+├── core/        # validate(), registry, compiler pipeline, errors
+├── formats/     # shared zero-dependency format primitives (S-expression, glTF, FCStd)
+├── importers/   # tool → IR  (base ABC + KiCad, glTF, FreeCAD)
+├── exporters/   # IR → tool  (base ABC + KiCad, glTF, FreeCAD)
+├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
+├── auth/        # shared OAuth 2.0 (verification, dev authorization server, scopes)
+├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
+├── api/         # FastAPI compiler-as-a-service
+└── cli.py       # `forgelab init` agent setup
+```
+
+## REST service & auth
+
+ForgeLab also runs as a compiler-as-a-service (`pip install "forgelab[api]"`):
 
 ```bash
 uvicorn forgelab.api.app:app --reload
 ```
 
-| Method | Path             | Purpose                          |
-| ------ | ---------------- | -------------------------------- |
-| GET    | `/health`        | Liveness + spec version          |
-| GET    | `/spec`          | ForgeDocument JSON Schema        |
-| POST   | `/validate`      | Validate a ForgeLab document     |
-| POST   | `/export/{tool}` | Export IR to a tool's format     |
+| Method | Path             | Purpose                      |
+| ------ | ---------------- | ---------------------------- |
+| GET    | `/health`        | liveness + spec version      |
+| GET    | `/spec`          | ForgeDocument JSON Schema    |
+| POST   | `/validate`      | validate a ForgeLab document |
+| POST   | `/export/{tool}` | export IR to a tool's format |
 
-### Authentication (optional)
-
-The REST API and the MCP server's HTTP transport can be protected with OAuth 2.0.
-It is **off by default**. Enable it with environment variables:
-
-```bash
-export FORGELAB_AUTH_ENABLED=true       # turn auth on
-export FORGELAB_AUTH_MODE=dev           # built-in dev issuer (HS256)
-# or point at an external IdP:
-# export FORGELAB_AUTH_MODE=jwks
-# export FORGELAB_AUTH_ISSUER=https://your-idp/
-# export FORGELAB_AUTH_AUDIENCE=forgelab
-# export FORGELAB_AUTH_JWKS_URL=https://your-idp/.well-known/jwks.json
-```
-
-Get a token from the built-in dev server and call a protected endpoint:
+The REST API and the MCP HTTP transport can be protected with **OAuth 2.0** (off by default; install
+`forgelab[auth]`). Set `FORGELAB_AUTH_ENABLED=true` and either `FORGELAB_AUTH_MODE=dev` (built-in
+HS256 issuer) or `=jwks` with your IdP's `ISSUER`/`AUDIENCE`/`JWKS_URL`. Scopes: `forge:read`
+(validate/spec/schema), `forge:export` (import/export), `forge:generate` (AI generation).
 
 ```bash
 TOKEN=$(curl -s -X POST localhost:8000/oauth/token \
@@ -441,114 +252,31 @@ TOKEN=$(curl -s -X POST localhost:8000/oauth/token \
   -d scope="forge:read" | jq -r .access_token)
 
 curl -s -X POST localhost:8000/validate \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -d @doc.forge.json
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d @doc.forge.json
 ```
 
-Scopes: `forge:read` (validate/spec/schema), `forge:export` (import/export),
-`forge:generate` (AI generation). Install with `pip install "forgelab[auth]"`.
+## Status & roadmap
 
-### MCP server (optional)
-
-ForgeLab ships an MCP server so agents (Claude Code, Hermes, OpenClaw) can use it
-directly. Install the extra and run it:
-
-```bash
-pip install "forgelab[mcp]"
-
-# Local (stdio, no auth):
-forgelab-mcp --transport stdio
-
-# Remote (Streamable HTTP, OAuth-protected — reuses FORGELAB_AUTH_* config):
-FORGELAB_AUTH_ENABLED=true forgelab-mcp --transport streamable-http --port 8001
-```
-
-Tools: `validate_document`, `get_domain_schema`, `get_prompt`, `list_domains`,
-`list_formats` (scope `forge:read`); `export_document`, `import_file`
-(`forge:export`); `generate_document` (`forge:generate`). Over stdio all tools are
-available locally; over HTTP each tool requires its scope on the bearer token.
-`generate_document` needs a server-side `ANTHROPIC_API_KEY` and returns a clear
-error if it is unset. For HTTP discovery metadata you may also set
-`FORGELAB_MCP_ISSUER_URL` (the OAuth authorization server) and
-`FORGELAB_MCP_RESOURCE_URL` (this server's public URL).
-
-## How it works
-
-A ForgeLab document is a small typed envelope — `forgelab_version`, `domain`, `meta` — wrapping a
-generic graph of `Node` objects. Domain vocabularies layer on top of that graph: a hardware board,
-for example, is a `board` node plus `net` and `component` nodes, each carrying a validated typed
-payload in its `props`.
-
-```
-.kicad_pcb ──▶ KiCadImporter ──▶ ForgeDocument ──▶ KiCadExporter ──▶ .kicad_pcb
-                                   (validate / transform)
-```
-
-Importers and exporters depend only on the spec and on shared format primitives (`forgelab.formats`,
-e.g. the S-expression parser) — never on each other. That keeps every tool an independent,
-testable plugin and makes adding the next one a contained change.
-
-## Repository layout
-
-```
-forgelab/
-├── spec/        # IR models (Pydantic v2), versioning, JSON Schema export, domain vocabularies
-├── core/        # validate(), registry, compiler pipeline, errors
-├── formats/     # shared, zero-dependency format primitives (S-expression, glTF, FCStd)
-├── importers/   # tool → IR  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
-├── exporters/   # IR → tool  (base ABC + per-domain packages; KiCad, glTF, FreeCAD implemented)
-├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
-├── auth/        # shared OAuth 2.0 (token verification, dev authorization server, scopes)
-├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
-├── api/         # FastAPI compiler-as-a-service
-└── cli.py       # `forgelab init` agent setup
-scripts/         # one-line Claude Code installer
-docs/            # agent bootstrap prompts, design specs and plans
-examples/        # real sample designs (one native file + generated .forge.json per domain)
-tests/           # pytest suite, including all three round-trip guarantees
-```
-
-## Spec versioning
-
-Every document carries a `forgelab_version`. Compatibility is **major-based**: a document validates
-against any library sharing its major version. The current spec is **v0.5.0** (`SPEC_VERSION` in
-`forgelab/spec/version.py`). Any change to the `ForgeDocument` root or a breaking change to a domain
-vocabulary bumps the version — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
-
-## Project status
-
-**Pre-alpha (v0.1 of the library, v0.5.0 of the spec).** The IR, validator, compiler pipeline, API,
-three end-to-end round-trips — the **KiCad `.kicad_pcb`** (hardware), the **glTF `.gltf`** (3D /
-game), and the **FreeCAD `.FCStd`** (mechanical CAD) importer/exporter pairs — the **AI SDK**
-(schema export, prompt templates, output validation, and a Claude-backed `ForgeAgent`), the
-**OAuth 2.0 auth module**, and the **MCP server** (stdio + Streamable HTTP) all work and are
-covered by tests. The remaining tool integrations are scaffolded stubs awaiting implementation.
+**Pre-alpha** (library v0.1, spec v0.5.0). The IR, validator, compiler pipeline, REST API, three
+round-trips (**KiCad**, **glTF**, **FreeCAD**), the **AI SDK**, the **OAuth 2.0** module, and the
+**MCP server** all work and are covered by tests. Remaining tool integrations are scaffolded stubs.
 APIs may change before 1.0.
 
-## Roadmap
+Every document carries a `forgelab_version`; compatibility is major-based (`SPEC_VERSION` in
+`forgelab/spec/version.py`). See [CHANGELOG.md](CHANGELOG.md) for changes.
 
-- [x] Core IR, validator, registry, and compiler pipeline
-- [x] AI SDK and FastAPI compiler service
-- [x] Typed hardware vocabulary + S-expression format primitive
-- [x] KiCad `.kicad_pcb` importer/exporter round-trip
-- [x] 3D / Game: Blender via glTF round-trip (meshes, materials, scene hierarchy)
-- [ ] Hardware: Gerber and Altium
-- [x] Mechanical CAD: FreeCAD `.FCStd` importer/exporter round-trip
-- [x] Shared OAuth 2.0 auth (scopes, dev authorization server, JWKS verification)
-- [x] MCP server (stdio + OAuth-protected Streamable HTTP) for Claude Code / Hermes / OpenClaw
-- [x] Multi-tool workflow support (`export_document` `output_path` + `FORGELAB_OUTPUT_DIR`)
-- [x] Zero-friction agent setup (one-line installer, `forgelab init` CLI, agent bootstrap prompts)
-- [ ] Publish to PyPI so `pip install forgelab` works without cloning the repo
-- [ ] Mechanical CAD: Fusion 360
-- [ ] 3D / Game: Unreal Engine, glTF textures/animations, and `.glb` binary container
-- [ ] Transform passes (e.g. design-rule checks, layer remaps) over the IR
-- [ ] HTTP `/import` endpoint and a CLI
+- [x] Core IR, validator, registry, compiler pipeline; AI SDK + REST service
+- [x] KiCad `.kicad_pcb`, glTF `.gltf` (Blender), and FreeCAD `.FCStd` round-trips
+- [x] OAuth 2.0 auth + MCP server (stdio + Streamable HTTP)
+- [x] Multi-tool workflows + zero-friction agent setup (installer, `forgelab init`, bootstrap prompts)
+- [ ] Publish to PyPI so `pip install forgelab` works without cloning
+- [ ] Hardware: Gerber, Altium · Mechanical: Fusion 360 · 3D: Unreal, glTF textures/animations, `.glb`
+- [ ] Transform passes (design-rule checks, layer remaps) over the IR; HTTP `/import` endpoint
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The highest-leverage starting
-point is implementing an importer/exporter for one tool against the `Importer`/`Exporter` base
-classes; the KiCad pair is a complete worked example to model new tools on.
+See [CONTRIBUTING.md](CONTRIBUTING.md). The highest-leverage start is an importer/exporter for one
+tool against the `Importer`/`Exporter` base classes — the KiCad pair is a complete worked example.
 
 ```bash
 ruff check . && ruff format --check . && pyright && pytest
