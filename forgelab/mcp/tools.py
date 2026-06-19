@@ -35,6 +35,7 @@ from forgelab.core import validate as _core_validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
+from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 
 _registry = default_registry()
@@ -87,8 +88,18 @@ def _document_source(document: dict[str, Any] | None, document_path: str | None)
     raise ValueError("provide a document (inline) or a document_path to a .forge.json file")
 
 
+def _check_projection(projection: str) -> str:
+    if projection not in PROJECTION_LEVELS:
+        raise ValueError(
+            f"unknown projection {projection!r}; valid: {', '.join(PROJECTION_LEVELS)}"
+        )
+    return projection
+
+
 def validate_document(
-    document: dict[str, Any] | None = None, document_path: str | None = None
+    document: dict[str, Any] | None = None,
+    document_path: str | None = None,
+    projection: str | None = None,
 ) -> dict[str, Any]:
     """Validate a ForgeLab document. Returns {"valid": bool, "error"?: str}.
 
@@ -96,13 +107,23 @@ def validate_document(
     a ``.forge.json`` file on disk — ForgeLab reads and validates it without the
     agent ever loading the JSON into its context. A bare filename resolves against
     ``FORGELAB_OUTPUT_DIR``. Exactly one of the two must be given.
+
+    projection: when set to a projection level (``metadata``, ``topology``,
+    ``geometry`` or ``full``), a successful validation also returns a
+    ``"projection"`` view of the document reduced to just that level's fields, so
+    the agent gets back only the data it needs. Omit it for a plain validity
+    result.
     """
     require_scope("forge:read")
+    if projection is not None:
+        _check_projection(projection)
     source = _document_source(document, document_path)
     try:
-        validate(source)
+        document_model = validate(source)
     except Exception as exc:  # any validation failure is reported to the caller
         return {"valid": False, "error": str(exc)}
+    if projection is not None:
+        return {"valid": True, "projection": project(document_model, projection)}
     return {"valid": True}
 
 
@@ -149,16 +170,26 @@ def _count_node_types(nodes: Any) -> Counter[str]:
     return counts
 
 
-def load_document(document_path: str) -> dict[str, Any]:
+def load_document(document_path: str, projection: str | None = None) -> dict[str, Any]:
     """Summarize a ``.forge.json`` on disk without returning the full document.
 
-    Reads the file and returns only its metadata — ``domain``, ``name``,
-    ``forgelab_version``, ``node_count`` (total, including nested children), and
-    ``nodes_by_type`` (counts per node type). Use this to verify a document the
-    agent just wrote without re-serializing the whole JSON back into context. A
-    bare filename resolves against ``FORGELAB_OUTPUT_DIR``.
+    With no ``projection``, returns a lightweight metadata summary — ``domain``,
+    ``name``, ``forgelab_version``, ``node_count`` (total, including nested
+    children), and ``nodes_by_type`` — computed straight from the file.
+
+    projection: request a specific context-projection level instead — one of
+    ``metadata``, ``topology`` (simplified node list, no geometry coordinates),
+    ``geometry`` (full mesh/pad/sketch geometry, no materials/scene/board
+    constraints) or ``full`` (everything). The document is validated and the
+    stripped fields never leave ForgeLab, so the agent receives only what the
+    chosen level keeps. Call ``get_projection_schema`` to see what each level
+    includes. A bare filename resolves against ``FORGELAB_OUTPUT_DIR``.
     """
     require_scope("forge:read")
+    if projection is not None:
+        _check_projection(projection)
+        document_model = validate(_read_document_file(document_path))
+        return project(document_model, projection)
     data = _read_document_file(document_path)
     counts = _count_node_types(data.get("nodes", []))
     meta = data.get("meta")
@@ -170,6 +201,19 @@ def load_document(document_path: str) -> dict[str, Any]:
         "node_count": sum(counts.values()),
         "nodes_by_type": dict(counts),
     }
+
+
+def get_projection_schema(domain: str, projection: str) -> dict[str, Any]:
+    """Describe what a projection level includes and excludes for a domain.
+
+    Returns ``{"domain", "projection", "description", "includes", "excludes",
+    "levels"}`` so an agent can choose which projection to request from
+    ``load_document`` / ``validate_document`` / ``export_document`` without
+    trial and error. ``domain`` is ``hardware``, ``threed`` or ``mechanical``;
+    ``projection`` is ``metadata``, ``topology``, ``geometry`` or ``full``.
+    """
+    require_scope("forge:read")
+    return projection_schema(domain, projection)
 
 
 def _touches_nodes(operation: Any) -> bool:
@@ -398,6 +442,7 @@ def export_document(
     tool: str = "",
     output_path: str | None = None,
     document_path: str | None = None,
+    projection: str | None = None,
 ) -> dict[str, Any]:
     """Export a ForgeLab document to a format tool's native file.
 
@@ -417,10 +462,19 @@ def export_document(
     written to the configured FORGELAB_OUTPUT_DIR. Only pass an absolute path if
     you need to write somewhere else. A bare filename is written into
     ``FORGELAB_OUTPUT_DIR`` when set, else the current working directory.
+
+    projection: when set (e.g. ``"topology"``), the export is still performed in
+    full — ForgeLab loads the whole document and writes the native file — but the
+    response carries only ``{"tool", "exported": true, ...path/bytes..., "projection":
+    <projected document>}`` at that level instead of the export bytes or the full
+    document. Use it with ``document_path`` + ``output_path`` to get a lightweight
+    confirmation rather than a large response.
     """
     require_scope("forge:export")
     if not tool:
         raise ValueError("tool is required")
+    if projection is not None:
+        _check_projection(projection)
     source = _document_source(document, document_path)
     try:
         doc = validate(source)
@@ -442,6 +496,7 @@ def export_document(
         # Exporters raise ValueError for actionable problems (e.g. a reference
         # that names a node by display name instead of its id).
         raise ValueError(f"export failed for {tool!r}: {exc}") from exc
+    written: dict[str, Any] | None = None
     if output_path is not None:
         target = _resolve_path(output_path)
         try:
@@ -449,7 +504,16 @@ def export_document(
             target.write_bytes(data)
         except OSError as exc:
             raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
-        return {"tool": tool, "path": str(target), "bytes_written": len(data)}
+        written = {"path": str(target), "bytes_written": len(data)}
+    if projection is not None:
+        # The full export ran; return a lightweight projected view, not the bytes.
+        response: dict[str, Any] = {"tool": tool, "exported": True}
+        if written is not None:
+            response.update(written)
+        response["projection"] = project(doc, projection)
+        return response
+    if written is not None:
+        return {"tool": tool, **written}
     return {"tool": tool, **encode_bytes(data)}
 
 
