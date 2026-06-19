@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- RFC 6902 JSON Patch support for iterative editing, so agents mutate a
+  `.forge.json` on disk without re-emitting the whole document. New
+  `forgelab.patch` module implements JSON Pointer (RFC 6901) and JSON Patch
+  (RFC 6902) from scratch — pure standard library, no new runtime dependency —
+  with the full op set (add, remove, replace, move, copy, test) and a `diff`
+  that round-trips (`apply(a, diff(a, b)) == b`). Two new MCP tools expose it:
+  `patch_document` (`forge:export`) applies a patch and validates-before-writing
+  by default, supports in-place or `output_path` writes, and returns
+  `{patched, document_path, nodes_changed, valid}`; `diff_documents`
+  (`forge:read`) returns the patch transforming document A into B so agents can
+  inspect a change without loading either file fully.
 - New `forgelab.calc` module + five MCP tools (all `forge:read`, read/compute
   only, pure Python with no dependencies) so agents offload deterministic design
   math instead of computing it inline and making arithmetic mistakes:
