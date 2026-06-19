@@ -147,17 +147,24 @@ Sample designs for each domain live in [`examples/`](examples/).
 
 ## MCP tools
 
-Whichever client you connect, the agent sees the same nine tools. Over stdio all are available
+Whichever client you connect, the agent sees the same ten tools. Over stdio all are available
 locally; over HTTP each requires its scope on the bearer token.
 
 | Tool | What it does | Scope |
 | --- | --- | --- |
 | `list_domains`, `list_formats`   | discover supported domains and format tools     | `forge:read` |
 | `get_domain_schema`, `get_prompt`| JSON Schema + prompt templates per domain       | `forge:read` |
-| `validate_document`              | validate a ForgeLab document                    | `forge:read` |
+| `validate_document`              | validate a document (inline or by path)         | `forge:read` |
+| `load_document`                  | summarize a saved `.forge.json` (metadata only) | `forge:read` |
 | `generation_status`              | report whether `generate_document` is usable    | `forge:read` |
 | `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD)        | `forge:export` |
 | `generate_document`              | natural language → validated ForgeDocument      | `forge:generate` |
+
+**Keeping JSON out of context.** `validate_document` and `export_document` accept a `document_path`
+to a `.forge.json` on disk instead of an inline `document`, and `load_document` returns only a saved
+document's metadata. So an agent can write a document once, then validate and export it entirely by
+path — no large JSON ever flows back through the context window. Bare filenames resolve against
+`FORGELAB_OUTPUT_DIR`.
 
 Run the server standalone (`pip install "forgelab[mcp]"`):
 

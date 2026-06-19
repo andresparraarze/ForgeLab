@@ -16,6 +16,7 @@ _TOOLS = [
     tools.get_prompt,
     tools.list_domains,
     tools.list_formats,
+    tools.load_document,
     tools.export_document,
     tools.import_file,
     tools.generate_document,

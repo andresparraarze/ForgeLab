@@ -9,6 +9,7 @@ _EXPECTED = {
     "get_prompt",
     "list_domains",
     "list_formats",
+    "load_document",
     "export_document",
     "import_file",
     "generate_document",

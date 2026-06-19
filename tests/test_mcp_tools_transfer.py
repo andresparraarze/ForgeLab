@@ -154,3 +154,39 @@ def test_export_relative_path_with_directory_ignores_output_dir(tmp_path, monkey
 def test_export_without_output_path_is_unchanged():
     out = tools.export_document(_props_doc(), "kicad")
     assert set(out) == {"tool", "encoding", "content"}
+
+
+def test_export_accepts_document_path(tmp_path):
+    path = tmp_path / "blinky.forge.json"
+    path.write_text(json.dumps(_props_doc()))
+    out = tools.export_document(document_path=str(path), tool="kicad")
+    assert out["tool"] == "kicad"
+    assert "kicad_pcb" in out["content"]
+
+
+def test_export_document_path_to_output_path(tmp_path):
+    # The full token-optimized chain: path in, path out, no inline JSON anywhere.
+    src = tmp_path / "blinky.forge.json"
+    src.write_text(json.dumps(_props_doc()))
+    target = tmp_path / "blinky.kicad_pcb"
+    out = tools.export_document(document_path=str(src), tool="kicad", output_path=str(target))
+    assert out["path"] == str(target)
+    assert "content" not in out
+    assert b"kicad_pcb" in target.read_bytes()
+
+
+def test_export_missing_document_path_raises(tmp_path):
+    with pytest.raises(ValueError, match="could not read"):
+        tools.export_document(document_path=str(tmp_path / "nope.forge.json"), tool="kicad")
+
+
+def test_export_requires_a_document_source():
+    with pytest.raises(ValueError, match="document"):
+        tools.export_document(tool="kicad")
+
+
+def test_export_rejects_both_document_and_path(tmp_path):
+    path = tmp_path / "blinky.forge.json"
+    path.write_text(json.dumps(_props_doc()))
+    with pytest.raises(ValueError, match="not both"):
+        tools.export_document(_props_doc(), "kicad", document_path=str(path))
