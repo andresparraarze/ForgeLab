@@ -39,6 +39,32 @@ def _s(tag: str, *args: object) -> list:
     return [Symbol(tag), *args]
 
 
+# KiCad stores a file-format version as a bare integer date stamp, never a
+# quoted semantic version. Map known application versions to their format date
+# and fall back to a known-good value for anything unrecognized or missing.
+_DEFAULT_FORMAT_VERSION = 20221018
+_SEMVER_TO_FORMAT = {
+    "6.0": 20211014,
+    "7.0": 20221018,
+    "8.0": 20240108,
+    "9.0": 20240108,
+}
+
+
+def _format_version(raw: str) -> int:
+    """Normalize a kicad_version field to KiCad's unquoted integer date stamp."""
+    text = (raw or "").strip()
+    if text.isdigit():
+        return int(text)
+    if text in _SEMVER_TO_FORMAT:
+        return _SEMVER_TO_FORMAT[text]
+    major = text.split(".")[0]
+    for semver, fmt in _SEMVER_TO_FORMAT.items():
+        if semver.split(".")[0] == major:
+            return fmt
+    return _DEFAULT_FORMAT_VERSION
+
+
 _PAD_GRID_PITCH = 2.0
 
 
@@ -68,12 +94,8 @@ class KiCadExporter(Exporter):
         components = self._components(document)
         name_to_code = {n.name: n.code for n in nets}
 
-        version: int | str = (
-            int(board.kicad_version) if board.kicad_version.isdigit() else board.kicad_version
-        )
-
         tree: list = [Symbol("kicad_pcb")]
-        tree.append(_s("version", version))
+        tree.append(_s("version", _format_version(board.kicad_version)))
         tree.append(_s("generator", Symbol(board.generator)))
         tree.append(_s("general", _s("thickness", 1.6)))
         tree.append(_s("paper", "A4"))
