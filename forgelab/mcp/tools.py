@@ -15,6 +15,21 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from forgelab.calc import (
+    calculate_board_layout as _calc_board_layout,
+)
+from forgelab.calc import (
+    calculate_pad_positions as _calc_pad_positions,
+)
+from forgelab.calc import (
+    calculate_polygon as _calc_polygon,
+)
+from forgelab.calc import (
+    calculate_rotation_matrix as _calc_rotation_matrix,
+)
+from forgelab.calc import (
+    calculate_trace_width as _calc_trace_width,
+)
 from forgelab.core import UnknownToolError, default_registry, validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
@@ -153,6 +168,91 @@ def load_document(document_path: str) -> dict[str, Any]:
         "node_count": sum(counts.values()),
         "nodes_by_type": dict(counts),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic calculation tools (forgelab.calc). Read/compute only — no auth
+# scope beyond forge:read — so agents offload geometry and electrical math
+# instead of computing it inline and making arithmetic mistakes.
+# --------------------------------------------------------------------------- #
+def calculate_pad_positions(
+    footprint_type: str,
+    pitch: float,
+    count: int,
+    dual_row: bool = True,
+    row_spacing: float | None = None,
+) -> list[dict[str, object]]:
+    """Pad offsets for a standard IC package, as ``{"number", "at": [x, y]}`` (mm).
+
+    Lay out the pads of a footprint instead of computing offsets by hand.
+    ``footprint_type`` is ``"DIP"``, ``"SOIC"``, ``"SOP"`` (dual-row) or ``"QFP"``
+    (quad). ``pitch`` is pin-to-pin spacing in mm; ``count`` the total pad count
+    (even for dual-row, divisible by 4 for QFP). ``dual_row=False`` gives a single
+    in-line row (ignored for QFP); ``row_spacing`` overrides the per-family default
+    distance between rows. Pin 1 is top-left, numbering counter-clockwise. Drop
+    each ``at`` straight into a hardware ``Pad``.
+    """
+    require_scope("forge:read")
+    return _calc_pad_positions(footprint_type, pitch, count, dual_row, row_spacing)
+
+
+def calculate_polygon(sides: int, radius: float, center: list[float] | None = None) -> list[float]:
+    """Vertices of a regular polygon as a flat ``[x, y, x, y, ...]`` list.
+
+    For tower/prism cross-sections, octagonal pads, and circular approximations.
+    ``sides`` >= 3, ``radius`` is the circumradius, ``center`` is an optional
+    ``[x, y]`` (default origin). The first vertex is on the +X axis, proceeding
+    counter-clockwise. Returns ``2 * sides`` floats.
+    """
+    require_scope("forge:read")
+    return _calc_polygon(sides, radius, center)
+
+
+def calculate_rotation_matrix(angle_deg: float, axis: str = "y") -> list[float]:
+    """Rotation quaternion ``[x, y, z, w]`` for the threed transform rotation field.
+
+    Returns a unit quaternion (not a matrix) in glTF's ``[x, y, z, w]`` order so
+    agents stop guessing quaternion values. ``angle_deg`` is degrees; ``axis`` is
+    ``"x"``, ``"y"`` or ``"z"`` (default ``"y"``, the up axis in the Y-up threed
+    domain).
+    """
+    require_scope("forge:read")
+    return _calc_rotation_matrix(angle_deg, axis)
+
+
+def calculate_trace_width(
+    current_amps: float,
+    copper_weight_oz: float = 1.0,
+    temp_rise_c: float = 10.0,
+    external: bool = True,
+) -> float:
+    """Recommended PCB trace width in mm via IPC-2221, in one call.
+
+    ``current_amps`` is the continuous current; ``copper_weight_oz`` the copper
+    thickness in oz/ft^2 (default 1.0); ``temp_rise_c`` the allowed temperature
+    rise in C (default 10.0); ``external=False`` for an inner-layer trace (wider).
+    Returns the minimum width in millimetres.
+    """
+    require_scope("forge:read")
+    return _calc_trace_width(current_amps, copper_weight_oz, temp_rise_c, external)
+
+
+def calculate_board_layout(
+    component_count: int,
+    board_width: float,
+    board_height: float,
+    margin: float = 2.0,
+    reference_prefix: str = "U",
+) -> list[dict[str, object]]:
+    """Suggest grid placements as ``{"reference", "at": [x, y]}`` (mm).
+
+    Spreads ``component_count`` components over a margin-aware grid inside a
+    ``board_width`` x ``board_height`` outline (origin at the lower-left corner),
+    so an agent does not plan coordinates by hand. ``margin`` is the edge keep-out
+    (default 2.0 mm); ``reference_prefix`` names the parts (``"U"`` -> U1, U2, ...).
+    """
+    require_scope("forge:read")
+    return _calc_board_layout(component_count, board_width, board_height, margin, reference_prefix)
 
 
 def _agent_extra_installed() -> bool:
