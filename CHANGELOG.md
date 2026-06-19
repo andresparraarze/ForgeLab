@@ -86,6 +86,12 @@ All notable changes to this project are documented here. The format is based on
   directory.
 
 ### Fixed
+- KiCad exporter: the PCB file-format version is now always written as an
+  unquoted integer date stamp (e.g. `(version 20221018)`), never a quoted
+  semantic version like `(version "7.0")` which live KiCad rejects. The exporter
+  maps known application versions (`6.0`–`9.0`) to their format date, passes
+  through bare integer date stamps, and falls back to the canonical `20221018`
+  when the `kicad_version` field is missing or unrecognized.
 - KiCad exporter: pads no longer stack at the footprint origin. Every pad was
   emitted with `(at 0 0)`, so a multi-pin part (e.g. a 29-pad HTSSOP-28) visually
   collapsed onto a single point. The `Pad` model gained an optional `at` ([x, y]

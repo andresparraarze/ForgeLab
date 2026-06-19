@@ -52,6 +52,35 @@ def test_export_produces_valid_kicad_root():
     assert tree[0] == "kicad_pcb"
 
 
+def _export_with_version(kicad_version: str) -> str:
+    doc = _doc()
+    board_node = next(n for n in doc.nodes if n.type == NODE_BOARD)
+    board = BoardConstraints.model_validate(board_node.props)
+    board.kicad_version = kicad_version
+    board_node.props = board.model_dump()
+    return KiCadExporter().from_ir(doc).decode("utf-8")
+
+
+def test_semver_version_is_written_as_unquoted_integer():
+    # Live KiCad bug: (version "7.0") is rejected; the format version is a bare
+    # integer date stamp. "7.0" must map to its date-format version, unquoted.
+    out = _export_with_version("7.0")
+    assert "(version 20221018)" in out
+    assert '(version "7.0")' not in out
+
+
+def test_integer_version_string_stays_unquoted():
+    out = _export_with_version("20240108")
+    assert "(version 20240108)" in out
+    assert '(version "20240108)' not in out
+
+
+def test_unrecognized_version_falls_back_to_canonical():
+    out = _export_with_version("nonsense")
+    assert "(version 20221018)" in out
+    assert "nonsense" not in out
+
+
 def test_export_contains_nets_and_footprint():
     out = KiCadExporter().from_ir(_doc()).decode("utf-8")
     assert '(net 1 "GND")' in out
