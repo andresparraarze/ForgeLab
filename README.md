@@ -147,7 +147,7 @@ Sample designs for each domain live in [`examples/`](examples/).
 
 ## MCP tools
 
-Whichever client you connect, the agent sees the same seventeen tools. Over stdio all are available
+Whichever client you connect, the agent sees the same eighteen tools. Over stdio all are available
 locally; over HTTP each requires its scope on the bearer token.
 
 | Tool | What it does | Scope |
@@ -157,6 +157,7 @@ locally; over HTTP each requires its scope on the bearer token.
 | `validate_document`              | validate a document (inline or by path)         | `forge:read` |
 | `load_document`                  | summarize a saved `.forge.json` (metadata only) | `forge:read` |
 | `diff_documents`                 | RFC 6902 patch transforming document A into B   | `forge:read` |
+| `get_projection_schema`          | what each projection level keeps/strips         | `forge:read` |
 | `calculate_*` (5 tools)          | deterministic design math (see below)           | `forge:read` |
 | `generation_status`              | report whether `generate_document` is usable    | `forge:read` |
 | `patch_document`                 | apply an RFC 6902 JSON Patch to a saved document| `forge:export` |
@@ -175,6 +176,14 @@ JSON Patch to a saved document (e.g. `[{"op": "replace", "path": "/nodes/0/props
 versions. So changing one resistor or adding one component is a few hundred bytes in and out — the
 full document never re-enters the context window. The RFC 6901/6902 implementation is pure standard
 library (no new dependency).
+
+**Projection layers.** `load_document`, `validate_document` and `export_document` take an optional
+`projection` so the agent receives only what a task needs: `metadata` (identity + node counts),
+`topology` (structure and references with geometry coordinates stripped — for BOM/net/connectivity
+work), `geometry` (full mesh/pad/sketch coordinates, minus materials/scene/board constraints — for
+coordinate edits), or `full`. Stripping happens inside ForgeLab, so stripped fields never reach the
+agent. `export_document` with `projection` runs the full export but returns just the projected view
+instead of the bytes — a lightweight confirmation. `get_projection_schema` describes each level.
 
 **Deterministic design math.** Five pure-compute tools let agents offload geometry and electrical
 sizing instead of doing it inline (and getting it wrong): `calculate_pad_positions`
@@ -245,6 +254,7 @@ forgelab/
 ├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
 ├── calc/        # dependency-free design math (pad layouts, polygons, quaternions, trace width)
 ├── patch/       # RFC 6901 JSON Pointer + RFC 6902 JSON Patch / diff, from scratch (stdlib)
+├── projection/  # context projection layers (metadata / topology / geometry / full)
 ├── auth/        # shared OAuth 2.0 (verification, dev authorization server, scopes)
 ├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
 ├── api/         # FastAPI compiler-as-a-service

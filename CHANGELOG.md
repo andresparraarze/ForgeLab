@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Context projection layers so agents receive only the data a task needs. New
+  `forgelab.projection` module with a pure `project(document, level)` returning a
+  plain dict at one of four levels: `metadata` (version/domain/meta + node counts
+  by type, no node data), `topology` (a simplified node list — hardware
+  components with reference/value/footprint and pad net names but no pad
+  coordinates; threed objects with name/mesh-ref/transform but no mesh geometry;
+  mechanical features as id/type/prop-key-names), `geometry` (full
+  mesh/pad/sketch geometry, stripping material definitions, scene hierarchy and
+  board constraints), and `full`. `load_document` and `validate_document` gained
+  an optional `projection`; `export_document` gained one with a twist — it runs
+  the full export but returns only the projected view (not the export bytes), so
+  the agent gets a lightweight confirmation. The stripping happens inside
+  ForgeLab; stripped fields never leave. New `get_projection_schema(domain,
+  projection)` tool describes what each level includes/excludes so agents can
+  pick a level without trial and error.
 - RFC 6902 JSON Patch support for iterative editing, so agents mutate a
   `.forge.json` on disk without re-emitting the whole document. New
   `forgelab.patch` module implements JSON Pointer (RFC 6901) and JSON Patch
