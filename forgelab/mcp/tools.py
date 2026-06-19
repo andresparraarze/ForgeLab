@@ -31,8 +31,10 @@ from forgelab.calc import (
     calculate_trace_width as _calc_trace_width,
 )
 from forgelab.core import UnknownToolError, default_registry, validate
+from forgelab.core import validate as _core_validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
+from forgelab.patch import PatchError, apply_patch, diff
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 
 _registry = default_registry()
@@ -168,6 +170,95 @@ def load_document(document_path: str) -> dict[str, Any]:
         "node_count": sum(counts.values()),
         "nodes_by_type": dict(counts),
     }
+
+
+def _touches_nodes(operation: Any) -> bool:
+    """True if a patch operation's target (path or move/copy source) is under /nodes."""
+    if not isinstance(operation, dict):
+        return False
+    for key in ("path", "from"):
+        value = operation.get(key)
+        if isinstance(value, str) and (value == "/nodes" or value.startswith("/nodes/")):
+            return True
+    return False
+
+
+def patch_document(
+    document_path: str,
+    patch: list[dict[str, Any]],
+    output_path: str | None = None,
+    validate: bool = True,
+) -> dict[str, Any]:
+    """Apply an RFC 6902 JSON Patch to a ``.forge.json`` on disk, in one step.
+
+    Mutate an existing document without re-emitting the whole thing: read it,
+    apply the patch, optionally validate, and write — so the full JSON never
+    re-enters your context window.
+
+    Args:
+        document_path: path to the existing ``.forge.json`` (a bare filename
+            resolves against ``FORGELAB_OUTPUT_DIR``).
+        patch: an RFC 6902 JSON Patch array — a list of ``{"op", "path", ...}``
+            operations. Supports add, remove, replace, move, copy and test, e.g.
+            ``[{"op": "replace", "path": "/nodes/0/props/value", "value": "10k"}]``.
+        output_path: where to write the result; if omitted, overwrites
+            ``document_path`` in place.
+        validate: when true (default), validate the patched document against the
+            ForgeLab schema before writing — if it is invalid, nothing is written
+            and the result reports ``valid: false`` with an ``error``.
+
+    Returns:
+        ``{"patched": bool, "document_path": str, "nodes_changed": int, "valid":
+        bool|None}``. ``nodes_changed`` counts the patch operations that touched
+        nodes (not metadata). ``valid`` is the schema result when ``validate`` is
+        true, else ``None``. On a validation failure ``patched`` is false and an
+        ``error`` is included. A malformed patch raises an error.
+    """
+    require_scope("forge:export")
+    source = _read_document_file(document_path)
+    try:
+        patched = apply_patch(source, patch)
+    except PatchError as exc:
+        raise ValueError(f"patch failed: {exc}") from exc
+    nodes_changed = sum(1 for op in patch if _touches_nodes(op)) if isinstance(patch, list) else 0
+    target = _resolve_path(output_path if output_path is not None else document_path)
+    if validate:
+        try:
+            _core_validate(patched)
+        except Exception as exc:
+            return {
+                "patched": False,
+                "document_path": str(target),
+                "nodes_changed": nodes_changed,
+                "valid": False,
+                "error": str(exc),
+            }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(patched, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
+    return {
+        "patched": True,
+        "document_path": str(target),
+        "nodes_changed": nodes_changed,
+        "valid": True if validate else None,
+    }
+
+
+def diff_documents(document_path_a: str, document_path_b: str) -> list[dict[str, Any]]:
+    """Return the RFC 6902 patch that transforms document A into document B.
+
+    Reads both ``.forge.json`` files (bare filenames resolve against
+    ``FORGELAB_OUTPUT_DIR``) and returns a JSON Patch array — a list of
+    ``{"op", "path", ...}`` operations — so an agent can inspect what changed
+    between two versions of a design without loading either document fully.
+    Applying the returned patch to A yields B.
+    """
+    require_scope("forge:read")
+    a = _read_document_file(document_path_a)
+    b = _read_document_file(document_path_b)
+    return diff(a, b)
 
 
 # --------------------------------------------------------------------------- #
