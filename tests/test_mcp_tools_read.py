@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from forgelab.mcp import tools
@@ -23,6 +25,85 @@ def test_validate_document_reports_invalid():
     result = tools.validate_document(bad)
     assert result["valid"] is False
     assert "error" in result
+
+
+def test_validate_document_accepts_path(tmp_path):
+    # Token optimization: the agent passes a path, never loading the JSON itself.
+    path = tmp_path / "doc.forge.json"
+    path.write_text(json.dumps(_hardware_doc()))
+    assert tools.validate_document(document_path=str(path)) == {"valid": True}
+
+
+def test_validate_document_path_reports_invalid(tmp_path):
+    bad = _hardware_doc()
+    bad["forgelab_version"] = "999.0.0"
+    path = tmp_path / "bad.forge.json"
+    path.write_text(json.dumps(bad))
+    result = tools.validate_document(document_path=str(path))
+    assert result["valid"] is False
+    assert "error" in result
+
+
+def test_validate_document_missing_path_raises(tmp_path):
+    with pytest.raises(ValueError, match="could not read"):
+        tools.validate_document(document_path=str(tmp_path / "nope.forge.json"))
+
+
+def test_validate_document_requires_a_source():
+    with pytest.raises(ValueError, match="document"):
+        tools.validate_document()
+
+
+def test_validate_document_rejects_both_sources(tmp_path):
+    path = tmp_path / "doc.forge.json"
+    path.write_text(json.dumps(_hardware_doc()))
+    with pytest.raises(ValueError, match="not both"):
+        tools.validate_document(_hardware_doc(), document_path=str(path))
+
+
+def test_load_document_returns_metadata_only(tmp_path):
+    path = tmp_path / "blinky.forge.json"
+    path.write_text(json.dumps(_hardware_doc()))
+    meta = tools.load_document(document_path=str(path))
+    assert meta["domain"] == "hardware"
+    assert meta["name"] == "blinky"
+    assert meta["forgelab_version"] == SPEC_VERSION
+    assert meta["node_count"] == 1
+    assert meta["nodes_by_type"] == {"component": 1}
+    # The full document is NOT returned — that is the whole point.
+    assert "nodes" not in meta
+
+
+def test_load_document_counts_nested_children(tmp_path):
+    doc = _hardware_doc()
+    doc["nodes"] = [
+        {"id": "g", "type": "group", "children": [{"id": "r1", "type": "component"}]},
+        {"id": "net0", "type": "net"},
+    ]
+    path = tmp_path / "nested.forge.json"
+    path.write_text(json.dumps(doc))
+    meta = tools.load_document(document_path=str(path))
+    assert meta["node_count"] == 3
+    assert meta["nodes_by_type"] == {"group": 1, "component": 1, "net": 1}
+
+
+def test_load_document_missing_file_raises(tmp_path):
+    with pytest.raises(ValueError, match="could not read"):
+        tools.load_document(document_path=str(tmp_path / "nope.forge.json"))
+
+
+def test_load_document_bad_json_raises(tmp_path):
+    path = tmp_path / "bad.forge.json"
+    path.write_text("{ not valid json")
+    with pytest.raises(ValueError, match="JSON"):
+        tools.load_document(document_path=str(path))
+
+
+def test_load_document_resolves_bare_name_against_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    (tmp_path / "blinky.forge.json").write_text(json.dumps(_hardware_doc()))
+    meta = tools.load_document(document_path="blinky.forge.json")
+    assert meta["name"] == "blinky"
 
 
 def test_get_domain_schema_pins_domain():

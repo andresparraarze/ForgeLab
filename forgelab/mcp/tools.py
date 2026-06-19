@@ -7,7 +7,9 @@ no-op over the unauthenticated stdio transport).
 
 from __future__ import annotations
 
+import json
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +23,67 @@ from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, syst
 _registry = default_registry()
 
 
-def validate_document(document: dict[str, Any]) -> dict[str, Any]:
-    """Validate a ForgeLab document. Returns {"valid": bool, "error"?: str}."""
-    require_scope("forge:read")
+def _resolve_path(path_str: str) -> Path:
+    """Bare filenames land in FORGELAB_OUTPUT_DIR (or the cwd); paths pass through."""
+    path = Path(path_str)
+    if not path.is_absolute() and path.parent == Path("."):
+        base = os.environ.get("FORGELAB_OUTPUT_DIR")
+        return (Path(base) if base else Path.cwd()) / path
+    return path
+
+
+def _read_document_file(document_path: str) -> dict[str, Any]:
+    """Read and JSON-parse a ``.forge.json`` from disk into a plain dict.
+
+    Raises ``ValueError`` with an actionable message if the file is missing or
+    is not a JSON object. A bare filename resolves against ``FORGELAB_OUTPUT_DIR``
+    (the same place ``export_document`` writes), so the agent can round-trip a
+    document by name without spelling out an absolute path.
+    """
+    path = _resolve_path(document_path)
     try:
-        validate(document)
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not read document {str(path)!r}: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"document {str(path)!r} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"document {str(path)!r} is not a JSON object")
+    return data
+
+
+def _document_source(document: dict[str, Any] | None, document_path: str | None) -> dict[str, Any]:
+    """Resolve a document from exactly one of an inline object or a file path.
+
+    Raises ``ValueError`` if both or neither is given, or if the file cannot be
+    read. Lets tools accept a path (keeping large JSON out of the agent's context
+    window) while preserving the inline-document path unchanged.
+    """
+    if document is not None and document_path is not None:
+        raise ValueError("pass either document or document_path, not both")
+    if document_path is not None:
+        return _read_document_file(document_path)
+    if document is not None:
+        return document
+    raise ValueError("provide a document (inline) or a document_path to a .forge.json file")
+
+
+def validate_document(
+    document: dict[str, Any] | None = None, document_path: str | None = None
+) -> dict[str, Any]:
+    """Validate a ForgeLab document. Returns {"valid": bool, "error"?: str}.
+
+    Pass the document inline as ``document``, or pass ``document_path`` pointing at
+    a ``.forge.json`` file on disk — ForgeLab reads and validates it without the
+    agent ever loading the JSON into its context. A bare filename resolves against
+    ``FORGELAB_OUTPUT_DIR``. Exactly one of the two must be given.
+    """
+    require_scope("forge:read")
+    source = _document_source(document, document_path)
+    try:
+        validate(source)
     except Exception as exc:  # any validation failure is reported to the caller
         return {"valid": False, "error": str(exc)}
     return {"valid": True}
@@ -59,6 +117,42 @@ def list_formats() -> dict[str, dict[str, bool]]:
     """List registered format tools and their import/export availability."""
     require_scope("forge:read")
     return _registry.tool_names()
+
+
+def _count_node_types(nodes: Any) -> Counter[str]:
+    """Count node types over a raw node list, recursing into ``children``."""
+    counts: Counter[str] = Counter()
+    if not isinstance(nodes, list):
+        return counts
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        counts[str(node.get("type", "unknown"))] += 1
+        counts.update(_count_node_types(node.get("children", [])))
+    return counts
+
+
+def load_document(document_path: str) -> dict[str, Any]:
+    """Summarize a ``.forge.json`` on disk without returning the full document.
+
+    Reads the file and returns only its metadata — ``domain``, ``name``,
+    ``forgelab_version``, ``node_count`` (total, including nested children), and
+    ``nodes_by_type`` (counts per node type). Use this to verify a document the
+    agent just wrote without re-serializing the whole JSON back into context. A
+    bare filename resolves against ``FORGELAB_OUTPUT_DIR``.
+    """
+    require_scope("forge:read")
+    data = _read_document_file(document_path)
+    counts = _count_node_types(data.get("nodes", []))
+    meta = data.get("meta")
+    name = meta.get("name") if isinstance(meta, dict) else None
+    return {
+        "domain": data.get("domain"),
+        "name": name,
+        "forgelab_version": data.get("forgelab_version"),
+        "node_count": sum(counts.values()),
+        "nodes_by_type": dict(counts),
+    }
 
 
 def _agent_extra_installed() -> bool:
@@ -108,19 +202,18 @@ def generation_status() -> dict[str, Any]:
     }
 
 
-def _resolve_output_path(output_path: str) -> Path:
-    """Bare filenames land in FORGELAB_OUTPUT_DIR (or the cwd); paths pass through."""
-    path = Path(output_path)
-    if not path.is_absolute() and path.parent == Path("."):
-        base = os.environ.get("FORGELAB_OUTPUT_DIR")
-        return (Path(base) if base else Path.cwd()) / path
-    return path
-
-
 def export_document(
-    document: dict[str, Any], tool: str, output_path: str | None = None
+    document: dict[str, Any] | None = None,
+    tool: str = "",
+    output_path: str | None = None,
+    document_path: str | None = None,
 ) -> dict[str, Any]:
     """Export a ForgeLab document to a format tool's native file.
+
+    Provide the document either inline as ``document`` or, to keep large JSON out
+    of your context window, as ``document_path`` pointing at a ``.forge.json`` on
+    disk (a bare filename resolves against ``FORGELAB_OUTPUT_DIR``). Exactly one
+    of the two must be given. ``tool`` is required.
 
     Without ``output_path``, returns the file inline:
     {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
@@ -135,8 +228,11 @@ def export_document(
     ``FORGELAB_OUTPUT_DIR`` when set, else the current working directory.
     """
     require_scope("forge:export")
+    if not tool:
+        raise ValueError("tool is required")
+    source = _document_source(document, document_path)
     try:
-        doc = validate(document)
+        doc = validate(source)
     except Exception as exc:
         raise ValueError(f"invalid document: {exc}") from exc
     try:
@@ -156,7 +252,7 @@ def export_document(
         # that names a node by display name instead of its id).
         raise ValueError(f"export failed for {tool!r}: {exc}") from exc
     if output_path is not None:
-        target = _resolve_output_path(output_path)
+        target = _resolve_path(output_path)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)

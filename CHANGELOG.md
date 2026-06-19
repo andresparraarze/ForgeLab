@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- MCP server: file-path inputs to keep large documents out of the agent's
+  context window. `validate_document` and `export_document` now accept a
+  `document_path` to a `.forge.json` on disk as an alternative to the inline
+  `document` object — ForgeLab reads the file itself. A bare filename resolves
+  against `FORGELAB_OUTPUT_DIR` (the same place `export_document` writes), so an
+  agent can write a document to disk, then `validate_document(document_path=…)`
+  and `export_document(document_path=…, output_path=…)` with zero large JSON in
+  context. The inline-`document` form is unchanged.
+- MCP server: new `load_document` tool reads a `.forge.json` and returns only its
+  metadata — `domain`, `name`, `forgelab_version`, `node_count`, and
+  `nodes_by_type` (counts per type, including nested children) — so an agent can
+  verify a saved document without re-serializing the whole thing into context.
 - MCP server: new `generation_status` tool reports whether `generate_document`
   is usable on this server (needs both `ANTHROPIC_API_KEY` set and the `agent`
   extra installed) without calling it. When unavailable it returns a `reason`
