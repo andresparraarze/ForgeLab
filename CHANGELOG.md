@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- New `forgelab.calc` module + five MCP tools (all `forge:read`, read/compute
+  only, pure Python with no dependencies) so agents offload deterministic design
+  math instead of computing it inline and making arithmetic mistakes:
+  `calculate_pad_positions` (DIP/SOIC/SOP/QFP pad offsets, single or dual row,
+  configurable pitch/count), `calculate_polygon` (regular-polygon vertex list for
+  prisms, octagonal pads, circle approximations), `calculate_rotation_matrix` (a
+  glTF `[x, y, z, w]` quaternion about a principal axis for threed rotation
+  fields), `calculate_trace_width` (IPC-2221 trace width in mm), and
+  `calculate_board_layout` (a margin-aware grid of component placements).
 - MCP server: file-path inputs to keep large documents out of the agent's
   context window. `validate_document` and `export_document` now accept a
   `document_path` to a `.forge.json` on disk as an alternative to the inline

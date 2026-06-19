@@ -191,3 +191,43 @@ def test_generation_status_unavailable_without_agent_extra(monkeypatch):
     status = tools.generation_status()
     assert status["available"] is False
     assert "agent extra" in status["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic calculation tools delegate to forgelab.calc.
+# --------------------------------------------------------------------------- #
+def test_calculate_pad_positions_tool():
+    pads = tools.calculate_pad_positions("SOIC", pitch=1.27, count=8)
+    assert len(pads) == 8
+    assert pads[0]["number"] == "1"
+    assert len({tuple(p["at"]) for p in pads}) == 8
+
+
+def test_calculate_polygon_tool():
+    verts = tools.calculate_polygon(sides=6, radius=1.0)
+    assert len(verts) == 12
+
+
+def test_calculate_rotation_matrix_tool():
+    assert tools.calculate_rotation_matrix(0.0) == [0.0, 0.0, 0.0, 1.0]
+
+
+def test_calculate_trace_width_tool():
+    assert tools.calculate_trace_width(1.0, 1.0, 10.0) == pytest.approx(0.30, abs=0.02)
+
+
+def test_calculate_board_layout_tool():
+    placements = tools.calculate_board_layout(4, 20.0, 20.0, margin=2.0)
+    assert [p["reference"] for p in placements] == ["U1", "U2", "U3", "U4"]
+
+
+def test_calculation_tools_require_read_scope(monkeypatch):
+    # Each tool enforces forge:read like the other read tools.
+    calls = []
+    monkeypatch.setattr(tools, "require_scope", lambda scope: calls.append(scope))
+    tools.calculate_pad_positions("DIP", 2.54, 8)
+    tools.calculate_polygon(4, 1.0)
+    tools.calculate_rotation_matrix(90.0)
+    tools.calculate_trace_width(1.0)
+    tools.calculate_board_layout(4, 20.0, 20.0)
+    assert calls == ["forge:read"] * 5

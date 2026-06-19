@@ -147,7 +147,7 @@ Sample designs for each domain live in [`examples/`](examples/).
 
 ## MCP tools
 
-Whichever client you connect, the agent sees the same ten tools. Over stdio all are available
+Whichever client you connect, the agent sees the same fifteen tools. Over stdio all are available
 locally; over HTTP each requires its scope on the bearer token.
 
 | Tool | What it does | Scope |
@@ -156,6 +156,7 @@ locally; over HTTP each requires its scope on the bearer token.
 | `get_domain_schema`, `get_prompt`| JSON Schema + prompt templates per domain       | `forge:read` |
 | `validate_document`              | validate a document (inline or by path)         | `forge:read` |
 | `load_document`                  | summarize a saved `.forge.json` (metadata only) | `forge:read` |
+| `calculate_*` (5 tools)          | deterministic design math (see below)           | `forge:read` |
 | `generation_status`              | report whether `generate_document` is usable    | `forge:read` |
 | `export_document`, `import_file` | IR ↔ native files (KiCad, glTF, FreeCAD)        | `forge:export` |
 | `generate_document`              | natural language → validated ForgeDocument      | `forge:generate` |
@@ -165,6 +166,13 @@ to a `.forge.json` on disk instead of an inline `document`, and `load_document` 
 document's metadata. So an agent can write a document once, then validate and export it entirely by
 path — no large JSON ever flows back through the context window. Bare filenames resolve against
 `FORGELAB_OUTPUT_DIR`.
+
+**Deterministic design math.** Five pure-compute tools let agents offload geometry and electrical
+sizing instead of doing it inline (and getting it wrong): `calculate_pad_positions`
+(DIP/SOIC/SOP/QFP pad offsets), `calculate_polygon` (regular-polygon vertices for prisms, octagonal
+pads, circle approximations), `calculate_rotation_matrix` (a glTF `[x, y, z, w]` quaternion for
+threed rotation fields), `calculate_trace_width` (IPC-2221), and `calculate_board_layout` (a
+margin-aware component grid).
 
 Run the server standalone (`pip install "forgelab[mcp]"`):
 
@@ -226,6 +234,7 @@ forgelab/
 ├── importers/   # tool → IR  (base ABC + KiCad, glTF, FreeCAD)
 ├── exporters/   # IR → tool  (base ABC + KiCad, glTF, FreeCAD)
 ├── sdk/         # AI agent helpers (schemas, prompts, validation, ForgeAgent)
+├── calc/        # dependency-free design math (pad layouts, polygons, quaternions, trace width)
 ├── auth/        # shared OAuth 2.0 (verification, dev authorization server, scopes)
 ├── mcp/         # MCP server (stdio + OAuth-protected Streamable HTTP)
 ├── api/         # FastAPI compiler-as-a-service
