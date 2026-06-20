@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `analyze_image` MCP tool (`forge:generate`) that turns a photo into a starting
+  ForgeLab document. `analyze_image(image_path, domain, hints='')` reads an image
+  (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`), sends it to the Anthropic vision model
+  (`claude-sonnet-4-6`) with a domain-specific prompt, and returns a partial
+  document skeleton: visible components/geometry/structure are extracted,
+  unreadable values are reasonable estimates, and estimated nodes' ids are
+  suffixed `-estimated`. This enables a photo → analyze → refine → validate →
+  export flow. It shares `generate_document`'s requirements (`ANTHROPIC_API_KEY`
+  + the `agent` extra); `generation_status` now reports both tools' availability
+  via `generate_document` and `analyze_image` booleans.
 - `verify_sync` MCP tool (`forge:read`) so agents can check whether a native
   file is still in sync with the ForgeLab document that generated it before
   patching. On export, each exporter now embeds a SHA256 of the source document:

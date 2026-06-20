@@ -70,7 +70,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ## MCP tools
 
-Nineteen tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Twenty tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -115,6 +115,7 @@ Nineteen tools, same for every client. Over stdio all are local; over HTTP each 
 | Tool | Description |
 | --- | --- |
 | `generate_document` | Natural language → validated ForgeDocument |
+| `analyze_image` | Photo → ForgeLab document skeleton (vision) |
 
 ## Token optimization
 
