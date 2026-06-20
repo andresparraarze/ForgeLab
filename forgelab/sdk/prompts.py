@@ -11,16 +11,16 @@ _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
 # domain -> (example user request, path to a valid .forge.json under examples/)
 _FEW_SHOT: dict[str, tuple[str, str]] = {
     "hardware": (
-        "a 2-layer blinky LED board with one resistor and one LED",
-        "hardware/blinky.forge.json",
+        "an Arduino Uno clone board",
+        "hardware/arduino_uno.forge.json",
     ),
     "threed": (
-        "a single cube with a clearly visible red material",
-        "threed/cube.forge.json",
+        "a sci-fi space station with a rotating ring, solar arrays, a docking port and a comm dish",
+        "threed/space_station.forge.json",
     ),
     "mechanical": (
-        "a 40x20x10 box with a through hole",
-        "mechanical/box-with-hole.forge.json",
+        "a NEMA17 stepper motor mount plate",
+        "mechanical/motor_mount.forge.json",
     ),
 }
 
