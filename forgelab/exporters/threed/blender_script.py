@@ -190,7 +190,7 @@ class BlenderScriptExporter(Exporter):
         materials = {n.id: Material.model_validate(n.props) for n in material_nodes}
         meshes = {n.id: Mesh.model_validate(n.props) for n in mesh_nodes}
 
-        scene_name = document.meta.name or "Scene"
+        scene_name = scene_nodes[0].props.get("name", "Scene") if scene_nodes else "Scene"
 
         lines: list[str] = []
         lines += self._header(scene_name)
