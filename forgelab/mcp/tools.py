@@ -37,6 +37,7 @@ from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
 from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
+from forgelab.validation import check_mechanical
 
 _registry = default_registry()
 
@@ -101,12 +102,21 @@ def validate_document(
     document_path: str | None = None,
     projection: str | None = None,
 ) -> dict[str, Any]:
-    """Validate a ForgeLab document. Returns {"valid": bool, "error"?: str}.
+    """Validate a ForgeLab document.
+
+    Returns ``{"valid": bool, "error"?: str, "warnings"?: list[str]}``.
 
     Pass the document inline as ``document``, or pass ``document_path`` pointing at
     a ``.forge.json`` file on disk — ForgeLab reads and validates it without the
     agent ever loading the JSON into its context. A bare filename resolves against
     ``FORGELAB_OUTPUT_DIR``. Exactly one of the two must be given.
+
+    For mechanical documents, lightweight constraint sanity checks run after the
+    structural check (sketch closure, positive pad length, pocket depth bounds,
+    positive circle radius, body-reference consistency). Fatal problems become
+    ``error`` (and ``valid`` is False); non-fatal ones are returned in
+    ``warnings`` without affecting ``valid``. These checks are skipped for the
+    hardware and threed domains.
 
     projection: when set to a projection level (``metadata``, ``topology``,
     ``geometry`` or ``full``), a successful validation also returns a
@@ -122,9 +132,22 @@ def validate_document(
         document_model = validate(source)
     except Exception as exc:  # any validation failure is reported to the caller
         return {"valid": False, "error": str(exc)}
+
+    # Domain sanity checks layer on top of structural validation. Errors are
+    # fatal (valid=False); warnings are surfaced but non-fatal.
+    errors, warnings = check_mechanical(document_model)
+    if errors:
+        result: dict[str, Any] = {"valid": False, "error": "; ".join(errors)}
+        if warnings:
+            result["warnings"] = warnings
+        return result
+
+    result = {"valid": True}
+    if warnings:
+        result["warnings"] = warnings
     if projection is not None:
-        return {"valid": True, "projection": project(document_model, projection)}
-    return {"valid": True}
+        result["projection"] = project(document_model, projection)
+    return result
 
 
 def get_domain_schema(domain: str) -> dict[str, Any]:
