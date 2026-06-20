@@ -1,0 +1,1812 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "hardware",
+  "meta": {
+    "name": "arduino-uno",
+    "generator": "forgelab",
+    "description": "A complete Arduino Uno clone: ATmega328P (TQFP-32) with real package pad geometry from calculate_pad_positions, CH340G USB-serial bridge (SOIC-16, also real pads), USB-B, 16MHz crystal with 22pF load caps, AMS1117-3.3 regulator, analog/digital/power/ICSP headers, power + TX/RX LEDs, reset button and 100nF MCU decoupling, on the canonical 68.58x53.34mm outline. Reference for a real multi-IC board: how to use calculate_pad_positions for QFP/SOIC packages and wire dozens of nets by name."
+  },
+  "nodes": [
+    {
+      "id": "board",
+      "type": "board",
+      "props": {
+        "kicad_version": "20240108",
+        "generator": "forgelab",
+        "layers": [
+          {
+            "ordinal": 0,
+            "canonical_name": "F.Cu",
+            "layer_type": "signal"
+          },
+          {
+            "ordinal": 31,
+            "canonical_name": "B.Cu",
+            "layer_type": "signal"
+          },
+          {
+            "ordinal": 44,
+            "canonical_name": "Edge.Cuts",
+            "layer_type": "user"
+          }
+        ],
+        "outline": [
+          {
+            "start": [
+              0.0,
+              0.0
+            ],
+            "end": [
+              68.58,
+              0.0
+            ]
+          },
+          {
+            "start": [
+              68.58,
+              0.0
+            ],
+            "end": [
+              68.58,
+              53.34
+            ]
+          },
+          {
+            "start": [
+              68.58,
+              53.34
+            ],
+            "end": [
+              0.0,
+              53.34
+            ]
+          },
+          {
+            "start": [
+              0.0,
+              53.34
+            ],
+            "end": [
+              0.0,
+              0.0
+            ]
+          }
+        ],
+        "design_rules": {
+          "clearance": 0.2,
+          "track_width": 0.25,
+          "via_diameter": 0.8,
+          "via_drill": 0.4
+        }
+      }
+    },
+    {
+      "id": "net:0",
+      "type": "net",
+      "props": {
+        "code": 0,
+        "name": ""
+      }
+    },
+    {
+      "id": "net:1",
+      "type": "net",
+      "props": {
+        "code": 1,
+        "name": "+3V3"
+      }
+    },
+    {
+      "id": "net:2",
+      "type": "net",
+      "props": {
+        "code": 2,
+        "name": "+5V"
+      }
+    },
+    {
+      "id": "net:3",
+      "type": "net",
+      "props": {
+        "code": 3,
+        "name": "A0"
+      }
+    },
+    {
+      "id": "net:4",
+      "type": "net",
+      "props": {
+        "code": 4,
+        "name": "A1"
+      }
+    },
+    {
+      "id": "net:5",
+      "type": "net",
+      "props": {
+        "code": 5,
+        "name": "A2"
+      }
+    },
+    {
+      "id": "net:6",
+      "type": "net",
+      "props": {
+        "code": 6,
+        "name": "A3"
+      }
+    },
+    {
+      "id": "net:7",
+      "type": "net",
+      "props": {
+        "code": 7,
+        "name": "A4"
+      }
+    },
+    {
+      "id": "net:8",
+      "type": "net",
+      "props": {
+        "code": 8,
+        "name": "A5"
+      }
+    },
+    {
+      "id": "net:9",
+      "type": "net",
+      "props": {
+        "code": 9,
+        "name": "ADC6"
+      }
+    },
+    {
+      "id": "net:10",
+      "type": "net",
+      "props": {
+        "code": 10,
+        "name": "ADC7"
+      }
+    },
+    {
+      "id": "net:11",
+      "type": "net",
+      "props": {
+        "code": 11,
+        "name": "AREF"
+      }
+    },
+    {
+      "id": "net:12",
+      "type": "net",
+      "props": {
+        "code": 12,
+        "name": "CH_XI"
+      }
+    },
+    {
+      "id": "net:13",
+      "type": "net",
+      "props": {
+        "code": 13,
+        "name": "CH_XO"
+      }
+    },
+    {
+      "id": "net:14",
+      "type": "net",
+      "props": {
+        "code": 14,
+        "name": "CTS"
+      }
+    },
+    {
+      "id": "net:15",
+      "type": "net",
+      "props": {
+        "code": 15,
+        "name": "D0"
+      }
+    },
+    {
+      "id": "net:16",
+      "type": "net",
+      "props": {
+        "code": 16,
+        "name": "D1"
+      }
+    },
+    {
+      "id": "net:17",
+      "type": "net",
+      "props": {
+        "code": 17,
+        "name": "D10"
+      }
+    },
+    {
+      "id": "net:18",
+      "type": "net",
+      "props": {
+        "code": 18,
+        "name": "D11"
+      }
+    },
+    {
+      "id": "net:19",
+      "type": "net",
+      "props": {
+        "code": 19,
+        "name": "D12"
+      }
+    },
+    {
+      "id": "net:20",
+      "type": "net",
+      "props": {
+        "code": 20,
+        "name": "D13"
+      }
+    },
+    {
+      "id": "net:21",
+      "type": "net",
+      "props": {
+        "code": 21,
+        "name": "D2"
+      }
+    },
+    {
+      "id": "net:22",
+      "type": "net",
+      "props": {
+        "code": 22,
+        "name": "D3"
+      }
+    },
+    {
+      "id": "net:23",
+      "type": "net",
+      "props": {
+        "code": 23,
+        "name": "D4"
+      }
+    },
+    {
+      "id": "net:24",
+      "type": "net",
+      "props": {
+        "code": 24,
+        "name": "D5"
+      }
+    },
+    {
+      "id": "net:25",
+      "type": "net",
+      "props": {
+        "code": 25,
+        "name": "D6"
+      }
+    },
+    {
+      "id": "net:26",
+      "type": "net",
+      "props": {
+        "code": 26,
+        "name": "D7"
+      }
+    },
+    {
+      "id": "net:27",
+      "type": "net",
+      "props": {
+        "code": 27,
+        "name": "D8"
+      }
+    },
+    {
+      "id": "net:28",
+      "type": "net",
+      "props": {
+        "code": 28,
+        "name": "D9"
+      }
+    },
+    {
+      "id": "net:29",
+      "type": "net",
+      "props": {
+        "code": 29,
+        "name": "DCD"
+      }
+    },
+    {
+      "id": "net:30",
+      "type": "net",
+      "props": {
+        "code": 30,
+        "name": "DSR"
+      }
+    },
+    {
+      "id": "net:31",
+      "type": "net",
+      "props": {
+        "code": 31,
+        "name": "DTR"
+      }
+    },
+    {
+      "id": "net:32",
+      "type": "net",
+      "props": {
+        "code": 32,
+        "name": "GND"
+      }
+    },
+    {
+      "id": "net:33",
+      "type": "net",
+      "props": {
+        "code": 33,
+        "name": "PWR_LED"
+      }
+    },
+    {
+      "id": "net:34",
+      "type": "net",
+      "props": {
+        "code": 34,
+        "name": "R232"
+      }
+    },
+    {
+      "id": "net:35",
+      "type": "net",
+      "props": {
+        "code": 35,
+        "name": "RESET"
+      }
+    },
+    {
+      "id": "net:36",
+      "type": "net",
+      "props": {
+        "code": 36,
+        "name": "RI"
+      }
+    },
+    {
+      "id": "net:37",
+      "type": "net",
+      "props": {
+        "code": 37,
+        "name": "RTS"
+      }
+    },
+    {
+      "id": "net:38",
+      "type": "net",
+      "props": {
+        "code": 38,
+        "name": "RX_LED"
+      }
+    },
+    {
+      "id": "net:39",
+      "type": "net",
+      "props": {
+        "code": 39,
+        "name": "TX_LED"
+      }
+    },
+    {
+      "id": "net:40",
+      "type": "net",
+      "props": {
+        "code": 40,
+        "name": "USB_DM"
+      }
+    },
+    {
+      "id": "net:41",
+      "type": "net",
+      "props": {
+        "code": 41,
+        "name": "USB_DP"
+      }
+    },
+    {
+      "id": "net:42",
+      "type": "net",
+      "props": {
+        "code": 42,
+        "name": "V3"
+      }
+    },
+    {
+      "id": "net:43",
+      "type": "net",
+      "props": {
+        "code": 43,
+        "name": "VIN"
+      }
+    },
+    {
+      "id": "net:44",
+      "type": "net",
+      "props": {
+        "code": 44,
+        "name": "XTAL1"
+      }
+    },
+    {
+      "id": "net:45",
+      "type": "net",
+      "props": {
+        "code": 45,
+        "name": "XTAL2"
+      }
+    },
+    {
+      "id": "U1",
+      "type": "component",
+      "props": {
+        "reference": "U1",
+        "value": "ATmega328P",
+        "footprint": "Package_QFP:TQFP-32_7x7mm_P0.8mm",
+        "layer": "F.Cu",
+        "at": [
+          34.0,
+          27.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D3",
+            "at": [
+              -3.6,
+              2.8
+            ]
+          },
+          {
+            "number": "2",
+            "net": "D4",
+            "at": [
+              -3.6,
+              2.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "GND",
+            "at": [
+              -3.6,
+              1.2
+            ]
+          },
+          {
+            "number": "4",
+            "net": "+5V",
+            "at": [
+              -3.6,
+              0.4
+            ]
+          },
+          {
+            "number": "5",
+            "net": "GND",
+            "at": [
+              -3.6,
+              -0.4
+            ]
+          },
+          {
+            "number": "6",
+            "net": "+5V",
+            "at": [
+              -3.6,
+              -1.2
+            ]
+          },
+          {
+            "number": "7",
+            "net": "XTAL1",
+            "at": [
+              -3.6,
+              -2.0
+            ]
+          },
+          {
+            "number": "8",
+            "net": "XTAL2",
+            "at": [
+              -3.6,
+              -2.8
+            ]
+          },
+          {
+            "number": "9",
+            "net": "D5",
+            "at": [
+              -2.8,
+              -3.6
+            ]
+          },
+          {
+            "number": "10",
+            "net": "D6",
+            "at": [
+              -2.0,
+              -3.6
+            ]
+          },
+          {
+            "number": "11",
+            "net": "D7",
+            "at": [
+              -1.2,
+              -3.6
+            ]
+          },
+          {
+            "number": "12",
+            "net": "D8",
+            "at": [
+              -0.4,
+              -3.6
+            ]
+          },
+          {
+            "number": "13",
+            "net": "D9",
+            "at": [
+              0.4,
+              -3.6
+            ]
+          },
+          {
+            "number": "14",
+            "net": "D10",
+            "at": [
+              1.2,
+              -3.6
+            ]
+          },
+          {
+            "number": "15",
+            "net": "D11",
+            "at": [
+              2.0,
+              -3.6
+            ]
+          },
+          {
+            "number": "16",
+            "net": "D12",
+            "at": [
+              2.8,
+              -3.6
+            ]
+          },
+          {
+            "number": "17",
+            "net": "D13",
+            "at": [
+              3.6,
+              -2.8
+            ]
+          },
+          {
+            "number": "18",
+            "net": "+5V",
+            "at": [
+              3.6,
+              -2.0
+            ]
+          },
+          {
+            "number": "19",
+            "net": "ADC6",
+            "at": [
+              3.6,
+              -1.2
+            ]
+          },
+          {
+            "number": "20",
+            "net": "AREF",
+            "at": [
+              3.6,
+              -0.4
+            ]
+          },
+          {
+            "number": "21",
+            "net": "GND",
+            "at": [
+              3.6,
+              0.4
+            ]
+          },
+          {
+            "number": "22",
+            "net": "ADC7",
+            "at": [
+              3.6,
+              1.2
+            ]
+          },
+          {
+            "number": "23",
+            "net": "A0",
+            "at": [
+              3.6,
+              2.0
+            ]
+          },
+          {
+            "number": "24",
+            "net": "A1",
+            "at": [
+              3.6,
+              2.8
+            ]
+          },
+          {
+            "number": "25",
+            "net": "A2",
+            "at": [
+              2.8,
+              3.6
+            ]
+          },
+          {
+            "number": "26",
+            "net": "A3",
+            "at": [
+              2.0,
+              3.6
+            ]
+          },
+          {
+            "number": "27",
+            "net": "A4",
+            "at": [
+              1.2,
+              3.6
+            ]
+          },
+          {
+            "number": "28",
+            "net": "A5",
+            "at": [
+              0.4,
+              3.6
+            ]
+          },
+          {
+            "number": "29",
+            "net": "RESET",
+            "at": [
+              -0.4,
+              3.6
+            ]
+          },
+          {
+            "number": "30",
+            "net": "D0",
+            "at": [
+              -1.2,
+              3.6
+            ]
+          },
+          {
+            "number": "31",
+            "net": "D1",
+            "at": [
+              -2.0,
+              3.6
+            ]
+          },
+          {
+            "number": "32",
+            "net": "D2",
+            "at": [
+              -2.8,
+              3.6
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "U2",
+      "type": "component",
+      "props": {
+        "reference": "U2",
+        "value": "CH340G",
+        "footprint": "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
+        "layer": "F.Cu",
+        "at": [
+          52.0,
+          40.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "GND",
+            "at": [
+              -2.7,
+              4.445
+            ]
+          },
+          {
+            "number": "2",
+            "net": "D0",
+            "at": [
+              -2.7,
+              3.175
+            ]
+          },
+          {
+            "number": "3",
+            "net": "D1",
+            "at": [
+              -2.7,
+              1.905
+            ]
+          },
+          {
+            "number": "4",
+            "net": "V3",
+            "at": [
+              -2.7,
+              0.635
+            ]
+          },
+          {
+            "number": "5",
+            "net": "USB_DP",
+            "at": [
+              -2.7,
+              -0.635
+            ]
+          },
+          {
+            "number": "6",
+            "net": "USB_DM",
+            "at": [
+              -2.7,
+              -1.905
+            ]
+          },
+          {
+            "number": "7",
+            "net": "CH_XI",
+            "at": [
+              -2.7,
+              -3.175
+            ]
+          },
+          {
+            "number": "8",
+            "net": "CH_XO",
+            "at": [
+              -2.7,
+              -4.445
+            ]
+          },
+          {
+            "number": "9",
+            "net": "CTS",
+            "at": [
+              2.7,
+              -4.445
+            ]
+          },
+          {
+            "number": "10",
+            "net": "DSR",
+            "at": [
+              2.7,
+              -3.175
+            ]
+          },
+          {
+            "number": "11",
+            "net": "RI",
+            "at": [
+              2.7,
+              -1.905
+            ]
+          },
+          {
+            "number": "12",
+            "net": "DCD",
+            "at": [
+              2.7,
+              -0.635
+            ]
+          },
+          {
+            "number": "13",
+            "net": "DTR",
+            "at": [
+              2.7,
+              0.635
+            ]
+          },
+          {
+            "number": "14",
+            "net": "RTS",
+            "at": [
+              2.7,
+              1.905
+            ]
+          },
+          {
+            "number": "15",
+            "net": "R232",
+            "at": [
+              2.7,
+              3.175
+            ]
+          },
+          {
+            "number": "16",
+            "net": "+5V",
+            "at": [
+              2.7,
+              4.445
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Y1",
+      "type": "component",
+      "props": {
+        "reference": "Y1",
+        "value": "16MHz",
+        "footprint": "Crystal:Crystal_SMD_HC49-SD",
+        "layer": "F.Cu",
+        "at": [
+          34.0,
+          17.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "XTAL1",
+            "at": [
+              -2.45,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "XTAL2",
+            "at": [
+              2.45,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C1",
+      "type": "component",
+      "props": {
+        "reference": "C1",
+        "value": "22pF",
+        "footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          29.0,
+          14.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "XTAL1",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C2",
+      "type": "component",
+      "props": {
+        "reference": "C2",
+        "value": "22pF",
+        "footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          39.0,
+          14.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "XTAL2",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "U3",
+      "type": "component",
+      "props": {
+        "reference": "U3",
+        "value": "AMS1117-3.3",
+        "footprint": "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
+        "layer": "F.Cu",
+        "at": [
+          12.0,
+          12.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "GND",
+            "at": [
+              -2.3,
+              -3.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "+3V3",
+            "at": [
+              0.0,
+              -3.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "+5V",
+            "at": [
+              2.3,
+              -3.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "+3V3",
+            "at": [
+              0.0,
+              3.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J1",
+      "type": "component",
+      "props": {
+        "reference": "J1",
+        "value": "USB-B",
+        "footprint": "Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal",
+        "layer": "F.Cu",
+        "at": [
+          7.0,
+          45.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -3.75,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "USB_DM",
+            "at": [
+              -1.25,
+              0.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "USB_DP",
+            "at": [
+              1.25,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "GND",
+            "at": [
+              3.75,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "GND",
+            "at": [
+              0.0,
+              4.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J_ANALOG",
+      "type": "component",
+      "props": {
+        "reference": "J_ANALOG",
+        "value": "A0-A5",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          50.0,
+          4.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "A0",
+            "at": [
+              -6.35,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "A1",
+            "at": [
+              -3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "A2",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "A3",
+            "at": [
+              1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "A4",
+            "at": [
+              3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "6",
+            "net": "A5",
+            "at": [
+              6.35,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J_DIG1",
+      "type": "component",
+      "props": {
+        "reference": "J_DIG1",
+        "value": "D0-D7",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          22.0,
+          50.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D0",
+            "at": [
+              -8.89,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "D1",
+            "at": [
+              -6.35,
+              0.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "D2",
+            "at": [
+              -3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "D3",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "D4",
+            "at": [
+              1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "6",
+            "net": "D5",
+            "at": [
+              3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "7",
+            "net": "D6",
+            "at": [
+              6.35,
+              0.0
+            ]
+          },
+          {
+            "number": "8",
+            "net": "D7",
+            "at": [
+              8.89,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J_DIG2",
+      "type": "component",
+      "props": {
+        "reference": "J_DIG2",
+        "value": "D8-D13",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          52.0,
+          50.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D8",
+            "at": [
+              -6.35,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "D9",
+            "at": [
+              -3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "D10",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "D11",
+            "at": [
+              1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "D12",
+            "at": [
+              3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "6",
+            "net": "D13",
+            "at": [
+              6.35,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J_PWR",
+      "type": "component",
+      "props": {
+        "reference": "J_PWR",
+        "value": "POWER",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          20.0,
+          4.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "RESET",
+            "at": [
+              -6.35,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "+3V3",
+            "at": [
+              -3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "3",
+            "net": "+5V",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "GND",
+            "at": [
+              1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "GND",
+            "at": [
+              3.81,
+              0.0
+            ]
+          },
+          {
+            "number": "6",
+            "net": "VIN",
+            "at": [
+              6.35,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "J_ICSP",
+      "type": "component",
+      "props": {
+        "reference": "J_ICSP",
+        "value": "ICSP",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          63.0,
+          27.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D12",
+            "at": [
+              -1.27,
+              2.54
+            ]
+          },
+          {
+            "number": "2",
+            "net": "+5V",
+            "at": [
+              1.27,
+              2.54
+            ]
+          },
+          {
+            "number": "3",
+            "net": "D13",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "4",
+            "net": "D11",
+            "at": [
+              1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "5",
+            "net": "RESET",
+            "at": [
+              -1.27,
+              -2.54
+            ]
+          },
+          {
+            "number": "6",
+            "net": "GND",
+            "at": [
+              1.27,
+              -2.54
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "D_PWR",
+      "type": "component",
+      "props": {
+        "reference": "D_PWR",
+        "value": "GREEN",
+        "footprint": "LED_SMD:LED_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          60.0,
+          46.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "PWR_LED",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "R_PWR",
+      "type": "component",
+      "props": {
+        "reference": "R_PWR",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          56.0,
+          46.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "PWR_LED",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "D_TX",
+      "type": "component",
+      "props": {
+        "reference": "D_TX",
+        "value": "YELLOW",
+        "footprint": "LED_SMD:LED_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          46.0,
+          47.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "TX_LED",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "R_TX",
+      "type": "component",
+      "props": {
+        "reference": "R_TX",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          42.0,
+          47.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D1",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "TX_LED",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "D_RX",
+      "type": "component",
+      "props": {
+        "reference": "D_RX",
+        "value": "YELLOW",
+        "footprint": "LED_SMD:LED_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          46.0,
+          44.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "RX_LED",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "R_RX",
+      "type": "component",
+      "props": {
+        "reference": "R_RX",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          42.0,
+          44.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "D0",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "RX_LED",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SW1",
+      "type": "component",
+      "props": {
+        "reference": "SW1",
+        "value": "RESET",
+        "footprint": "Button_Switch_SMD:SW_SPST_PTS645",
+        "layer": "F.Cu",
+        "at": [
+          60.0,
+          12.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "RESET",
+            "at": [
+              -3.0,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              3.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C3",
+      "type": "component",
+      "props": {
+        "reference": "C3",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          27.0,
+          33.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C4",
+      "type": "component",
+      "props": {
+        "reference": "C4",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          41.0,
+          33.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C5",
+      "type": "component",
+      "props": {
+        "reference": "C5",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          34.0,
+          35.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "AREF",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C6",
+      "type": "component",
+      "props": {
+        "reference": "C6",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          16.0,
+          18.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "C7",
+      "type": "component",
+      "props": {
+        "reference": "C7",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          8.0,
+          12.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+3V3",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

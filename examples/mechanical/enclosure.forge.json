@@ -1,0 +1,250 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "enclosure",
+    "generator": "forgelab",
+    "description": "A PCB enclosure box: 120x80x40mm outer, 2mm walls, open top, with four M3 boss cylinders in the interior corners for board mounting. Demonstrates additive + subtractive features in one body: a solid block, a cavity pocket that leaves a 2mm floor and walls, raised mounting bosses, and pilot holes in the bosses. Pockets stay within the built material, so the sanity checks pass with no warnings."
+  },
+  "nodes": [
+    {
+      "id": "Enclosure",
+      "type": "part",
+      "props": {
+        "name": "Enclosure"
+      }
+    },
+    {
+      "id": "Body",
+      "type": "body",
+      "props": {
+        "name": "Body",
+        "part": "Enclosure"
+      }
+    },
+    {
+      "id": "Outer",
+      "type": "sketch",
+      "props": {
+        "name": "Outer",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0,
+              0,
+              120.0,
+              0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              120.0,
+              0,
+              120.0,
+              80.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              120.0,
+              80.0,
+              0,
+              80.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0,
+              80.0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "OuterPad",
+      "type": "pad",
+      "props": {
+        "name": "OuterPad",
+        "body": "Body",
+        "profile": "Outer",
+        "length": 40.0
+      }
+    },
+    {
+      "id": "Cavity",
+      "type": "sketch",
+      "props": {
+        "name": "Cavity",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              2.0,
+              2.0,
+              118.0,
+              2.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              118.0,
+              2.0,
+              118.0,
+              78.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              118.0,
+              78.0,
+              2.0,
+              78.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              2.0,
+              78.0,
+              2.0,
+              2.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CavityPocket",
+      "type": "pocket",
+      "props": {
+        "name": "CavityPocket",
+        "body": "Body",
+        "profile": "Cavity",
+        "length": 38.0,
+        "through_all": false,
+        "reversed": true
+      }
+    },
+    {
+      "id": "Bosses",
+      "type": "sketch",
+      "props": {
+        "name": "Bosses",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [
+              8.0,
+              8.0
+            ],
+            "radius": 3.0
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              112.0,
+              8.0
+            ],
+            "radius": 3.0
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              8.0,
+              72.0
+            ],
+            "radius": 3.0
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              112.0,
+              72.0
+            ],
+            "radius": 3.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "BossPad",
+      "type": "pad",
+      "props": {
+        "name": "BossPad",
+        "body": "Body",
+        "profile": "Bosses",
+        "length": 38.0
+      }
+    },
+    {
+      "id": "BossHoles",
+      "type": "sketch",
+      "props": {
+        "name": "BossHoles",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [
+              8.0,
+              8.0
+            ],
+            "radius": 1.6
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              112.0,
+              8.0
+            ],
+            "radius": 1.6
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              8.0,
+              72.0
+            ],
+            "radius": 1.6
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              112.0,
+              72.0
+            ],
+            "radius": 1.6
+          }
+        ]
+      }
+    },
+    {
+      "id": "BossHolePocket",
+      "type": "pocket",
+      "props": {
+        "name": "BossHolePocket",
+        "body": "Body",
+        "profile": "BossHoles",
+        "length": 36.0,
+        "through_all": false,
+        "reversed": true
+      }
+    }
+  ]
+}

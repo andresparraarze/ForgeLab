@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Six canonical example documents under `examples/`, one to three per domain, so
+  agents have high-quality few-shot references: `hardware/blinky_led` and
+  `hardware/arduino_uno` (a full Arduino Uno clone with real TQFP-32/SOIC-16 pad
+  geometry from `calculate_pad_positions`), `mechanical/motor_mount` (NEMA17
+  mount plate) and `mechanical/enclosure` (PCB box with mounting bosses), and
+  `threed/space_station` and `threed/torii_gate`. Every example validates
+  cleanly, exports to its native format, carries an explanatory
+  `meta.description`, and (for mechanical) passes the constraint sanity checks
+  with no warnings. New `examples/README.md` tabulates each example and what it
+  demonstrates.
 - `analyze_image` MCP tool (`forge:generate`) that turns a photo into a starting
   ForgeLab document. `analyze_image(image_path, domain, hints='')` reads an image
   (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`), sends it to the Anthropic vision model

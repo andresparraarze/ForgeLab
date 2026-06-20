@@ -1,0 +1,224 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "motor-mount",
+    "generator": "forgelab",
+    "description": "The canonical mechanical example: a NEMA17 stepper mount plate. 100x60x3mm plate, central 38mm bore, four M3 mounting holes on the 31mm NEMA17 bolt pattern, four M4 corner holes 6mm inset. Shows the part -> body -> sketch -> pad/pocket feature tree: a closed rectangular profile padded to thickness, then circular profiles cut through-all. Passes the mechanical sanity checks with no warnings."
+  },
+  "nodes": [
+    {
+      "id": "MotorMount",
+      "type": "part",
+      "props": {
+        "name": "MotorMount"
+      }
+    },
+    {
+      "id": "Body",
+      "type": "body",
+      "props": {
+        "name": "Body",
+        "part": "MotorMount"
+      }
+    },
+    {
+      "id": "Plate",
+      "type": "sketch",
+      "props": {
+        "name": "Plate",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0,
+              0,
+              100,
+              0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              100,
+              0,
+              100,
+              60
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              100,
+              60,
+              0,
+              60
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0,
+              60,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PlatePad",
+      "type": "pad",
+      "props": {
+        "name": "PlatePad",
+        "body": "Body",
+        "profile": "Plate",
+        "length": 3.0
+      }
+    },
+    {
+      "id": "Bore",
+      "type": "sketch",
+      "props": {
+        "name": "Bore",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [
+              50.0,
+              30.0
+            ],
+            "radius": 19.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "BorePocket",
+      "type": "pocket",
+      "props": {
+        "name": "BorePocket",
+        "body": "Body",
+        "profile": "Bore",
+        "length": 0.0,
+        "through_all": true,
+        "reversed": true
+      }
+    },
+    {
+      "id": "M3Holes",
+      "type": "sketch",
+      "props": {
+        "name": "M3Holes",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [
+              34.5,
+              14.5
+            ],
+            "radius": 1.7
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              65.5,
+              14.5
+            ],
+            "radius": 1.7
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              34.5,
+              45.5
+            ],
+            "radius": 1.7
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              65.5,
+              45.5
+            ],
+            "radius": 1.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "M3Pocket",
+      "type": "pocket",
+      "props": {
+        "name": "M3Pocket",
+        "body": "Body",
+        "profile": "M3Holes",
+        "length": 0.0,
+        "through_all": true,
+        "reversed": true
+      }
+    },
+    {
+      "id": "M4Holes",
+      "type": "sketch",
+      "props": {
+        "name": "M4Holes",
+        "body": "Body",
+        "plane": "XY",
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [
+              6.0,
+              6.0
+            ],
+            "radius": 2.25
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              94.0,
+              6.0
+            ],
+            "radius": 2.25
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              6.0,
+              54.0
+            ],
+            "radius": 2.25
+          },
+          {
+            "geo_type": "circle",
+            "center": [
+              94.0,
+              54.0
+            ],
+            "radius": 2.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "M4Pocket",
+      "type": "pocket",
+      "props": {
+        "name": "M4Pocket",
+        "body": "Body",
+        "profile": "M4Holes",
+        "length": 0.0,
+        "through_all": true,
+        "reversed": true
+      }
+    }
+  ]
+}
