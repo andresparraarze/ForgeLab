@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `verify_sync` MCP tool (`forge:read`) so agents can check whether a native
+  file is still in sync with the ForgeLab document that generated it before
+  patching. On export, each exporter now embeds a SHA256 of the source document:
+  KiCad as a `(property "forgelab_hash" "<hash>")`, glTF as
+  `asset.extras.forgelab_hash`, and FreeCAD as a `Hash` attribute on the
+  `ForgeLab.Document.xml` sidecar's root element. `verify_sync(document_path,
+  native_path)` reads the embedded hash, recomputes the hash of the current
+  `.forge.json`, and returns `{in_sync, document_hash, native_hash, native_path,
+  document_path}` plus a `recommendation` to re-import when they differ.
+  `patch_document` gained optional `native_path` and `force` parameters: when
+  `native_path` is given it runs the sync check first and refuses to patch an
+  out-of-sync document (writing nothing) unless `force=true`. New
+  `forgelab.sync` module (pure standard library).
 - Mechanical-domain constraint sanity checks that run as part of
   `validate_document`, so agents get clear errors before FreeCAD opens instead
   of a silent recompute failure. New `forgelab.validation` module

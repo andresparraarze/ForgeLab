@@ -37,6 +37,7 @@ from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
 from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
+from forgelab.sync import document_hash, read_native_hash, tool_for_path
 from forgelab.validation import check_mechanical
 
 _registry = default_registry()
@@ -255,6 +256,8 @@ def patch_document(
     patch: list[dict[str, Any]],
     output_path: str | None = None,
     validate: bool = True,
+    native_path: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Apply an RFC 6902 JSON Patch to a ``.forge.json`` on disk, in one step.
 
@@ -273,6 +276,12 @@ def patch_document(
         validate: when true (default), validate the patched document against the
             ForgeLab schema before writing — if it is invalid, nothing is written
             and the result reports ``valid: false`` with an ``error``.
+        native_path: optional path to the native file this document was exported
+            to. When given, ForgeLab runs ``verify_sync`` first and refuses to
+            patch a document whose native file has drifted out of sync (nothing
+            is written; the result reports ``patched: false`` with the sync
+            details), unless ``force`` is also true.
+        force: skip the ``native_path`` sync check and patch anyway.
 
     Returns:
         ``{"patched": bool, "document_path": str, "nodes_changed": int, "valid":
@@ -282,6 +291,18 @@ def patch_document(
         ``error`` is included. A malformed patch raises an error.
     """
     require_scope("forge:export")
+    if native_path is not None and not force:
+        status = _sync_status(document_path, native_path)
+        if not status["in_sync"]:
+            return {
+                "patched": False,
+                "error": (
+                    "native file is out of sync with the document; refusing to "
+                    "patch. Pass force=true to override, or run import_file to "
+                    "rebuild the document from the native file first."
+                ),
+                **status,
+            }
     source = _read_document_file(document_path)
     try:
         patched = apply_patch(source, patch)
@@ -326,6 +347,71 @@ def diff_documents(document_path_a: str, document_path_b: str) -> list[dict[str,
     a = _read_document_file(document_path_a)
     b = _read_document_file(document_path_b)
     return diff(a, b)
+
+
+def _read_native_file(native_path: str) -> tuple[Path, bytes]:
+    target = _resolve_path(native_path)
+    try:
+        return target, target.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"could not read native file {str(target)!r}: {exc}") from exc
+
+
+def _sync_status(document_path: str, native_path: str) -> dict[str, Any]:
+    """Compare a native file's embedded hash with its source document's hash."""
+    native_target, content = _read_native_file(native_path)
+    tool = tool_for_path(native_path)
+    if tool is None:
+        raise ValueError(
+            f"cannot determine the format tool from {native_path!r}; "
+            "expected a .kicad_pcb, .gltf or .FCStd file"
+        )
+    native_hash = read_native_hash(tool, content)
+    raw = _read_document_file(document_path)
+    try:
+        model = _core_validate(raw)
+    except Exception as exc:
+        doc_target = _resolve_path(document_path)
+        raise ValueError(f"invalid document {str(doc_target)!r}: {exc}") from exc
+    doc_hash = document_hash(model.model_dump(mode="json"))
+    in_sync = native_hash is not None and native_hash == doc_hash
+    result: dict[str, Any] = {
+        "in_sync": in_sync,
+        "document_hash": doc_hash,
+        "native_hash": native_hash,
+        "native_path": str(native_target),
+        "document_path": str(_resolve_path(document_path)),
+    }
+    if not in_sync:
+        result["recommendation"] = (
+            "Run import_file to rebuild the ForgeLab document from the native file before patching"
+        )
+    return result
+
+
+def verify_sync(document_path: str, native_path: str) -> dict[str, Any]:
+    """Check whether a native file is still in sync with its source document.
+
+    On export ForgeLab embeds a hash of the source document into the native file
+    (a KiCad board ``property``, glTF ``asset.extras``, or a ``Hash`` attribute on
+    the FreeCAD sidecar). This reads that hash and compares it with the hash of
+    the current ``.forge.json`` on disk, so an agent can tell — before issuing
+    patch operations — whether the two have drifted apart.
+
+    Args:
+        document_path: the ``.forge.json`` (a bare filename resolves against
+            ``FORGELAB_OUTPUT_DIR``).
+        native_path: the exported native file (``.kicad_pcb``, ``.gltf`` or
+            ``.FCStd``); the tool is inferred from the extension.
+
+    Returns:
+        ``{"in_sync": bool, "document_hash": str, "native_hash": str|None,
+        "native_path": str, "document_path": str}``. When out of sync, a
+        ``recommendation`` field is added. ``native_hash`` is ``None`` when the
+        file carries no embedded hash (treated as out of sync).
+    """
+    require_scope("forge:read")
+    return _sync_status(document_path, native_path)
 
 
 # --------------------------------------------------------------------------- #

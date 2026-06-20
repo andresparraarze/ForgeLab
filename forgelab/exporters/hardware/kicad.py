@@ -21,6 +21,7 @@ from forgelab.spec import (
     ForgeDocument,
     Net,
 )
+from forgelab.sync.hashing import HASH_KEY, document_hash
 
 _DEFAULT_LAYERS = [
     [0, Symbol("F.Cu"), Symbol("signal")],
@@ -97,6 +98,7 @@ class KiCadExporter(Exporter):
         tree: list = [Symbol("kicad_pcb")]
         tree.append(_s("version", _format_version(board.kicad_version)))
         tree.append(_s("generator", Symbol(board.generator)))
+        tree.append(_s("property", HASH_KEY, document_hash(document.model_dump(mode="json"))))
         tree.append(_s("general", _s("thickness", 1.6)))
         tree.append(_s("paper", "A4"))
         tree.append(self._layers_block(board))

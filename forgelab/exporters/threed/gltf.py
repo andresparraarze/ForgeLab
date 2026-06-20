@@ -30,6 +30,7 @@ from forgelab.spec import (
     Node,
     Object3D,
 )
+from forgelab.sync.hashing import HASH_KEY, document_hash
 
 
 def _resolve_ref(ref: str, index: dict[str, int], kind: str) -> int:
@@ -69,7 +70,13 @@ class GltfExporter(Exporter):
         mat_index = {n.id: i for i, n in enumerate(material_nodes)}
         mesh_index = {n.id: i for i, n in enumerate(mesh_nodes)}
 
-        gltf: dict[str, Any] = {"asset": {"version": "2.0", "generator": "forgelab-gltf"}}
+        gltf: dict[str, Any] = {
+            "asset": {
+                "version": "2.0",
+                "generator": "forgelab-gltf",
+                "extras": {HASH_KEY: document_hash(document.model_dump(mode="json"))},
+            }
+        }
 
         materials = []
         for n in material_nodes:
