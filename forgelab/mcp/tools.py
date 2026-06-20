@@ -641,15 +641,43 @@ def export_document(
     return {"tool": tool, **encode_bytes(data)}
 
 
-def import_file(tool: str, content: str, encoding: str = "utf-8") -> dict[str, Any]:
-    """Import a format tool's native file into a ForgeLab document (as a dict)."""
+def import_file(
+    tool: str,
+    content: str | None = None,
+    encoding: str = "utf-8",
+    file_path: str | None = None,
+) -> dict[str, Any]:
+    """Import a format tool's native file into a ForgeLab document (as a dict).
+
+    Provide the file either inline as ``content`` (with ``encoding`` ``utf-8`` or
+    ``base64``) or, preferably, as ``file_path`` to a file on disk (a bare
+    filename resolves against ``FORGELAB_OUTPUT_DIR``). A path also lets importers
+    that need sibling files resolve them — e.g. ``tool='obj'`` reads the
+    companion ``.mtl`` from the same directory. Exactly one of the two is allowed.
+    """
     require_scope("forge:export")
+    if content is not None and file_path is not None:
+        raise ValueError("pass either content or file_path, not both")
     try:
-        importer = _registry.get_importer(tool)
+        importer_cls = _registry.get_importer(tool)
     except UnknownToolError as exc:
         raise ValueError(str(exc)) from exc
-    source = decode_content(content, encoding)
-    document = importer().to_ir(source)
+    importer = importer_cls()
+    if file_path is not None:
+        path = _resolve_path(file_path)
+        try:
+            source = path.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"could not read file {str(path)!r}: {exc}") from exc
+        if hasattr(importer, "base_dir"):
+            importer.base_dir = path.parent
+        if hasattr(importer, "source_name"):
+            importer.source_name = path.stem
+    elif content is not None:
+        source = decode_content(content, encoding)
+    else:
+        raise ValueError("provide content (inline) or a file_path to the native file")
+    document = importer.to_ir(source)
     return document.model_dump(mode="json")
 
 
