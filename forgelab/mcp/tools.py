@@ -7,6 +7,7 @@ no-op over the unauthenticated stdio transport).
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 from collections import Counter
@@ -30,13 +31,14 @@ from forgelab.calc import (
 from forgelab.calc import (
     calculate_trace_width as _calc_trace_width,
 )
-from forgelab.core import UnknownToolError, default_registry, validate
+from forgelab.core import LLMOutputError, UnknownToolError, default_registry, validate
 from forgelab.core import validate as _core_validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
 from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
+from forgelab.sdk.validation import _extract_json
 from forgelab.sync import document_hash, read_native_hash, tool_for_path
 from forgelab.validation import check_mechanical
 
@@ -523,20 +525,26 @@ def _generation_availability() -> tuple[bool, str | None]:
 
 
 def generation_status() -> dict[str, Any]:
-    """Report whether ``generate_document`` is currently usable on this server.
+    """Report whether the API-backed tools are usable on this server.
 
-    Call this before ``generate_document`` to avoid a wasted round trip: when
-    generation is unavailable (no API key, or the agent extra is not installed),
-    skip ``generate_document`` and build the document yourself against the schema
-    instead. Returns ``{"available": bool}``; when unavailable, also ``"reason"``
-    and an ``"alternative"`` describing how to proceed without generation.
+    Both ``generate_document`` and ``analyze_image`` need ``ANTHROPIC_API_KEY``
+    set on the server and the ``agent`` extra installed. Call this first to avoid
+    a wasted round trip: when they are unavailable, skip them and build the
+    document yourself against the schema instead.
+
+    Returns ``{"available": bool, "generate_document": bool, "analyze_image":
+    bool}``; when unavailable, also ``"reason"`` and an ``"alternative"``
+    describing how to proceed. ``available`` mirrors ``generate_document`` for
+    backward compatibility (both API tools share the same requirements).
     """
     require_scope("forge:read")
     available, reason = _generation_availability()
     if available:
-        return {"available": True}
+        return {"available": True, "generate_document": True, "analyze_image": True}
     return {
         "available": False,
+        "generate_document": False,
+        "analyze_image": False,
         "reason": reason,
         "alternative": (
             "Build the document yourself: call get_domain_schema and get_prompt "
@@ -658,3 +666,142 @@ def generate_document(prompt: str, domain: str, model: str = "claude-opus-4-8") 
         ) from exc
     document = agent.design(prompt, domain=domain)
     return document.model_dump(mode="json")
+
+
+_VISION_MODEL = "claude-sonnet-4-6"
+
+_IMAGE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+_VISION_ADDENDUM = (
+    "You are analyzing an image to produce a STARTING ForgeLab {domain} document.\n"
+    "- Identify the components, geometry, and structure visible in the image and "
+    "model each as a node matching the {domain} schema above.\n"
+    "- For any dimension or value you cannot read directly from the image, use a "
+    "reasonable engineering estimate.\n"
+    '- Whenever a value is an estimate, append "-estimated" to that node\'s id so a '
+    'human can spot it (e.g. "U1-estimated").\n'
+    "- This is a skeleton to be refined later; favour completeness of structure "
+    "over precision.\n"
+    "- Respond with ONLY the ForgeLab JSON document — no prose, no code fences."
+)
+
+
+def _image_media_type(path: Path) -> str:
+    media = _IMAGE_MEDIA_TYPES.get(path.suffix.lower())
+    if media is None:
+        raise ValueError(
+            f"unsupported image type {path.suffix!r}; supported: "
+            f"{', '.join(sorted(_IMAGE_MEDIA_TYPES))}"
+        )
+    return media
+
+
+def _make_vision_client() -> Any:
+    """Construct an Anthropic client for vision calls. Indirection so tests inject."""
+    try:
+        import anthropic  # type: ignore
+    except ImportError as exc:
+        raise ImportError(
+            'image analysis requires the agent extra (pip install "forgelab[agent]")'
+        ) from exc
+    return anthropic.Anthropic()
+
+
+def _message_text(message: Any) -> str:
+    """Concatenate the text blocks of an Anthropic message (object or dict blocks)."""
+    parts: list[str] = []
+    for block in getattr(message, "content", []) or []:
+        if getattr(block, "type", None) == "text":
+            parts.append(getattr(block, "text", "") or "")
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(block.get("text", "") or "")
+    return "".join(parts)
+
+
+def _parse_skeleton_json(text: str) -> dict[str, Any]:
+    """Parse a ForgeLab JSON document out of the model's text response."""
+    candidate = text.strip()
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError:
+        try:
+            data = json.loads(_extract_json(candidate))
+        except (LLMOutputError, json.JSONDecodeError) as exc:
+            raise ValueError(f"image analysis did not return valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("image analysis did not return a JSON object")
+    return data
+
+
+def analyze_image(image_path: str, domain: str, hints: str = "") -> dict[str, Any]:
+    """Analyze an image and return a starting ForgeLab document skeleton.
+
+    Reads an image from disk and asks the Anthropic vision model
+    (``claude-sonnet-4-6``) to describe what it sees as a partial ForgeLab
+    document for ``domain``. Use it as the first step of a photo-to-design flow:
+    snap a photo of a board/part/scene, get a skeleton, then refine it, validate
+    it, and export it.
+
+    Args:
+        image_path: path to the image (``.png``, ``.jpg/.jpeg``, ``.gif`` or
+            ``.webp``); a bare filename resolves against ``FORGELAB_OUTPUT_DIR``.
+        domain: one of ``hardware``, ``mechanical`` or ``threed``.
+        hints: optional free text to steer the analysis (e.g. "approximate
+            dimensions are 100x60mm", "this is a 4-layer board").
+
+    Returns:
+        The model's ForgeLab document as a dict. It is a *skeleton*: visible
+        structure is extracted and unreadable values are reasonable estimates,
+        with estimated nodes' ids suffixed ``-estimated``. Validate it with
+        ``validate_document`` after refining. Requires ``ANTHROPIC_API_KEY`` and
+        the ``agent`` extra (see ``generation_status``); scope ``forge:generate``.
+    """
+    require_scope("forge:generate")
+    if domain not in DOMAIN_VOCAB:
+        raise ValueError(f"unknown domain: {domain!r}; valid domains: {sorted(DOMAIN_VOCAB)}")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("image analysis unavailable: ANTHROPIC_API_KEY is not set on the server")
+    path = _resolve_path(image_path)
+    media_type = _image_media_type(path)
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"could not read image {str(path)!r}: {exc}") from exc
+    try:
+        client = _make_vision_client()
+    except ImportError as exc:
+        raise ValueError(
+            'image analysis unavailable: install the agent extra (pip install "forgelab[agent]")'
+        ) from exc
+
+    user_text = "Analyze this image and produce the ForgeLab document."
+    if hints.strip():
+        user_text += f"\n\nHints from the user: {hints.strip()}"
+    message = client.messages.create(
+        model=_VISION_MODEL,
+        max_tokens=8192,
+        system=system_prompt(domain) + "\n\n" + _VISION_ADDENDUM.format(domain=domain),
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": base64.b64encode(raw).decode("ascii"),
+                        },
+                    },
+                    {"type": "text", "text": user_text},
+                ],
+            }
+        ],
+    )
+    return _parse_skeleton_json(_message_text(message))
