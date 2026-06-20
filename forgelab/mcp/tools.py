@@ -568,6 +568,13 @@ def export_document(
     disk (a bare filename resolves against ``FORGELAB_OUTPUT_DIR``). Exactly one
     of the two must be given. ``tool`` is required.
 
+    Tools include ``kicad`` (hardware), ``freecad`` (mechanical), and for the
+    threed domain ``gltf`` (a portable ``.gltf``) or ``blender_script`` (a
+    runnable Blender ``.py`` that rebuilds the scene with native objects,
+    Principled BSDF materials, recognised primitives, a camera and three-point
+    lighting — prefer it over ``gltf`` when the target is Blender). Call
+    ``list_formats`` for the full list.
+
     Without ``output_path``, returns the file inline:
     {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
 

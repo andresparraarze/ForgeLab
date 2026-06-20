@@ -63,6 +63,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
+| 3D / Game      | Blender script|        |   ✅   | export `tool='blender_script'` → runnable `.py` (native objects, materials, primitives, camera + lighting) |
 | 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
 | 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
 
@@ -107,7 +108,7 @@ Twenty tools, same for every client. Over stdio all are local; over HTTP each ne
 
 | Tool | Description |
 | --- | --- |
-| `export_document` | IR → native file (KiCad, glTF, FreeCAD) |
+| `export_document` | IR → native file (KiCad, glTF, FreeCAD, Blender `.py`) |
 | `import_file` | Native file → IR |
 
 ### Generate

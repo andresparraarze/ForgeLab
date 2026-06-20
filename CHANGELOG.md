@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Blender Python script export for the threed domain: `export_document` with
+  `tool='blender_script'` compiles a document into a runnable `.py` that rebuilds
+  the scene with Blender's native API (`bpy`) instead of glTF triangle soup.
+  Material nodes become Principled BSDF materials; meshes whose geometry matches
+  a box, axis-aligned cylinder, or sphere are emitted as `primitive_cube_add` /
+  `primitive_cylinder_add` / `primitive_uv_sphere_add` (others fall back to raw
+  `from_pydata` meshes); object transforms are applied as quaternion→matrix. The
+  script clears the default scene, names it from `meta.name`, parents everything
+  under a Y-up→Z-up root, and adds a camera plus three-point lighting so the
+  scene renders immediately. Run it via Text Editor → Run Script or a Blender MCP
+  `execute_blender_code` call. New `forgelab.exporters.threed.BlenderScriptExporter`,
+  registered as `blender_script` and reported by `list_formats`.
 - Six canonical example documents under `examples/`, one to three per domain, so
   agents have high-quality few-shot references: `hardware/blinky_led` and
   `hardware/arduino_uno` (a full Arduino Uno clone with real TQFP-32/SOIC-16 pad
