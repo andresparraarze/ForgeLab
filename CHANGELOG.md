@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- OBJ and STL importers for the threed domain, so agents can bring in existing
+  geometry instead of modelling from scratch. `import_file(file_path=...,
+  tool='obj')` parses Wavefront OBJ (stdlib only): `v`/`f` with quad and n-gon
+  fan triangulation, `o`/`g` groups as separate mesh+object node pairs,
+  `mtllib`/`usemtl` with the companion `.mtl` resolved from the file's directory
+  (`Kd`→base color, `Ns`→roughness, `Pm`→metallic, `d`/`Tr`→alpha), and a
+  default grey material when none is defined. `tool='stl'` parses both ASCII and
+  binary STL into a single mesh with a default material, naming it from the
+  binary header / ASCII solid / filename. Both register import-only and enable
+  OBJ→IR→glTF/Blender-script round-trips. `import_file` gained a `file_path`
+  parameter (preferred over inline `content`; required for OBJ's sibling `.mtl`).
 - Blender Python script export for the threed domain: `export_document` with
   `tool='blender_script'` compiles a document into a runnable `.py` that rebuilds
   the scene with Blender's native API (`bpy`) instead of glTF triangle soup.

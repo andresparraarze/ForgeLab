@@ -18,7 +18,13 @@ from forgelab.exporters.threed import (
 )
 from forgelab.importers.hardware import AltiumImporter, GerberImporter, KiCadImporter
 from forgelab.importers.mechanical import FreeCADImporter, Fusion360Importer
-from forgelab.importers.threed import BlenderImporter, GltfImporter, UnrealImporter
+from forgelab.importers.threed import (
+    BlenderImporter,
+    GltfImporter,
+    ObjImporter,
+    StlImporter,
+    UnrealImporter,
+)
 from forgelab.spec import ForgeDocument
 
 TransformPass = Callable[[ForgeDocument], ForgeDocument]
@@ -31,6 +37,8 @@ _IMPORTERS = [
     Fusion360Importer,
     FreeCADImporter,
     BlenderImporter,
+    ObjImporter,
+    StlImporter,
     UnrealImporter,
 ]
 _EXPORTERS = [
