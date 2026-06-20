@@ -70,7 +70,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ## MCP tools
 
-Eighteen tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Nineteen tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -91,6 +91,7 @@ Eighteen tools, same for every client. Over stdio all are local; over HTTP each 
 | `load_document` | Summarize a saved `.forge.json` (metadata only) |
 | `patch_document` | Apply an RFC 6902 JSON Patch to a saved document |
 | `diff_documents` | RFC 6902 patch transforming document A into B |
+| `verify_sync` | Check a native file is still in sync with its source document |
 
 ### Calculate
 

@@ -18,6 +18,7 @@ _TOOLS = [
     tools.list_formats,
     tools.load_document,
     tools.diff_documents,
+    tools.verify_sync,
     tools.get_projection_schema,
     tools.calculate_pad_positions,
     tools.calculate_polygon,

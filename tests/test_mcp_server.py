@@ -11,6 +11,7 @@ _EXPECTED = {
     "list_formats",
     "load_document",
     "diff_documents",
+    "verify_sync",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",

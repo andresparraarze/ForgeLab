@@ -15,6 +15,8 @@ Writes an archive FreeCAD genuinely opens:
   cannot carry e.g. constraint metadata losslessly).
 """
 
+import xml.etree.ElementTree as ET
+
 from forgelab.exporters.base import Exporter
 from forgelab.exporters.mechanical.realxml import (
     AnyModel,
@@ -41,6 +43,7 @@ from forgelab.spec.mechanical import (
     Pocket,
     Sketch,
 )
+from forgelab.sync.hashing import document_hash
 
 _FCTYPE_BY_NODE = {
     NODE_PART: "App::Part",
@@ -130,6 +133,9 @@ class FreeCADExporter(Exporter):
         # Reuse the dialect writer, then lift its Document.xml into the sidecar.
         sidecar_zip = write_fcstd(fc_doc)
         sidecar_xml = read_archive_entry(sidecar_zip, "Document.xml") or b""
+        # Stamp the source-document hash onto the sidecar's root <Document> so
+        # verify_sync can later tell whether this file is still in sync.
+        sidecar_xml = _stamp_hash(sidecar_xml, document_hash(document.model_dump(mode="json")))
         real = build_real_document_xml(items, document.meta.name)
         return write_archive(
             {
@@ -138,3 +144,13 @@ class FreeCADExporter(Exporter):
                 _SIDECAR: sidecar_xml,
             }
         )
+
+
+def _stamp_hash(document_xml: bytes, hash_value: str) -> bytes:
+    """Set a ``Hash`` attribute on the sidecar's root ``Document`` element."""
+    try:
+        root = ET.fromstring(document_xml)
+    except ET.ParseError:
+        return document_xml
+    root.set("Hash", hash_value)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
