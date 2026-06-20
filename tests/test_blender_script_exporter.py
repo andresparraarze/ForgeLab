@@ -187,7 +187,9 @@ def test_unrecognized_mesh_falls_back_to_raw():
 # scene setup: clear, name, camera, three-point lighting
 # --------------------------------------------------------------------------- #
 def test_scene_is_cleared_and_named():
-    src = _export([_scene()], name="MyScene")
+    # Scene name comes from the scene node's props.name (matches the glTF exporter).
+    scene = Node(id="scene", type=NODE_SCENE, props={"name": "MyScene"})
+    src = _export([scene], name="ignored-meta-name")
     assert "bpy.ops.object.select_all(action='SELECT')" in src
     assert "bpy.ops.object.delete(use_global=False)" in src
     assert "scene.name = 'MyScene'" in src
