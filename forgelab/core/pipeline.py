@@ -10,7 +10,12 @@ from collections.abc import Callable, Sequence
 from forgelab.core.registry import Registry
 from forgelab.exporters.hardware import AltiumExporter, GerberExporter, KiCadExporter
 from forgelab.exporters.mechanical import FreeCADExporter, Fusion360Exporter
-from forgelab.exporters.threed import BlenderExporter, GltfExporter, UnrealExporter
+from forgelab.exporters.threed import (
+    BlenderExporter,
+    BlenderScriptExporter,
+    GltfExporter,
+    UnrealExporter,
+)
 from forgelab.importers.hardware import AltiumImporter, GerberImporter, KiCadImporter
 from forgelab.importers.mechanical import FreeCADImporter, Fusion360Importer
 from forgelab.importers.threed import BlenderImporter, GltfImporter, UnrealImporter
@@ -36,6 +41,7 @@ _EXPORTERS = [
     Fusion360Exporter,
     FreeCADExporter,
     BlenderExporter,
+    BlenderScriptExporter,
     UnrealExporter,
 ]
 
