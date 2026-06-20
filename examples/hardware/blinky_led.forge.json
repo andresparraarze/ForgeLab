@@ -1,0 +1,215 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "hardware",
+  "meta": {
+    "name": "blinky-led",
+    "generator": "forgelab",
+    "description": "The 'hello world' of hardware: a power header, a 330R current-limiting resistor and an LED in series between +5V and GND on a 20x20mm board. Three components, three nets. The smallest complete board \u2014 start here to see the minimal hardware shape: a board node with an outline, net nodes, and component nodes whose pads reference nets by name."
+  },
+  "nodes": [
+    {
+      "id": "board",
+      "type": "board",
+      "props": {
+        "kicad_version": "20240108",
+        "generator": "forgelab",
+        "layers": [
+          {
+            "ordinal": 0,
+            "canonical_name": "F.Cu",
+            "layer_type": "signal"
+          },
+          {
+            "ordinal": 31,
+            "canonical_name": "B.Cu",
+            "layer_type": "signal"
+          },
+          {
+            "ordinal": 44,
+            "canonical_name": "Edge.Cuts",
+            "layer_type": "user"
+          }
+        ],
+        "outline": [
+          {
+            "start": [
+              0.0,
+              0.0
+            ],
+            "end": [
+              20.0,
+              0.0
+            ]
+          },
+          {
+            "start": [
+              20.0,
+              0.0
+            ],
+            "end": [
+              20.0,
+              20.0
+            ]
+          },
+          {
+            "start": [
+              20.0,
+              20.0
+            ],
+            "end": [
+              0.0,
+              20.0
+            ]
+          },
+          {
+            "start": [
+              0.0,
+              20.0
+            ],
+            "end": [
+              0.0,
+              0.0
+            ]
+          }
+        ],
+        "design_rules": {
+          "clearance": 0.2,
+          "track_width": 0.25,
+          "via_diameter": 0.8,
+          "via_drill": 0.4
+        }
+      }
+    },
+    {
+      "id": "net:0",
+      "type": "net",
+      "props": {
+        "code": 0,
+        "name": ""
+      }
+    },
+    {
+      "id": "net:1",
+      "type": "net",
+      "props": {
+        "code": 1,
+        "name": "+5V"
+      }
+    },
+    {
+      "id": "net:2",
+      "type": "net",
+      "props": {
+        "code": 2,
+        "name": "GND"
+      }
+    },
+    {
+      "id": "net:3",
+      "type": "net",
+      "props": {
+        "code": 3,
+        "name": "LED_A"
+      }
+    },
+    {
+      "id": "J1",
+      "type": "component",
+      "props": {
+        "reference": "J1",
+        "value": "PWR",
+        "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+        "layer": "F.Cu",
+        "at": [
+          4.0,
+          10.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -1.27,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              1.27,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "R1",
+      "type": "component",
+      "props": {
+        "reference": "R1",
+        "value": "330R",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "layer": "F.Cu",
+        "at": [
+          10.0,
+          10.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "+5V",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "LED_A",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "D1",
+      "type": "component",
+      "props": {
+        "reference": "D1",
+        "value": "RED",
+        "footprint": "LED_SMD:LED_0805_2012Metric",
+        "layer": "F.Cu",
+        "at": [
+          15.0,
+          10.0,
+          0.0
+        ],
+        "pads": [
+          {
+            "number": "1",
+            "net": "LED_A",
+            "at": [
+              -0.8,
+              0.0
+            ]
+          },
+          {
+            "number": "2",
+            "net": "GND",
+            "at": [
+              0.8,
+              0.0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
