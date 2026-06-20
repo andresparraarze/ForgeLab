@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Mechanical-domain constraint sanity checks that run as part of
+  `validate_document`, so agents get clear errors before FreeCAD opens instead
+  of a silent recompute failure. New `forgelab.validation` module
+  (`check_mechanical`, pure standard library) checks sketch line-loop closure
+  (warning), positive pad length unless through-all (error), pocket depth within
+  the material built by the body's pads unless through-all (error), positive
+  circle radius (error), and body-reference consistency (error). The
+  `validate_document` response now carries an optional `warnings` list;
+  warnings keep `valid` true, errors make it false. The checks are mechanical
+  only — hardware and threed documents are skipped.
 - Context projection layers so agents receive only the data a task needs. New
   `forgelab.projection` module with a pure `project(document, level)` returning a
   plain dict at one of four levels: `metadata` (version/domain/meta + node counts
