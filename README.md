@@ -141,6 +141,12 @@ Twenty tools, same for every client. Over stdio all are local; over HTTP each ne
 - [ ] Hardware: Gerber, Altium · Mechanical: Fusion 360 · 3D: Unreal, glTF textures/animations, `.glb`
 - [ ] Transform passes (design-rule checks, layer remaps) over the IR; HTTP `/import` endpoint
 
+**Planned domains** — new vocabularies and compile targets beyond the current hardware/mechanical/3D trio:
+
+- [ ] Robotics domain — URDF/ROS output: link/joint/sensor vocabulary compiling to URDF files for robot kinematic simulation in ROS alongside FreeCAD mechanical models
+- [ ] Microfluidics domain — lab-on-a-chip design: treat mixers/reservoirs as components and fluid channels as traces, compiling to Gerber files for photomask lithography (natural extension of the hardware domain)
+- [ ] BIM domain — building information modeling: wall/floor/door/window/room vocabulary compiling to IFC for architectural floor plans, structural framing, and MEP system routing
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The highest-leverage start is an importer/exporter for one tool against the `Importer`/`Exporter` base classes — the KiCad pair is a complete worked example.
