@@ -13,6 +13,8 @@ _EXPECTED = {
     "diff_documents",
     "verify_sync",
     "generate_bom",
+    "list_components",
+    "get_component",
     "create_project",
     "load_project",
     "update_project",

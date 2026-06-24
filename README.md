@@ -73,7 +73,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ## MCP tools
 
-Twenty-five tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Twenty-seven tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -85,6 +85,8 @@ Twenty-five tools, same for every client. Over stdio all are local; over HTTP ea
 | `get_prompt` | System-prompt template for a domain |
 | `get_projection_schema` | What each projection level keeps or strips |
 | `generation_status` | Whether `generate_document` is usable |
+| `list_components` | Pre-built component names grouped by category |
+| `get_component` | A component's footprint + datasheet pad geometry |
 
 ### Edit
 
