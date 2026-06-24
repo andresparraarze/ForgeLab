@@ -38,9 +38,9 @@ Paste this prompt:
 
 Just tell your agent what you want:
 
-- *"Design an Arduino Mega clone board and export it to KiCad"*
-- *"Generate a NEMA17 motor mount plate with M3 mounting holes and export to FreeCAD"*
-- *"Create a low-poly sci-fi space station with solar panels and a docking port for Blender"*
+- *"Design a wireless temperature sensor with ESP32, DHT22, USB-C power, and a 3D-printable enclosure"*
+
+ForgeLab produces a complete project: KiCad PCB + FreeCAD enclosure sized to fit the board + Blender product render script + BOM — all from one prompt, all dimensionally coherent via a shared project file.
 
 ## How it works
 
@@ -140,10 +140,11 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 - **Edit by patch.** `patch_document` applies an RFC 6902 JSON Patch, so changing one component is a few hundred bytes, not a full re-emission.
 - **Project what you need.** Pass `projection` (`metadata`/`topology`/`geometry`/`full`) to receive only the relevant slice; stripping happens server-side.
 - **Compute, don't guess.** The five `calculate_*` tools handle geometry and electrical math deterministically instead of inline.
+- **Project files.** Tie board, enclosure, and render documents together with shared dimensions as a single source of truth; export all formats in one call via `export_project`.
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). The IR, validator, compiler pipeline, REST API, three round-trips (**KiCad**, **glTF**, **FreeCAD**), the **AI SDK**, the **OAuth 2.0** module, and the **MCP server** all work and are covered by tests. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **27 MCP tools**, and **518 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 
