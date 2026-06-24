@@ -19,6 +19,7 @@ _TOOLS = [
     tools.load_document,
     tools.diff_documents,
     tools.verify_sync,
+    tools.generate_bom,
     tools.create_project,
     tools.load_project,
     tools.update_project,

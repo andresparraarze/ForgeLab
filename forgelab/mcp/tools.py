@@ -8,6 +8,8 @@ no-op over the unauthenticated stdio transport).
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import json
 import os
 from collections import Counter
@@ -188,9 +190,16 @@ def list_domains() -> list[str]:
 
 
 def list_formats() -> dict[str, dict[str, bool]]:
-    """List registered format tools and their import/export availability."""
+    """List registered format tools and their import/export availability.
+
+    Includes the synthetic ``bom`` output (export-only): a bill of materials
+    extracted from a hardware document by ``generate_bom``, not a registered
+    importer/exporter.
+    """
     require_scope("forge:read")
-    return _registry.tool_names()
+    formats = _registry.tool_names()
+    formats["bom"] = {"import": False, "export": True}
+    return formats
 
 
 def _count_node_types(nodes: Any) -> Counter[str]:
@@ -424,6 +433,120 @@ def verify_sync(document_path: str, native_path: str) -> dict[str, Any]:
     """
     require_scope("forge:read")
     return _sync_status(document_path, native_path)
+
+
+# --------------------------------------------------------------------------- #
+# Bill of materials: extract a grouped parts list from a hardware document.
+# --------------------------------------------------------------------------- #
+def _component_nets(props: dict[str, Any]) -> list[str]:
+    """Unique, non-empty net names across a component's pads, in first-seen order."""
+    nets: list[str] = []
+    pads = props.get("pads")
+    if isinstance(pads, list):
+        for pad in pads:
+            if not isinstance(pad, dict):
+                continue
+            net = pad.get("net")
+            if isinstance(net, str) and net and net not in nets:
+                nets.append(net)
+    return nets
+
+
+def _collect_bom(document: dict[str, Any]) -> tuple[int, list[dict[str, Any]]]:
+    """Group component nodes by (value, footprint); return (total, ordered groups)."""
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
+    total = 0
+    nodes = document.get("nodes")
+    if not isinstance(nodes, list):
+        return 0, []
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("type") != "component":
+            continue
+        raw_props = node.get("props")
+        props: dict[str, Any] = raw_props if isinstance(raw_props, dict) else {}
+        reference = str(props.get("reference") or node.get("id") or "")
+        value = str(props.get("value", ""))
+        footprint = str(props.get("footprint", ""))
+        total += 1
+        key = (value, footprint)
+        group = groups.get(key)
+        if group is None:
+            group = {
+                "quantity": 0,
+                "references": [],
+                "value": value,
+                "footprint": footprint,
+                "nets": [],
+            }
+            groups[key] = group
+            order.append(key)
+        group["quantity"] += 1
+        if reference:
+            group["references"].append(reference)
+        for net in _component_nets(props):
+            if net not in group["nets"]:
+                group["nets"].append(net)
+    return total, [groups[key] for key in order]
+
+
+def _bom_csv(groups: list[dict[str, Any]]) -> str:
+    """Render BOM groups as CSV with a Quantity/References/Value/Footprint header."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["Quantity", "References", "Value", "Footprint"])
+    for group in groups:
+        writer.writerow(
+            [
+                group["quantity"],
+                ",".join(group["references"]),
+                group["value"],
+                group["footprint"],
+            ]
+        )
+    return buffer.getvalue()
+
+
+def generate_bom(document_path: str, format: str = "json") -> dict[str, Any] | str:
+    """Extract a bill of materials from a hardware ``.forge.json`` on disk.
+
+    Reads the document (a bare filename resolves against ``FORGELAB_OUTPUT_DIR``),
+    walks its ``component`` nodes, and groups identical parts (same ``value`` +
+    ``footprint``), summing quantities. For each component it pulls the reference,
+    value, footprint, and the unique net names connected to its pads.
+
+    Args:
+        document_path: the hardware ``.forge.json`` to read.
+        format: ``"json"`` (default) or ``"csv"``.
+
+    Returns:
+        For ``"json"``: ``{"total_components", "unique_parts", "bom"}`` where each
+        ``bom`` entry is ``{"quantity", "reference" (comma-joined refs), "value",
+        "footprint", "nets"}``. For ``"csv"``: a CSV string with the header
+        ``Quantity, References, Value, Footprint``.
+    """
+    require_scope("forge:read")
+    fmt = format.lower()
+    if fmt not in ("json", "csv"):
+        raise ValueError(f"unknown format {format!r}; expected 'json' or 'csv'")
+    raw = _read_document_file(document_path)
+    domain = raw.get("domain")
+    if domain != "hardware":
+        raise ValueError(f"generate_bom requires a hardware document; got domain {domain!r}")
+    total, groups = _collect_bom(raw)
+    if fmt == "csv":
+        return _bom_csv(groups)
+    bom = [
+        {
+            "quantity": group["quantity"],
+            "reference": ",".join(group["references"]),
+            "value": group["value"],
+            "footprint": group["footprint"],
+            "nets": group["nets"],
+        }
+        for group in groups
+    ]
+    return {"total_components": total, "unique_parts": len(groups), "bom": bom}
 
 
 # --------------------------------------------------------------------------- #
