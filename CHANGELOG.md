@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- ForgeLab **projects**: a `.forge.project` JSON container (a new file type, not
+  a domain document) that ties several domain documents together with a flat
+  `shared` dimension table — a single source of truth every linked document can
+  be checked against, so a board outline's width can inform an enclosure's inner
+  width. Four MCP tools: `create_project` (forge:read) writes a project and
+  infers `board_width`/`board_height` from any linked hardware document's board
+  outline; `load_project` (forge:read) summarizes the shared dimensions and each
+  linked document's domain, node count, and validation status without returning
+  document contents; `update_project` (forge:export) changes shared dimensions
+  and optionally re-validates every document and re-checks constraints;
+  `export_project` (forge:export) exports all linked documents to their native
+  formats in one call (default tool per domain — hardware→kicad,
+  mechanical→freecad, threed→gltf — overridable per document via `tools`).
+  Cross-domain constraints are informational for now: violations are reported
+  but never block an export.
 - OBJ and STL importers for the threed domain, so agents can bring in existing
   geometry instead of modelling from scratch. `import_file(file_path=...,
   tool='obj')` parses Wavefront OBJ (stdlib only): `v`/`f` with quad and n-gon

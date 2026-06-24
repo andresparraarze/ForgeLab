@@ -36,6 +36,16 @@ from forgelab.core import validate as _core_validate
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
+from forgelab.project import (
+    PROJECT_EXTENSION,
+    Project,
+    check_constraints,
+    default_tool_for_domain,
+    dump_project,
+    extension_for_tool,
+    infer_shared,
+    load_project_file,
+)
 from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 from forgelab.sdk.validation import _extract_json
@@ -414,6 +424,291 @@ def verify_sync(document_path: str, native_path: str) -> dict[str, Any]:
     """
     require_scope("forge:read")
     return _sync_status(document_path, native_path)
+
+
+# --------------------------------------------------------------------------- #
+# ForgeLab projects: a .forge.project container ties multiple domain documents
+# together with shared dimensions (a single source of truth) and informational
+# cross-domain constraints. The project file is not itself a domain document.
+# --------------------------------------------------------------------------- #
+def _project_doc_key(path_str: str) -> str:
+    """Derive a short document key from a file path (strip the ForgeLab suffix)."""
+    name = Path(path_str).name
+    for suffix in (".forge.json", ".json"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return Path(name).stem
+
+
+def _resolve_project_doc(project_dir: Path, doc_path: str) -> Path:
+    """Resolve a document path stored in a project relative to the project file."""
+    path = Path(doc_path)
+    return path if path.is_absolute() else project_dir / path
+
+
+def create_project(
+    name: str,
+    description: str = "",
+    document_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a ForgeLab project file linking several domain documents.
+
+    A project is a ``.forge.project`` JSON file (not a domain document) that ties
+    documents together with a flat ``shared`` dimension table — a single source of
+    truth every linked document can be checked against (e.g. a board outline width
+    informing an enclosure's inner width).
+
+    Args:
+        name: the project name; the file is written as ``<name>.forge.project``
+            into ``FORGELAB_OUTPUT_DIR`` (or the cwd).
+        description: an optional human description.
+        document_paths: optional existing ``.forge.json`` paths to link. Each is
+            keyed by its base filename. Shared dimensions are inferred
+            automatically from any hardware document (``board_width`` and
+            ``board_height`` from the board outline's bounding box).
+
+    Returns ``{"project_path", "name", "documents", "shared"}``.
+    """
+    require_scope("forge:read")
+    if not name:
+        raise ValueError("name is required")
+    documents: dict[str, str] = {}
+    shared: dict[str, float] = {}
+    for raw_path in document_paths or []:
+        key = _project_doc_key(raw_path)
+        documents[key] = raw_path
+        try:
+            doc = _read_document_file(raw_path)
+        except ValueError as exc:
+            raise ValueError(f"could not add document {raw_path!r}: {exc}") from exc
+        shared.update(infer_shared(doc))
+    project_model = Project(
+        name=name,
+        description=description or None,
+        documents=documents,
+        shared=shared,
+    )
+    filename = name if name.endswith(PROJECT_EXTENSION) else f"{name}{PROJECT_EXTENSION}"
+    target = _resolve_path(filename)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(dump_project(project_model), encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not write project {str(target)!r}: {exc}") from exc
+    return {
+        "project_path": str(target),
+        "name": project_model.name,
+        "documents": dict(project_model.documents),
+        "shared": dict(project_model.shared),
+    }
+
+
+def load_project(project_path: str) -> dict[str, Any]:
+    """Load a project file and summarize it without returning document contents.
+
+    Reads a ``.forge.project`` and returns its metadata, shared dimensions, and a
+    per-document summary (key, resolved path, domain, node count, validation
+    status). Document paths resolve relative to the project file. The full
+    document JSON is never returned, keeping the response small.
+
+    Returns ``{"project_path", "name", "description", "shared", "documents",
+    "constraint_count"}``.
+    """
+    require_scope("forge:read")
+    target = _resolve_path(project_path)
+    project_model = load_project_file(target)
+    project_dir = target.parent
+    summaries: list[dict[str, Any]] = []
+    for key, doc_path in project_model.documents.items():
+        resolved = _resolve_project_doc(project_dir, doc_path)
+        summary: dict[str, Any] = {"key": key, "path": str(resolved)}
+        try:
+            raw = json.loads(resolved.read_text(encoding="utf-8"))
+        except OSError as exc:
+            summary.update({"domain": None, "node_count": 0, "valid": False, "error": str(exc)})
+            summaries.append(summary)
+            continue
+        except json.JSONDecodeError as exc:
+            summary.update(
+                {"domain": None, "node_count": 0, "valid": False, "error": f"invalid JSON: {exc}"}
+            )
+            summaries.append(summary)
+            continue
+        summary["domain"] = raw.get("domain") if isinstance(raw, dict) else None
+        nodes = raw.get("nodes") if isinstance(raw, dict) else None
+        summary["node_count"] = sum(_count_node_types(nodes).values())
+        try:
+            _core_validate(raw)
+            summary["valid"] = True
+        except Exception as exc:
+            summary["valid"] = False
+            summary["error"] = str(exc)
+        summaries.append(summary)
+    return {
+        "project_path": str(target),
+        "name": project_model.name,
+        "description": project_model.description,
+        "shared": dict(project_model.shared),
+        "documents": summaries,
+        "constraint_count": len(project_model.constraints),
+    }
+
+
+def update_project(
+    project_path: str,
+    shared: dict[str, float],
+    revalidate: bool = False,
+) -> dict[str, Any]:
+    """Update a project's shared dimension values, optionally re-checking docs.
+
+    Merges ``shared`` into the project's dimension table (overwriting matching
+    keys, adding new ones) and writes the file back. With ``revalidate=True``,
+    every linked document is re-validated and all constraints are re-checked
+    against the new dimensions; the report is informational and never blocks.
+
+    Returns ``{"project_path", "shared", "updated"}`` and, when revalidating,
+    ``"validation"``, ``"constraints"`` and ``"violations"`` (the unsatisfied
+    subset).
+    """
+    require_scope("forge:export")
+    if not isinstance(shared, dict) or not shared:
+        raise ValueError("shared must be a non-empty dict of dimension name -> value")
+    target = _resolve_path(project_path)
+    project_model = load_project_file(target)
+    updated: list[str] = []
+    for dim, value in shared.items():
+        try:
+            project_model.shared[dim] = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"shared value for {dim!r} must be numeric: {exc}") from exc
+        updated.append(dim)
+    try:
+        target.write_text(dump_project(project_model), encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not write project {str(target)!r}: {exc}") from exc
+    result: dict[str, Any] = {
+        "project_path": str(target),
+        "shared": dict(project_model.shared),
+        "updated": sorted(updated),
+    }
+    if revalidate:
+        project_dir = target.parent
+        loaded: dict[str, dict[str, Any]] = {}
+        validation: list[dict[str, Any]] = []
+        for key, doc_path in project_model.documents.items():
+            resolved = _resolve_project_doc(project_dir, doc_path)
+            try:
+                raw = json.loads(resolved.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                validation.append({"key": key, "valid": False, "error": str(exc)})
+                continue
+            loaded[key] = raw
+            try:
+                _core_validate(raw)
+                validation.append({"key": key, "valid": True})
+            except Exception as exc:
+                validation.append({"key": key, "valid": False, "error": str(exc)})
+        reports = check_constraints(project_model, loaded)
+        result["validation"] = validation
+        result["constraints"] = reports
+        result["violations"] = [r for r in reports if not r["satisfied"]]
+    return result
+
+
+def export_project(
+    project_path: str,
+    tools: dict[str, str] | None = None,
+    output_dir: str | None = None,
+) -> dict[str, Any]:
+    """Export every document in a project to its native format in one call.
+
+    Each document is written as ``<key><ext>`` (e.g. ``board.kicad_pcb``) into
+    ``output_dir`` (default: the project file's directory). The export tool per
+    document defaults to its domain's natural target (hardware->kicad,
+    mechanical->freecad, threed->gltf); override any with ``tools``, e.g.
+    ``{"board": "kicad", "enclosure": "freecad", "render": "blender_script"}``.
+
+    Returns ``{"project_path", "name", "output_dir", "exported", "exported_count",
+    "constraints", "violations"}``. ``exported`` lists one entry per document with
+    its tool, path and bytes (or an ``error``); a failure on one document does not
+    stop the others. Constraint violations are reported but never block.
+    """
+    require_scope("forge:export")
+    target = _resolve_path(project_path)
+    project_model = load_project_file(target)
+    project_dir = target.parent
+    overrides = tools or {}
+    out_base = _resolve_path(output_dir) if output_dir else project_dir
+    try:
+        out_base.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"could not create output dir {str(out_base)!r}: {exc}") from exc
+
+    exported: list[dict[str, Any]] = []
+    loaded: dict[str, dict[str, Any]] = {}
+    for key, doc_path in project_model.documents.items():
+        resolved = _resolve_project_doc(project_dir, doc_path)
+        entry: dict[str, Any] = {"document": key}
+        try:
+            raw = json.loads(resolved.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            entry.update({"exported": False, "error": f"could not read document: {exc}"})
+            exported.append(entry)
+            continue
+        loaded[key] = raw
+        try:
+            doc = validate(raw)
+        except Exception as exc:
+            entry.update({"exported": False, "error": f"invalid document: {exc}"})
+            exported.append(entry)
+            continue
+        domain = raw.get("domain") if isinstance(raw, dict) else None
+        tool = overrides.get(key) or default_tool_for_domain(str(domain))
+        if not tool:
+            entry.update(
+                {
+                    "exported": False,
+                    "error": (
+                        f"no default export tool for domain {domain!r}; "
+                        f"pass tools={{{key!r}: <tool>}}"
+                    ),
+                }
+            )
+            exported.append(entry)
+            continue
+        entry["tool"] = tool
+        try:
+            exporter = _registry.get_exporter(tool)
+        except UnknownToolError as exc:
+            entry.update({"exported": False, "error": str(exc)})
+            exported.append(entry)
+            continue
+        try:
+            data = exporter().from_ir(doc)
+        except (NotImplementedError, ValidationError, ValueError) as exc:
+            entry.update({"exported": False, "error": f"export failed: {exc}"})
+            exported.append(entry)
+            continue
+        out_path = out_base / f"{key}{extension_for_tool(tool)}"
+        try:
+            out_path.write_bytes(data)
+        except OSError as exc:
+            entry.update({"exported": False, "error": f"could not write {str(out_path)!r}: {exc}"})
+            exported.append(entry)
+            continue
+        entry.update({"exported": True, "path": str(out_path), "bytes_written": len(data)})
+        exported.append(entry)
+
+    reports = check_constraints(project_model, loaded)
+    return {
+        "project_path": str(target),
+        "name": project_model.name,
+        "output_dir": str(out_base),
+        "exported": exported,
+        "exported_count": sum(1 for e in exported if e.get("exported")),
+        "constraints": reports,
+        "violations": [r for r in reports if not r["satisfied"]],
+    }
 
 
 # --------------------------------------------------------------------------- #
