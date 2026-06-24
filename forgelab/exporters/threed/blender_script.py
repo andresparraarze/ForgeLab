@@ -443,12 +443,16 @@ class BlenderScriptExporter(Exporter):
             "else:",
             "    scene.render.engine = 'CYCLES'",
             "    scene.cycles.samples = 128",
-            "# Denoising on (NLM where the build still has it, for broad compatibility).",
+            "# Denoising on. Prefer OpenImageDenoise (Blender 3.5+, CPU & GPU);",
+            "# fall back to NLM only on older builds that lack it.",
             "scene.cycles.use_denoising = True",
             "try:",
-            "    scene.cycles.denoiser = 'NLM'",
+            "    scene.cycles.denoiser = 'OPENIMAGEDENOISE'",
             "except (TypeError, AttributeError):",
-            "    pass",
+            "    try:",
+            "        scene.cycles.denoiser = 'NLM'",
+            "    except (TypeError, AttributeError):",
+            "        pass",
         ]
 
     def _world_sky(self) -> list[str]:
