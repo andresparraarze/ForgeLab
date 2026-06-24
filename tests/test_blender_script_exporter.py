@@ -246,7 +246,9 @@ def test_render_settings_cycles_resolution_and_denoising():
     assert "scene.render.resolution_x = 1920" in src
     assert "scene.render.resolution_y = 1080" in src
     assert "scene.cycles.use_denoising = True" in src
-    assert "scene.cycles.denoiser = 'NLM'" in src
+    # OpenImageDenoise is the primary denoiser (Blender 3.5+); NLM is the fallback.
+    assert "scene.cycles.denoiser = 'OPENIMAGEDENOISE'" in src
+    assert src.index("'OPENIMAGEDENOISE'") < src.index("'NLM'")
 
 
 def test_preview_flag_toggles_eevee():
