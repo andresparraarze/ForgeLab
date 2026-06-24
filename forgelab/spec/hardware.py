@@ -72,8 +72,11 @@ class Component(BaseModel):
     @field_validator("at")
     @classmethod
     def _at_is_xyr(cls, value: list[float]) -> list[float]:
+        # [x, y] is accepted as shorthand for [x, y, 0]: an implicit zero rotation.
+        if len(value) == 2:
+            return [value[0], value[1], 0.0]
         if len(value) != 3:
-            raise ValueError("at must be [x, y, rotation]")
+            raise ValueError("at must be [x, y] or [x, y, rotation]")
         return value
 
 

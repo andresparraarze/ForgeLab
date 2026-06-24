@@ -81,6 +81,28 @@ def test_unrecognized_version_falls_back_to_canonical():
     assert "nonsense" not in out
 
 
+def test_component_at_xy_normalizes_to_zero_rotation():
+    # [x, y] is shorthand for [x, y, 0]: it must export, not raise, and land at
+    # rotation 0 in the footprint placement.
+    comp = Component(
+        reference="R1",
+        value="330R",
+        footprint="Resistor_SMD:R_0603_1608Metric",
+        layer="F.Cu",
+        at=[100.0, 50.0],  # no rotation given
+        pads=[],
+    )
+    assert comp.at == [100.0, 50.0, 0.0]
+
+    doc = _doc()
+    comp_node = next(n for n in doc.nodes if n.type == NODE_COMPONENT)
+    comp_node.props = comp.model_dump()
+    tree = parse(KiCadExporter().from_ir(doc).decode("utf-8"))
+    (footprint,) = [c for c in tree if isinstance(c, list) and c and c[0] == "footprint"]
+    at = next(c for c in footprint if isinstance(c, list) and c and c[0] == "at")
+    assert [at[1], at[2], at[3]] == [100.0, 50.0, 0.0]
+
+
 def test_export_contains_nets_and_footprint():
     out = KiCadExporter().from_ir(_doc()).decode("utf-8")
     assert '(net 1 "GND")' in out

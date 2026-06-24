@@ -7,7 +7,7 @@ from forgelab.calc import calculate_pad_positions
 from forgelab.mcp import tools
 from forgelab.spec import SPEC_VERSION
 
-_CATEGORIES = {"Microcontrollers", "Regulators", "USB", "Passives", "Connectors"}
+_CATEGORIES = {"Microcontrollers", "Regulators", "USB", "Sensors", "Passives", "Connectors"}
 
 
 def _all_names():
@@ -52,6 +52,7 @@ def test_list_components_includes_the_named_parts():
     assert {"ESP32-WROOM-32", "ATmega328P", "ATmega2560"} <= set(grouped["Microcontrollers"])
     assert {"AMS1117-3.3", "AMS1117-5.0", "LM7805", "MCP1700-3302"} <= set(grouped["Regulators"])
     assert {"CH340G", "CP2102", "USB-B", "USB-C-16P"} <= set(grouped["USB"])
+    assert {"DHT22", "BME280", "SCD40"} <= set(grouped["Sensors"])
     # 2.54mm pin headers 1x2 .. 1x10.
     for n in range(2, 11):
         assert f"PinHeader-1x{n}" in grouped["Connectors"]
