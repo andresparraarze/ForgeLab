@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- The Blender script exporter (`tool='blender_script'`) now generates a
+  product-render scene rather than a bare viewport. Every script gains: a World
+  shader with a procedural Nishita **Sky Texture** (sun elevation 45°, rotation
+  30°, strength 1.0) standing in for an HDRI; render settings (1920×1080,
+  denoising via `scene.cycles.use_denoising`); a `PREVIEW` flag at the top —
+  `True` uses EEVEE at 64 samples for speed, `False` uses **CYCLES** at 128
+  samples for quality; an 85mm camera positioned at a 3/4 product angle
+  (azimuth 45°, elevation 30°) at a distance scaled to the scene bounds; a large
+  light-grey ground plane (roughness 0.8) just below the lowest geometry; and a
+  closing `bpy.ops.render.render(write_still=True)` that writes
+  `<script>_render.png` so running the script also produces a render.
+
 ### Added
 - Component library (`forgelab/components/`): 29 pre-built hardware component
   definitions across five categories (microcontrollers, regulators, USB,

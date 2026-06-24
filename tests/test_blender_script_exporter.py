@@ -1,8 +1,9 @@
 """BlenderScriptExporter: ForgeLab threed IR -> a runnable Blender bpy script."""
 
 import ast
+import math
 
-from forgelab.exporters.threed.blender_script import BlenderScriptExporter
+from forgelab.exporters.threed.blender_script import BlenderScriptExporter, _camera_location
 from forgelab.spec import (
     DocumentMeta,
     Domain,
@@ -212,6 +213,77 @@ def test_camera_and_three_point_lighting_inserted():
     assert '_add_light("Rim", "AREA"' in src
     assert "bpy.context.view_layer.update()" in src
     assert "print(" in src
+
+
+# --------------------------------------------------------------------------- #
+# product-render upgrades: sky world, render engine, camera angle, ground, render
+# --------------------------------------------------------------------------- #
+def _product_scene_src():
+    flat, idx = _box_positions(sx=3.0, sy=3.0, sz=3.0)
+    mesh = Node(
+        id="m",
+        type=NODE_MESH,
+        props=Mesh(name="cube", primitives=[Primitive(positions=flat, indices=idx)]).model_dump(),
+    )
+    return _export([_scene(), mesh, _object("Cube", "m")])
+
+
+def test_world_uses_nishita_sky_texture():
+    src = _product_scene_src()
+    assert "ShaderNodeTexSky" in src
+    assert "'NISHITA'" in src
+    assert "_w_sky.sun_elevation = math.radians(45.0)" in src
+    assert "_w_sky.sun_rotation = math.radians(30.0)" in src
+    # Background strength is the world strength.
+    assert "_w_bg.inputs['Strength'].default_value = 1.0" in src
+    ast.parse(src)
+
+
+def test_render_settings_cycles_resolution_and_denoising():
+    src = _product_scene_src()
+    assert "scene.render.engine = 'CYCLES'" in src
+    assert "scene.cycles.samples = 128" in src
+    assert "scene.render.resolution_x = 1920" in src
+    assert "scene.render.resolution_y = 1080" in src
+    assert "scene.cycles.use_denoising = True" in src
+    assert "scene.cycles.denoiser = 'NLM'" in src
+
+
+def test_preview_flag_toggles_eevee():
+    src = _product_scene_src()
+    assert "PREVIEW = True" in src
+    assert "if PREVIEW:" in src
+    # Preview path uses EEVEE with 64 samples; quality path uses CYCLES.
+    assert "BLENDER_EEVEE" in src
+    assert "taa_render_samples = 64" in src
+
+
+def test_camera_is_85mm_at_three_quarter_angle():
+    src = _product_scene_src()
+    assert "cam_data.lens = 85.0" in src
+    # The placement helper must put the camera at azimuth 45deg, elevation 30deg
+    # (computed in the IR's Y-up space: azimuth in the X/Z plane, elevation in Y).
+    center = (0.0, 0.0, 0.0)
+    radius = 4.0
+    x, y, z = _camera_location(center, radius)
+    assert round(math.degrees(math.atan2(x, z)), 6) == 45.0
+    dist = math.dist((x, y, z), center)
+    assert round(math.degrees(math.asin(y / dist)), 6) == 30.0
+    assert round(dist / radius, 6) == 4.5  # distance scaled to the bounding sphere
+
+
+def test_ground_plane_present():
+    src = _product_scene_src()
+    assert "bpy.ops.mesh.primitive_plane_add(" in src
+    assert "ForgeLab_Ground" in src
+    assert "_gbsdf.inputs['Roughness'].default_value = 0.8" in src
+
+
+def test_render_output_line_present():
+    src = _product_scene_src()
+    assert "bpy.ops.render.render(write_still=True)" in src
+    assert ".replace('.py', '_render.png')" in src
+    ast.parse(src)
 
 
 # --------------------------------------------------------------------------- #
