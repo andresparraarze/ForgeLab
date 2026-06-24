@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `generate_bom` MCP tool (forge:read): extracts a bill of materials from a
+  hardware document. Walks `component` nodes, pulling each one's reference,
+  value, footprint, and the unique net names connected to its pads, then groups
+  identical parts (same value + footprint) and sums quantities. `format='json'`
+  (default) returns `{total_components, unique_parts, bom}` with comma-joined
+  references and the union of nets per group; `format='csv'` returns a CSV string
+  with a `Quantity, References, Value, Footprint` header. `list_formats` now notes
+  `bom` as an export-only output.
 - ForgeLab **projects**: a `.forge.project` JSON container (a new file type, not
   a domain document) that ties several domain documents together with a flat
   `shared` dimension table — a single source of truth every linked document can
