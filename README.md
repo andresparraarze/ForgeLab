@@ -73,7 +73,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ## MCP tools
 
-Twenty tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Twenty-four tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -95,6 +95,17 @@ Twenty tools, same for every client. Over stdio all are local; over HTTP each ne
 | `patch_document` | Apply an RFC 6902 JSON Patch to a saved document |
 | `diff_documents` | RFC 6902 patch transforming document A into B |
 | `verify_sync` | Check a native file is still in sync with its source document |
+
+### Project
+
+A `.forge.project` file ties multiple domain documents together with a shared dimension table (one source of truth) and informational cross-domain constraints.
+
+| Tool | Description |
+| --- | --- |
+| `create_project` | Create a project, inferring shared dimensions from linked documents |
+| `load_project` | Summarize a project: shared dimensions + per-document status |
+| `update_project` | Change shared dimensions, optionally re-checking all documents |
+| `export_project` | Export every linked document to its native format in one call |
 
 ### Calculate
 
