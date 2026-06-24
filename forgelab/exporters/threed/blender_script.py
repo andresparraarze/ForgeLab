@@ -156,8 +156,11 @@ def _geo_matrix_expr(desc: dict[str, Any]) -> str:
     return f"Matrix.Translation({_vec(c)}) @ Matrix.Diagonal(({_f(r)}, {_f(r)}, {_f(r)}, 1.0))"
 
 
-def _bounds(meshes: dict[str, Mesh]) -> tuple[tuple[float, float, float], float]:
-    """Bounding-box centre and radius over all mesh geometry (IR/Y-up space)."""
+Vec3 = tuple[float, float, float]
+
+
+def _bounds(meshes: dict[str, Mesh]) -> tuple[Vec3, float, Vec3, Vec3]:
+    """Bounds over all mesh geometry (IR/Y-up): (centre, radius, lo, hi)."""
     lo = [math.inf, math.inf, math.inf]
     hi = [-math.inf, -math.inf, -math.inf]
     for mesh in meshes.values():
@@ -167,10 +170,26 @@ def _bounds(meshes: dict[str, Mesh]) -> tuple[tuple[float, float, float], float]
                     lo[k] = min(lo[k], p[k])
                     hi[k] = max(hi[k], p[k])
     if lo[0] == math.inf:
-        return (0.0, 0.0, 0.0), 5.0
+        return (0.0, 0.0, 0.0), 5.0, (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0)
     center = tuple((lo[k] + hi[k]) / 2 for k in range(3))
     radius = max(math.dist(lo, hi) / 2, 1.0)
-    return center, radius  # type: ignore[return-value]
+    return center, radius, tuple(lo), tuple(hi)  # type: ignore[return-value]
+
+
+def _camera_location(center: Vec3, radius: float) -> Vec3:
+    """Camera position for a 3/4 product shot: 45 deg azimuth, 30 deg elevation.
+
+    Computed in the IR's Y-up space (the camera is parented to the conversion
+    root): azimuth sweeps the X/Z ground plane, elevation lifts along +Y. The
+    distance is scaled to the bounding sphere so an 85mm lens frames the subject.
+    """
+    azim = math.radians(45.0)
+    elev = math.radians(30.0)
+    dist = max(radius * 4.5, 1.0)
+    dx = dist * math.cos(elev) * math.sin(azim)
+    dy = dist * math.sin(elev)
+    dz = dist * math.cos(elev) * math.cos(azim)
+    return (center[0] + dx, center[1] + dy, center[2] + dz)
 
 
 class BlenderScriptExporter(Exporter):
@@ -191,9 +210,12 @@ class BlenderScriptExporter(Exporter):
         meshes = {n.id: Mesh.model_validate(n.props) for n in mesh_nodes}
 
         scene_name = scene_nodes[0].props.get("name", "Scene") if scene_nodes else "Scene"
+        center, radius, lo, _hi = _bounds(meshes)
 
         lines: list[str] = []
         lines += self._header(scene_name)
+        lines += self._render_settings()
+        lines += self._world_sky()
         lines += self._materials_block(materials)
         lines.append("")
         lines.append("objects = []")
@@ -201,14 +223,18 @@ class BlenderScriptExporter(Exporter):
         for node in root_objects:
             n_objects += self._object_block(node, meshes, lines, parent="root")
         lines.append("")
-        lines += self._camera_and_lights(*_bounds(meshes))
+        lines += self._ground_plane(center, radius, lo)
+        lines.append("")
+        lines += self._camera_and_lights(center, radius)
         lines.append("")
         lines.append("bpy.context.view_layer.update()")
         lines.append(
             f'print("ForgeLab: built scene {scene_name!r} with "'
-            f' "{n_objects} object(s), {len(materials)} material(s), '
-            f'a camera and three-point lighting")'
+            f' "{n_objects} object(s), {len(materials)} material(s), a Nishita-sky world, "'
+            f' "a ground plane, an 85mm product-shot camera and three-point lighting")'
         )
+        lines.append("")
+        lines += self._render_output()
         return ("\n".join(lines) + "\n").encode("utf-8")
 
     # -- script sections ---------------------------------------------------- #
@@ -218,6 +244,9 @@ class BlenderScriptExporter(Exporter):
             "import bpy",
             "import math",
             "from mathutils import Matrix, Quaternion",
+            "",
+            "# Flip to False for a high-quality CYCLES render; True is a fast EEVEE preview.",
+            "PREVIEW = True",
             "",
             "",
             "def _trs(t, r, s):",
@@ -355,23 +384,25 @@ class BlenderScriptExporter(Exporter):
         if mat:
             lines.append(f"{var}.data.materials.append(materials[{mat!r}])")
 
-    def _camera_and_lights(self, center: tuple[float, float, float], radius: float) -> list[str]:
+    def _camera_and_lights(self, center: Vec3, radius: float) -> list[str]:
         cx, cy, cz = center
         r = radius
+        cam_loc = _camera_location(center, radius)
 
         def loc(dx: float, dy: float, dz: float) -> str:
             return _vec((cx + dx * r, cy + dy * r, cz + dz * r))
 
         return [
-            "# --- camera + three-point lighting (framed on the scene bounds) ---",
+            "# --- camera: 3/4 product angle (azimuth 45deg, elevation 30deg), 85mm lens ---",
             'target = bpy.data.objects.new("ForgeLab_Target", None)',
             "scene.collection.objects.link(target)",
             f"_parent(target, root, Matrix.Translation({_vec(center)}))",
             "",
             'cam_data = bpy.data.cameras.new("ForgeLab_Camera")',
+            "cam_data.lens = 85.0  # flattering product-shot focal length",
             'cam = bpy.data.objects.new("ForgeLab_Camera", cam_data)',
             "scene.collection.objects.link(cam)",
-            f"_parent(cam, root, Matrix.Translation({loc(1.7, 1.2, 2.6)}))",
+            f"_parent(cam, root, Matrix.Translation({_vec(cam_loc)}))",
             "_cam_track = cam.constraints.new('TRACK_TO')",
             "_cam_track.target = target",
             "scene.camera = cam",
@@ -391,4 +422,84 @@ class BlenderScriptExporter(Exporter):
             f'_add_light("Key", "AREA", {_f(1200.0 * r)}, {_f(r)}, {loc(2.2, 2.4, 1.8)})',
             f'_add_light("Fill", "AREA", {_f(400.0 * r)}, {_f(1.5 * r)}, {loc(-2.6, 1.2, 1.4)})',
             f'_add_light("Rim", "AREA", {_f(700.0 * r)}, {_f(r)}, {loc(0.0, 1.8, -3.0)})',
+        ]
+
+    def _render_settings(self) -> list[str]:
+        return [
+            "",
+            "# --- render settings: CYCLES 128-sample quality, EEVEE 64-sample preview ---",
+            "scene.render.resolution_x = 1920",
+            "scene.render.resolution_y = 1080",
+            "scene.render.resolution_percentage = 100",
+            "if PREVIEW:",
+            "    try:",
+            "        scene.render.engine = 'BLENDER_EEVEE_NEXT'  # Blender 4.2+",
+            "    except TypeError:",
+            "        scene.render.engine = 'BLENDER_EEVEE'  # Blender 4.0/4.1",
+            "    try:",
+            "        scene.eevee.taa_render_samples = 64",
+            "    except AttributeError:",
+            "        pass",
+            "else:",
+            "    scene.render.engine = 'CYCLES'",
+            "    scene.cycles.samples = 128",
+            "# Denoising on (NLM where the build still has it, for broad compatibility).",
+            "scene.cycles.use_denoising = True",
+            "try:",
+            "    scene.cycles.denoiser = 'NLM'",
+            "except (TypeError, AttributeError):",
+            "    pass",
+        ]
+
+    def _world_sky(self) -> list[str]:
+        # We can't embed a real HDRI, so stand in with a procedural Nishita sky
+        # wired through a Background node (the Environment-Texture slot's role).
+        return [
+            "",
+            "# --- world: procedural Nishita sky (HDRI stand-in), strength 1.0 ---",
+            "world = bpy.data.worlds.new('ForgeLab_World')",
+            "scene.world = world",
+            "world.use_nodes = True",
+            "_wnodes = world.node_tree.nodes",
+            "_wlinks = world.node_tree.links",
+            "_wnodes.clear()",
+            "_w_out = _wnodes.new('ShaderNodeOutputWorld')",
+            "_w_bg = _wnodes.new('ShaderNodeBackground')",
+            "_w_bg.inputs['Strength'].default_value = 1.0",
+            "_w_sky = _wnodes.new('ShaderNodeTexSky')",
+            "_w_sky.sky_type = 'NISHITA'",
+            "_w_sky.sun_elevation = math.radians(45.0)",
+            "_w_sky.sun_rotation = math.radians(30.0)",
+            "_wlinks.new(_w_sky.outputs['Color'], _w_bg.inputs['Color'])",
+            "_wlinks.new(_w_bg.outputs['Background'], _w_out.inputs['Surface'])",
+        ]
+
+    def _ground_plane(self, center: Vec3, radius: float, lo: Vec3) -> list[str]:
+        # World space (Z-up): IR (x, y, z) maps to Blender (x, -z, y) under the
+        # conversion root, so the lowest Blender Z is the minimum IR Y.
+        offset = max(radius * 0.01, 0.001)
+        ground_loc = (center[0], -center[2], lo[1] - offset)
+        size = max(radius * 20.0, 10.0)
+        return [
+            "# --- ground plane (shadow catcher / context), light grey, roughness 0.8 ---",
+            "_ground_mat = bpy.data.materials.new('ForgeLab_Ground')",
+            "_ground_mat.use_nodes = True",
+            "_gbsdf = _ground_mat.node_tree.nodes.get('Principled BSDF')",
+            "_gbsdf.inputs['Base Color'].default_value = (0.9, 0.9, 0.9, 1.0)",
+            "_gbsdf.inputs['Roughness'].default_value = 0.8",
+            f"bpy.ops.mesh.primitive_plane_add(size={_f(size)}, location={_vec(ground_loc)})",
+            "ground = bpy.context.active_object",
+            "ground.name = 'ForgeLab_Ground'",
+            "ground.data.materials.append(_ground_mat)",
+        ]
+
+    def _render_output(self) -> list[str]:
+        return [
+            "# --- render to <script>_render.png next to this script ---",
+            "try:",
+            "    _script_path = __file__",
+            "except NameError:",
+            "    _script_path = bpy.data.filepath or 'forgelab_scene.py'",
+            "scene.render.filepath = _script_path.replace('.py', '_render.png')",
+            "bpy.ops.render.render(write_still=True)",
         ]
