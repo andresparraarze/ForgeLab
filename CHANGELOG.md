@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Component library (`forgelab/components/`): 29 pre-built hardware component
+  definitions across five categories (microcontrollers, regulators, USB,
+  passives, connectors) so agents reference known-good parts instead of
+  inventing footprints. Each definition pairs a real KiCad footprint with
+  datasheet-accurate pad positions — TQFP/QFP parts (ATmega328P, ATmega2560)
+  use the same deterministic geometry as `calculate_pad_positions`; everything
+  else carries hand-specified positions. Two MCP tools (forge:read):
+  `list_components` returns all names grouped by category, and `get_component`
+  returns a part's full definition (`value`, `footprint`, `description`, `pads`)
+  ready to merge with a reference/layer/position into a hardware `component`
+  node.
 - `generate_bom` MCP tool (forge:read): extracts a bill of materials from a
   hardware document. Walks `component` nodes, pulling each one's reference,
   value, footprint, and the unique net names connected to its pads, then groups

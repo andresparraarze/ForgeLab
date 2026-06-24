@@ -20,6 +20,8 @@ _TOOLS = [
     tools.diff_documents,
     tools.verify_sync,
     tools.generate_bom,
+    tools.list_components,
+    tools.get_component,
     tools.create_project,
     tools.load_project,
     tools.update_project,

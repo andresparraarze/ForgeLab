@@ -33,6 +33,8 @@ from forgelab.calc import (
 from forgelab.calc import (
     calculate_trace_width as _calc_trace_width,
 )
+from forgelab.components import get_component as _get_component
+from forgelab.components import list_components as _list_components
 from forgelab.core import LLMOutputError, UnknownToolError, default_registry, validate
 from forgelab.core import validate as _core_validate
 from forgelab.mcp.auth_bridge import require_scope
@@ -547,6 +549,41 @@ def generate_bom(document_path: str, format: str = "json") -> dict[str, Any] | s
         for group in groups
     ]
     return {"total_components": total, "unique_parts": len(groups), "bom": bom}
+
+
+# --------------------------------------------------------------------------- #
+# Component library: pre-built footprint + pad-geometry definitions an agent can
+# drop into a hardware document instead of inventing footprints.
+# --------------------------------------------------------------------------- #
+def list_components() -> dict[str, list[str]]:
+    """List every pre-built component, grouped by category.
+
+    Returns a mapping of category name (``"Microcontrollers"``, ``"Regulators"``,
+    ``"USB"``, ``"Passives"``, ``"Connectors"``) to the component names in it.
+    Pass a name to ``get_component`` for its full definition.
+    """
+    require_scope("forge:read")
+    return _list_components()
+
+
+def get_component(name: str) -> dict[str, Any]:
+    """Return a pre-built component definition ready for a hardware document.
+
+    Looks ``name`` up in the component library (case-insensitive) and returns
+    ``{"name", "category", "value", "footprint", "description", "pads"}``, where
+    ``pads`` is a list of ``{"number", "at": [x, y]}`` with datasheet-accurate
+    positions (TQFP/QFP parts use the same geometry as ``calculate_pad_positions``).
+
+    The definition is footprint-level: merge it with a ``reference``, a ``layer``
+    (e.g. ``"F.Cu"``) and a board ``at`` to form a hardware ``component`` node.
+    Call ``list_components`` for the available names.
+    """
+    require_scope("forge:read")
+    try:
+        return _get_component(name)
+    except KeyError as exc:
+        available = sorted(n for names in _list_components().values() for n in names)
+        raise ValueError(f"unknown component {name!r}; available: {', '.join(available)}") from exc
 
 
 # --------------------------------------------------------------------------- #
