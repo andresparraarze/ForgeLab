@@ -228,10 +228,15 @@ def _product_scene_src():
     return _export([_scene(), mesh, _object("Cube", "m")])
 
 
-def test_world_uses_nishita_sky_texture():
+def test_world_uses_daylight_sky_texture():
     src = _product_scene_src()
     assert "ShaderNodeTexSky" in src
-    assert "'NISHITA'" in src
+    # HOSEK_WILKIE is the primary sky type (Nishita was removed in Blender 5.x);
+    # PREETHAM is the fallback, so it must come after.
+    assert "_w_sky.sky_type = 'HOSEK_WILKIE'" in src
+    assert "_w_sky.sky_type = 'PREETHAM'" in src
+    assert src.index("'HOSEK_WILKIE'") < src.index("'PREETHAM'")
+    assert "'NISHITA'" not in src
     assert "_w_sky.sun_elevation = math.radians(45.0)" in src
     assert "_w_sky.sun_rotation = math.radians(30.0)" in src
     # Background strength is the world strength.

@@ -230,7 +230,7 @@ class BlenderScriptExporter(Exporter):
         lines.append("bpy.context.view_layer.update()")
         lines.append(
             f'print("ForgeLab: built scene {scene_name!r} with "'
-            f' "{n_objects} object(s), {len(materials)} material(s), a Nishita-sky world, "'
+            f' "{n_objects} object(s), {len(materials)} material(s), a daylight-sky world, "'
             f' "a ground plane, an 85mm product-shot camera and three-point lighting")'
         )
         lines.append("")
@@ -456,11 +456,11 @@ class BlenderScriptExporter(Exporter):
         ]
 
     def _world_sky(self) -> list[str]:
-        # We can't embed a real HDRI, so stand in with a procedural Nishita sky
+        # We can't embed a real HDRI, so stand in with a procedural daylight sky
         # wired through a Background node (the Environment-Texture slot's role).
         return [
             "",
-            "# --- world: procedural Nishita sky (HDRI stand-in), strength 1.0 ---",
+            "# --- world: procedural daylight sky (HDRI stand-in), strength 1.0 ---",
             "world = bpy.data.worlds.new('ForgeLab_World')",
             "scene.world = world",
             "world.use_nodes = True",
@@ -471,9 +471,21 @@ class BlenderScriptExporter(Exporter):
             "_w_bg = _wnodes.new('ShaderNodeBackground')",
             "_w_bg.inputs['Strength'].default_value = 1.0",
             "_w_sky = _wnodes.new('ShaderNodeTexSky')",
-            "_w_sky.sky_type = 'NISHITA'",
-            "_w_sky.sun_elevation = math.radians(45.0)",
-            "_w_sky.sun_rotation = math.radians(30.0)",
+            "# Sky type: prefer HOSEK_WILKIE (closest to Nishita's realistic daylight,",
+            "# and Nishita was removed in Blender 5.x); fall back to PREETHAM, else skip.",
+            "try:",
+            "    _w_sky.sky_type = 'HOSEK_WILKIE'",
+            "except (TypeError, AttributeError):",
+            "    try:",
+            "        _w_sky.sky_type = 'PREETHAM'",
+            "    except (TypeError, AttributeError):",
+            "        pass",
+            "# Sun angle props are Nishita-era; guard them for non-Nishita sky types.",
+            "try:",
+            "    _w_sky.sun_elevation = math.radians(45.0)",
+            "    _w_sky.sun_rotation = math.radians(30.0)",
+            "except (TypeError, AttributeError):",
+            "    pass",
             "_wlinks.new(_w_sky.outputs['Color'], _w_bg.inputs['Color'])",
             "_wlinks.new(_w_bg.outputs['Background'], _w_out.inputs['Surface'])",
         ]
