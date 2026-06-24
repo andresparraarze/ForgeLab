@@ -278,6 +278,26 @@ _LIBRARY: dict[str, dict[str, dict[str, Any]]] = {
             "LED", "LED_SMD:LED_0805_2012Metric", "LED, 0805 (2012 metric)", _two_pad(2.0)
         ),
     },
+    "Sensors": {
+        "DHT22": _component(
+            "DHT22",
+            "Sensor:Aosong_DHT22_AM2302_P2.54mm",
+            "Temperature/humidity sensor, 4-pin SIP (VCC/DATA/NC/GND, 2.54mm pitch)",
+            _inline(4, 2.54),
+        ),
+        "BME280": _component(
+            "BME280",
+            "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering",
+            "Environmental sensor (pressure/temp/humidity), LGA-8 2.5x2.5mm",
+            _dual_row(8, 0.65, 2.4),
+        ),
+        "SCD40": _component(
+            "SCD40",
+            "Package_DFN_QFN:Sensirion_DFN-10_2.0x2.5mm_P0.5mm",
+            "CO2/temperature/humidity sensor, DFN-10 2.0x2.5mm",
+            _dual_row(10, 0.5, 1.6),
+        ),
+    },
     "Connectors": {
         **{
             f"PinHeader-1x{n}": _component(

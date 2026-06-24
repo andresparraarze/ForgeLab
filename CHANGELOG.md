@@ -19,9 +19,16 @@ All notable changes to this project are documented here. The format is based on
   closing `bpy.ops.render.render(write_still=True)` that writes
   `<script>_render.png` so running the script also produces a render.
 
+### Fixed
+- A hardware component `at` of `[x, y]` is now accepted as shorthand for
+  `[x, y, 0]` (an implicit zero rotation) instead of failing validation, so the
+  KiCad exporter places such components at rotation 0 rather than raising.
+
 ### Added
-- Component library (`forgelab/components/`): 29 pre-built hardware component
-  definitions across five categories (microcontrollers, regulators, USB,
+- Three environmental sensors in the component library: DHT22 (4-pin 2.54mm
+  SIP), BME280 (LGA-8) and SCD40 (DFN-10), under a new **Sensors** category.
+- Component library (`forgelab/components/`): 32 pre-built hardware component
+  definitions across six categories (microcontrollers, regulators, USB, sensors,
   passives, connectors) so agents reference known-good parts instead of
   inventing footprints. Each definition pairs a real KiCad footprint with
   datasheet-accurate pad positions — TQFP/QFP parts (ATmega328P, ATmega2560)

@@ -36,14 +36,20 @@ def test_component_roundtrips_through_dict():
     assert restored.pads[0].net == "LED_A"
 
 
-def test_component_at_must_have_three_values():
+def test_component_at_xy_is_normalized_to_zero_rotation():
+    # [x, y] is shorthand for [x, y, 0] (an implicit zero rotation).
+    comp = Component(reference="R1", value="330R", footprint="x", layer="F.Cu", at=[1.0, 2.0])
+    assert comp.at == [1.0, 2.0, 0.0]
+
+
+def test_component_at_rejects_wrong_length():
     with pytest.raises(ValidationError):
         Component(
             reference="R1",
             value="330R",
             footprint="x",
             layer="F.Cu",
-            at=[1.0, 2.0],
+            at=[1.0, 2.0, 3.0, 4.0],
         )
 
 
