@@ -26,6 +26,15 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Design history tracking for documents and projects. The write tools
+  (`patch_document`, `export_document`, `export_project`, `update_project`) append
+  a timestamped entry to a `.forge.history` JSON array beside the file they touch
+  (newest last, capped at 100 entries; best-effort — a failed history write never
+  blocks the tool). Two new MCP tools (forge:read): `get_history(path)` returns
+  the last 20 entries with a per-entry summary (empty when no history exists yet),
+  and `get_project_summary(project_path)` returns a quick status — name,
+  documents, shared dimensions, last-modified timestamp, export count, total
+  changes — without loading any document.
 - Hardware engineering-rule validation (`forgelab/validation/hardware.py`,
   `check_hardware`), run automatically inside `validate_document` for hardware
   documents alongside the mechanical checks. Warnings (non-fatal): an LED with no

@@ -13,11 +13,13 @@ import io
 import json
 import os
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
+from forgelab import history as _history
 from forgelab.calc import (
     calculate_board_layout as _calc_board_layout,
 )
@@ -355,6 +357,15 @@ def patch_document(
         target.write_text(json.dumps(patched, indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
         raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
+    _history.record(
+        target,
+        {
+            "tool": "patch_document",
+            "document_path": str(target),
+            "operations": len(patch) if isinstance(patch, list) else 0,
+            "nodes_changed": nodes_changed,
+        },
+    )
     return {
         "patched": True,
         "document_path": str(target),
@@ -752,6 +763,14 @@ def update_project(
         target.write_text(dump_project(project_model), encoding="utf-8")
     except OSError as exc:
         raise ValueError(f"could not write project {str(target)!r}: {exc}") from exc
+    _history.record(
+        target,
+        {
+            "tool": "update_project",
+            "project_path": str(target),
+            "updated": sorted(updated),
+        },
+    )
     result: dict[str, Any] = {
         "project_path": str(target),
         "shared": dict(project_model.shared),
@@ -866,14 +885,124 @@ def export_project(
         exported.append(entry)
 
     reports = check_constraints(project_model, loaded)
+    exported_ok = [e for e in exported if e.get("exported")]
+    if exported_ok:
+        _history.record(
+            target,
+            {
+                "tool": "export_project",
+                "project_path": str(target),
+                "documents": [e["document"] for e in exported_ok],
+                "tools": sorted({e["tool"] for e in exported_ok if e.get("tool")}),
+            },
+        )
     return {
         "project_path": str(target),
         "name": project_model.name,
         "output_dir": str(out_base),
         "exported": exported,
-        "exported_count": sum(1 for e in exported if e.get("exported")),
+        "exported_count": len(exported_ok),
         "constraints": reports,
         "violations": [r for r in reports if not r["satisfied"]],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Design history: a .forge.history sidecar records every write so agents and
+# users can see what changed between versions.
+# --------------------------------------------------------------------------- #
+def _history_summary(entry: dict[str, Any]) -> str:
+    """A one-line, human-readable summary of a history entry."""
+    tool = entry.get("tool", "?")
+    if tool == "patch_document":
+        return (
+            f"patched {entry.get('document_path')}: "
+            f"{entry.get('operations', 0)} op(s), "
+            f"{entry.get('nodes_changed', 0)} node(s) changed"
+        )
+    if tool == "export_document":
+        return (
+            f"exported {entry.get('document_path')} -> {entry.get('output_tool')} "
+            f"({entry.get('bytes_written', 0)} bytes) at {entry.get('output_path')}"
+        )
+    if tool == "export_project":
+        docs = entry.get("documents") or []
+        tools_used = entry.get("tools") or []
+        return (
+            f"exported project {entry.get('project_path')}: "
+            f"{len(docs)} document(s) via {', '.join(tools_used) or 'n/a'}"
+        )
+    if tool == "update_project":
+        keys = entry.get("updated") or []
+        return f"updated shared dims on {entry.get('project_path')}: {', '.join(keys) or 'none'}"
+    return tool
+
+
+def get_history(path: str) -> list[dict[str, Any]]:
+    """Return the recent change history for a document or project.
+
+    Finds the ``.forge.history`` file beside ``path`` (a bare filename resolves
+    against ``FORGELAB_OUTPUT_DIR``) and returns the last 20 entries, newest last,
+    each as ``{"timestamp", "tool", "summary"}``. Returns an empty list when no
+    history file exists yet.
+    """
+    require_scope("forge:read")
+    target = _resolve_path(path)
+    entries = _history.read_history(target)
+    return [
+        {
+            "timestamp": entry.get("timestamp"),
+            "tool": entry.get("tool"),
+            "summary": _history_summary(entry),
+        }
+        for entry in entries[-20:]
+    ]
+
+
+def get_project_summary(project_path: str) -> dict[str, Any]:
+    """Return a quick, human-readable status of a project without loading docs.
+
+    Reads the ``.forge.project`` file and its sibling ``.forge.history`` and
+    returns the project name, description, linked documents, shared dimensions,
+    last-modified timestamp, export count and total change count — a status check
+    that never opens any document. A bare filename resolves against
+    ``FORGELAB_OUTPUT_DIR``.
+
+    Returns ``{"name", "description", "documents", "shared", "last_modified",
+    "export_count", "total_changes", "summary"}``.
+    """
+    require_scope("forge:read")
+    target = _resolve_path(project_path)
+    project_model = load_project_file(target)
+    entries = _history.read_history(target)
+    export_count = sum(1 for e in entries if e.get("tool") in ("export_document", "export_project"))
+    if entries:
+        last_modified = entries[-1].get("timestamp")
+    else:
+        try:
+            mtime = target.stat().st_mtime
+            last_modified = datetime.fromtimestamp(mtime, tz=UTC).isoformat()
+        except OSError:
+            last_modified = None
+
+    documents = dict(project_model.documents)
+    shared = dict(project_model.shared)
+    dims = ", ".join(f"{k}={v}" for k, v in shared.items()) or "none"
+    summary = (
+        f"Project {project_model.name!r}: {len(documents)} document(s) "
+        f"({', '.join(documents) or 'none'}); shared dims: {dims}; "
+        f"{export_count} export(s), {len(entries)} total change(s); "
+        f"last modified {last_modified or 'never'}"
+    )
+    return {
+        "name": project_model.name,
+        "description": project_model.description,
+        "documents": documents,
+        "shared": shared,
+        "last_modified": last_modified,
+        "export_count": export_count,
+        "total_changes": len(entries),
+        "summary": summary,
     }
 
 
@@ -1090,6 +1219,17 @@ def export_document(
         except OSError as exc:
             raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
         written = {"path": str(target), "bytes_written": len(data)}
+        anchor = _resolve_path(document_path) if document_path else target
+        _history.record(
+            anchor,
+            {
+                "tool": "export_document",
+                "document_path": str(_resolve_path(document_path)) if document_path else None,
+                "output_tool": tool,
+                "output_path": written["path"],
+                "bytes_written": written["bytes_written"],
+            },
+        )
     if projection is not None:
         # The full export ran; return a lightweight projected view, not the bytes.
         response: dict[str, Any] = {"tool": tool, "exported": True}
