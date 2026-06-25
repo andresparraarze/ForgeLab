@@ -19,6 +19,8 @@ _EXPECTED = {
     "load_project",
     "update_project",
     "export_project",
+    "get_history",
+    "get_project_summary",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",

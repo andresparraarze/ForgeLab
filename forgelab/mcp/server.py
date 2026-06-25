@@ -26,6 +26,8 @@ _TOOLS = [
     tools.load_project,
     tools.update_project,
     tools.export_project,
+    tools.get_history,
+    tools.get_project_summary,
     tools.get_projection_schema,
     tools.calculate_pad_positions,
     tools.calculate_polygon,
