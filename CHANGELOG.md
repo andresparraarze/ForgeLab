@@ -26,6 +26,14 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Hardware engineering-rule validation (`forgelab/validation/hardware.py`,
+  `check_hardware`), run automatically inside `validate_document` for hardware
+  documents alongside the mechanical checks. Warnings (non-fatal): an LED with no
+  series current-limiting resistor, a power net (VCC/3V3/5V/VBUS/VDD) with no
+  decoupling capacitor, a capacitor whose voltage rating is under 2× the supply
+  inferred from a net name, and a board with no outline. Error (fatal): a
+  component pad referencing a net not in the net list. Non-hardware documents
+  return no findings.
 - Three environmental sensors in the component library: DHT22 (4-pin 2.54mm
   SIP), BME280 (LGA-8) and SCD40 (DFN-10), under a new **Sensors** category.
 - Component library (`forgelab/components/`): 32 pre-built hardware component
