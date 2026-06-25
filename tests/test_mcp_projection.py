@@ -19,7 +19,12 @@ def _hardware_doc():
                     "kicad_version": "20240108",
                     "generator": "test",
                     "layers": [],
-                    "outline": [],
+                    "outline": [
+                        {"start": [0.0, 0.0], "end": [10.0, 0.0]},
+                        {"start": [10.0, 0.0], "end": [10.0, 10.0]},
+                        {"start": [10.0, 10.0], "end": [0.0, 10.0]},
+                        {"start": [0.0, 10.0], "end": [0.0, 0.0]},
+                    ],
                     "design_rules": {
                         "clearance": 0.2,
                         "track_width": 0.25,

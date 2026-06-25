@@ -54,7 +54,7 @@ from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 from forgelab.sdk.validation import _extract_json
 from forgelab.sync import document_hash, read_native_hash, tool_for_path
-from forgelab.validation import check_mechanical
+from forgelab.validation import check_hardware, check_mechanical
 
 _registry = default_registry()
 
@@ -128,12 +128,14 @@ def validate_document(
     agent ever loading the JSON into its context. A bare filename resolves against
     ``FORGELAB_OUTPUT_DIR``. Exactly one of the two must be given.
 
-    For mechanical documents, lightweight constraint sanity checks run after the
-    structural check (sketch closure, positive pad length, pocket depth bounds,
-    positive circle radius, body-reference consistency). Fatal problems become
-    ``error`` (and ``valid`` is False); non-fatal ones are returned in
-    ``warnings`` without affecting ``valid``. These checks are skipped for the
-    hardware and threed domains.
+    Domain sanity checks run after the structural check. Mechanical documents get
+    geometry/feature checks (sketch closure, positive pad length, pocket depth
+    bounds, positive circle radius, body-reference consistency); hardware
+    documents get engineering-rule checks (LED series resistor, power-net
+    decoupling, capacitor voltage rating, undefined net references, board
+    outline). Fatal problems become ``error`` (and ``valid`` is False); non-fatal
+    ones are returned in ``warnings`` without affecting ``valid``. The threed
+    domain has no extra checks.
 
     projection: when set to a projection level (``metadata``, ``topology``,
     ``geometry`` or ``full``), a successful validation also returns a
@@ -151,8 +153,12 @@ def validate_document(
         return {"valid": False, "error": str(exc)}
 
     # Domain sanity checks layer on top of structural validation. Errors are
-    # fatal (valid=False); warnings are surfaced but non-fatal.
+    # fatal (valid=False); warnings are surfaced but non-fatal. Each check gates
+    # on its own domain and returns ([], []) otherwise, so both run safely.
     errors, warnings = check_mechanical(document_model)
+    h_errors, h_warnings = check_hardware(document_model)
+    errors += h_errors
+    warnings += h_warnings
     if errors:
         result: dict[str, Any] = {"valid": False, "error": "; ".join(errors)}
         if warnings:
