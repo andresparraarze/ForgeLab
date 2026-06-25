@@ -148,6 +148,15 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
                 f"via_drill {via_drill}mm is below {fab} minimum via drill "
                 f"{profile['min_via_drill']}mm"
             )
+        # drill_size is optional; only check it when both the document carries it
+        # and the profile defines a minimum.
+        drill_size = rules.get("drill_size")
+        if drill_size is not None and "min_drill_size" in profile:
+            if _below(float(drill_size), profile["min_drill_size"]):
+                errors.append(
+                    f"drill_size {float(drill_size)}mm is below {fab} minimum drill size "
+                    f"{profile['min_drill_size']}mm"
+                )
 
     # Board-size envelope — only when the profile defines limits and there is an
     # outline to measure.
