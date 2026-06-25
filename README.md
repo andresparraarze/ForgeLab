@@ -73,7 +73,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ## MCP tools
 
-Twenty-nine tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Thirty-one tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -98,6 +98,8 @@ Twenty-nine tools, same for every client. Over stdio all are local; over HTTP ea
 | `diff_documents` | RFC 6902 patch transforming document A into B |
 | `verify_sync` | Check a native file is still in sync with its source document |
 | `generate_bom` | Bill of materials from a hardware document (JSON or CSV) |
+| `check_fabrication` | Validate a board against a PCB fab's rules (JLCPCB/PCBWay/OSH Park) |
+| `list_fab_profiles` | Available fab profiles and their key constraints |
 
 ### Project
 
