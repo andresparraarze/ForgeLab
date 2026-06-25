@@ -26,6 +26,15 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Fabrication rule validation (`forgelab/validation/fabrication.py`): named PCB
+  fab profiles (`jlcpcb`, `pcbway`, `oshpark`) and `check_fab_rules(document,
+  fab='jlcpcb')`, which validates a hardware document's `design_rules` (trace
+  width, via diameter, via drill) and board-outline size envelope against the
+  profile and returns `{fab, passed, errors, warnings}`. Two MCP tools
+  (forge:read): `check_fabrication(document_path, fab='jlcpcb')` and
+  `list_fab_profiles()`. `validate_document` also runs the default (`jlcpcb`)
+  fab check on any hardware board with `design_rules` and surfaces violations as
+  warnings (not errors, since the target fab may differ).
 - Design history tracking for documents and projects. The write tools
   (`patch_document`, `export_document`, `export_project`, `update_project`) append
   a timestamped entry to a `.forge.history` JSON array beside the file they touch

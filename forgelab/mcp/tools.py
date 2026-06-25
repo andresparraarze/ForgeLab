@@ -56,7 +56,12 @@ from forgelab.projection import PROJECTION_LEVELS, project, projection_schema
 from forgelab.sdk import DOMAIN_VOCAB, ForgeAgent, domain_schema, few_shot, system_prompt
 from forgelab.sdk.validation import _extract_json
 from forgelab.sync import document_hash, read_native_hash, tool_for_path
-from forgelab.validation import check_hardware, check_mechanical
+from forgelab.validation import (
+    check_fab_rules,
+    check_hardware,
+    check_mechanical,
+    fab_profiles,
+)
 
 _registry = default_registry()
 
@@ -161,6 +166,11 @@ def validate_document(
     h_errors, h_warnings = check_hardware(document_model)
     errors += h_errors
     warnings += h_warnings
+    # Fabrication rules are advisory here: a hardware board with design_rules is
+    # checked against the default fab (jlcpcb) and any violations are surfaced as
+    # warnings, since the user may be targeting a different fab. Use the
+    # check_fabrication tool to validate against a specific fab.
+    warnings += _fab_warnings(document_model)
     if errors:
         result: dict[str, Any] = {"valid": False, "error": "; ".join(errors)}
         if warnings:
@@ -1004,6 +1014,61 @@ def get_project_summary(project_path: str) -> dict[str, Any]:
         "total_changes": len(entries),
         "summary": summary,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Fabrication rule checks: validate a hardware design against a PCB fab's limits.
+# --------------------------------------------------------------------------- #
+_DEFAULT_FAB = "jlcpcb"
+
+
+def _fab_warnings(document_model: Any) -> list[str]:
+    """Default-fab violations as warning strings, only when design_rules exist."""
+    if str(document_model.domain) != "hardware":
+        return []
+    has_rules = any(
+        node.type == "board" and isinstance(node.props.get("design_rules"), dict)
+        for node in document_model.walk()
+    )
+    if not has_rules:
+        return []
+    result = check_fab_rules(document_model, _DEFAULT_FAB)
+    return [f"fab({_DEFAULT_FAB}): {e}" for e in result["errors"]]
+
+
+def check_fabrication(document_path: str, fab: str = _DEFAULT_FAB) -> dict[str, Any]:
+    """Check a hardware document against a PCB fab's manufacturing rules.
+
+    Reads the ``.forge.json`` (a bare filename resolves against
+    ``FORGELAB_OUTPUT_DIR``) and validates its board ``design_rules`` and outline
+    against the named fab profile — minimum trace width, via diameter, via drill,
+    and the board-size envelope. Call ``list_fab_profiles`` for the available fab
+    names (e.g. ``jlcpcb``, ``pcbway``, ``oshpark``).
+
+    Returns ``{"fab", "passed", "errors", "warnings"}``: ``errors`` are hard rule
+    violations the fab would reject; ``warnings`` flag things that could not be
+    checked (e.g. no outline to measure). A non-hardware document passes with
+    empty lists.
+    """
+    require_scope("forge:read")
+    source = _read_document_file(document_path)
+    try:
+        model = _core_validate(source)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    return check_fab_rules(model, fab)
+
+
+def list_fab_profiles() -> dict[str, dict[str, float]]:
+    """List the available PCB fab profiles and their key constraints.
+
+    Returns a mapping of fab name (``jlcpcb``, ``pcbway``, ``oshpark``) to its
+    constraint table (minimum trace width/spacing, via diameter/drill, drill
+    size, and board-size limits, in millimetres) so an agent can pick a fab and
+    see its limits without guessing.
+    """
+    require_scope("forge:read")
+    return fab_profiles()
 
 
 # --------------------------------------------------------------------------- #

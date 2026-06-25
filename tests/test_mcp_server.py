@@ -21,6 +21,8 @@ _EXPECTED = {
     "export_project",
     "get_history",
     "get_project_summary",
+    "check_fabrication",
+    "list_fab_profiles",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",
