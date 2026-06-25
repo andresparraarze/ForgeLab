@@ -125,6 +125,10 @@ class DesignRules(BaseModel):
     track_width: float
     via_diameter: float
     via_drill: float
+    drill_size: float | None = Field(
+        default=None,
+        description="Smallest mechanical drill (hole) size on the board, in millimetres.",
+    )
 
 
 class BoardConstraints(BaseModel):

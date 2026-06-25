@@ -26,7 +26,16 @@ def _doc(
     width=68.58,
     height=53.34,
     domain="hardware",
+    drill_size=None,
 ):
+    design_rules = {
+        "clearance": 0.2,
+        "track_width": track_width,
+        "via_diameter": via_diameter,
+        "via_drill": via_drill,
+    }
+    if drill_size is not None:
+        design_rules["drill_size"] = drill_size
     return validate(
         {
             "forgelab_version": SPEC_VERSION,
@@ -40,12 +49,7 @@ def _doc(
                         "kicad_version": "20221018",
                         "generator": "forgelab",
                         "outline": _rect_outline(width, height),
-                        "design_rules": {
-                            "clearance": 0.2,
-                            "track_width": track_width,
-                            "via_diameter": via_diameter,
-                            "via_drill": via_drill,
-                        },
+                        "design_rules": design_rules,
                     },
                 },
                 {"id": "net1", "type": "net", "props": {"code": 1, "name": "GND"}},
@@ -109,6 +113,29 @@ def test_oshpark_has_no_board_size_limit():
     # OSH Park profile defines no board-size envelope, so a huge board passes.
     result = check_fab_rules(_doc(width=1000.0, height=1000.0), "oshpark")
     assert result["passed"] is True
+
+
+def test_drill_size_pass_when_at_or_above_minimum():
+    # 0.3mm >= JLCPCB's 0.2mm minimum drill size.
+    assert check_fab_rules(_doc(drill_size=0.3), "jlcpcb")["passed"] is True
+
+
+def test_drill_size_fail_below_minimum():
+    result = check_fab_rules(_doc(drill_size=0.15), "jlcpcb")
+    assert result["passed"] is False
+    assert any("drill size" in e for e in result["errors"])
+
+
+def test_drill_size_absent_is_not_checked():
+    # No drill_size in the document => the optional check is skipped, board passes.
+    result = check_fab_rules(_doc(), "jlcpcb")
+    assert result["passed"] is True
+    assert not any("drill size" in e for e in result["errors"])
+
+
+def test_drill_size_ignored_by_profile_without_limit():
+    # OSH Park profile has no min_drill_size, so even a tiny drill passes.
+    assert check_fab_rules(_doc(drill_size=0.05), "oshpark")["passed"] is True
 
 
 def test_unknown_fab_raises():

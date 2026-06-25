@@ -76,7 +76,8 @@
           "clearance": 0.2,
           "track_width": 0.25,
           "via_diameter": 0.8,
-          "via_drill": 0.4
+          "via_drill": 0.4,
+          "drill_size": 0.3
         }
       }
     },
