@@ -28,15 +28,23 @@ from forgelab.spec import (
 )
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_FILLET,
+    NODE_LOFT,
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_SHELL,
     NODE_SKETCH,
+    NODE_SWEEP,
     Body,
+    Fillet,
+    Loft,
     Pad,
     Part,
     Pocket,
+    Shell,
     Sketch,
+    Sweep,
 )
 from forgelab.spec.version import SPEC_VERSION
 
@@ -58,6 +66,10 @@ DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
         NODE_SKETCH: Sketch,
         NODE_PAD: Pad,
         NODE_POCKET: Pocket,
+        NODE_LOFT: Loft,
+        NODE_SWEEP: Sweep,
+        NODE_FILLET: Fillet,
+        NODE_SHELL: Shell,
     },
 }
 

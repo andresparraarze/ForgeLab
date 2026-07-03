@@ -53,6 +53,25 @@ _REFERENCE_HINTS: dict[str, str] = {
         "Y-up and Blender's importer converts Y-up back to its own Z-up world, "
         "so a Z-up document gets double-converted and lands tipped on its side."
     ),
+    "mechanical": (
+        "Two modelling toolkits are available. PartDesign (sketch/pad/pocket) "
+        "is for prismatic engineering parts — brackets, mounts, plates, "
+        "enclosures — built by extruding and cutting closed 2D profiles. The "
+        "Part workbench (loft/sweep/fillet/shell) is for organic or curved "
+        "shapes — grips, handles, ergonomic surfaces — where FreeCAD's OCC "
+        "kernel computes real NURBS geometry. The canonical organic pattern "
+        "(see examples/mechanical/organic_grip.forge.json) is: stack several "
+        "circle-profile sketches along the loft axis by giving each sketch a "
+        "placement position [0, 0, z], loft through them in order via a loft "
+        'node\'s "profiles" list (sketch node ids, at least 2), then soften '
+        'the result with a fillet node whose "target" is the loft (omit '
+        '"edges" to round every edge). Use sweep to drive a profile sketch '
+        "along a path sketch, and shell to hollow a solid — list the faces to "
+        'leave open in "faces_to_remove" (at least one face must stay open '
+        "for the kernel to hollow it). Reach for loft/sweep/fillet/shell only "
+        "when the shape genuinely curves; prismatic parts stay in "
+        "sketch/pad/pocket."
+    ),
 }
 
 

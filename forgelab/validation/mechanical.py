@@ -14,12 +14,29 @@ inspectable here.
 from __future__ import annotations
 
 from forgelab.spec import Domain, ForgeDocument
-from forgelab.spec.mechanical import NODE_BODY, NODE_PAD, NODE_POCKET, NODE_SKETCH
+from forgelab.spec.mechanical import (
+    NODE_BODY,
+    NODE_FILLET,
+    NODE_LOFT,
+    NODE_PAD,
+    NODE_POCKET,
+    NODE_SHELL,
+    NODE_SKETCH,
+    NODE_SWEEP,
+)
 
 # Endpoints within this distance (mm) are treated as the same vertex.
 _CLOSURE_TOL = 0.001
 
-_FEATURE_TYPES = (NODE_SKETCH, NODE_PAD, NODE_POCKET)
+_FEATURE_TYPES = (
+    NODE_SKETCH,
+    NODE_PAD,
+    NODE_POCKET,
+    NODE_LOFT,
+    NODE_SWEEP,
+    NODE_FILLET,
+    NODE_SHELL,
+)
 
 
 def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
@@ -63,10 +80,17 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
                 f"which is not a body in the document"
             )
 
+    # Sketches referenced as a sweep path are deliberately open curves, so the
+    # closed-loop warning below does not apply to them.
+    sweep_path_refs = {str(n.props.get("path", "")) for n in nodes if n.type == NODE_SWEEP} - {""}
+
     # Sketch checks: circle radius positive (error) + line-loop closure (warn).
     for node in nodes:
         if node.type != NODE_SKETCH:
             continue
+        is_sweep_path = node.id in sweep_path_refs or (
+            str(node.props.get("name", "")) in sweep_path_refs
+        )
         geometry = node.props.get("geometry") or []
         lines: list[list[float]] = []
         for geo in geometry:
@@ -79,7 +103,7 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
                 points = geo.get("points") or []
                 if len(points) == 4:
                     lines.append([float(p) for p in points])
-        if lines and not _lines_form_closed_loop(lines):
+        if lines and not is_sweep_path and not _lines_form_closed_loop(lines):
             warnings.append(
                 f"sketch {node.id!r} line geometry is not a closed loop; "
                 f"an open profile cannot be padded"
@@ -113,6 +137,55 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
                 f"pocket {node.id!r} length {length} exceeds the available "
                 f"material {available} in its body"
             )
+
+    # Part-workbench feature checks: cross-references must resolve (like the
+    # body-reference check above, ids or display names both count) and the
+    # scalar parameters must be geometrically meaningful.
+    node_ids = {n.id for n in nodes}
+    node_names = {str(n.props.get("name", "")) for n in nodes} - {""}
+
+    def unresolved(ref: str) -> bool:
+        return ref not in node_ids and ref not in node_names
+
+    for node in nodes:
+        if node.type == NODE_LOFT:
+            profiles = node.props.get("profiles") or []
+            if len(profiles) < 2:
+                errors.append(
+                    f"loft {node.id!r} has {len(profiles)} profile(s); a loft needs at least 2"
+                )
+            for ref in profiles:
+                if unresolved(str(ref)):
+                    errors.append(
+                        f"loft {node.id!r} references profile {ref!r} "
+                        f"which does not exist in the document"
+                    )
+        elif node.type == NODE_SWEEP:
+            for role in ("profile", "path"):
+                ref = str(node.props.get(role, ""))
+                if unresolved(ref):
+                    errors.append(
+                        f"sweep {node.id!r} references {role} {ref!r} "
+                        f"which does not exist in the document"
+                    )
+        elif node.type == NODE_FILLET:
+            if float(node.props.get("radius", 0.0)) <= 0.0:
+                errors.append(f"fillet {node.id!r} has radius <= 0")
+            ref = str(node.props.get("target", ""))
+            if unresolved(ref):
+                errors.append(
+                    f"fillet {node.id!r} references target {ref!r} "
+                    f"which does not exist in the document"
+                )
+        elif node.type == NODE_SHELL:
+            if float(node.props.get("thickness", 0.0)) <= 0.0:
+                errors.append(f"shell {node.id!r} has thickness <= 0")
+            ref = str(node.props.get("target", ""))
+            if unresolved(ref):
+                errors.append(
+                    f"shell {node.id!r} references target {ref!r} "
+                    f"which does not exist in the document"
+                )
 
     return errors, warnings
 

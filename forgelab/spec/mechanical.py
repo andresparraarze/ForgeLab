@@ -22,6 +22,10 @@ NODE_BODY = "body"
 NODE_SKETCH = "sketch"
 NODE_PAD = "pad"
 NODE_POCKET = "pocket"
+NODE_LOFT = "loft"
+NODE_SWEEP = "sweep"
+NODE_FILLET = "fillet"
+NODE_SHELL = "shell"
 
 
 class Placement(BaseModel):
@@ -146,3 +150,75 @@ class Pocket(BaseModel):
     through_all: bool = False
     reversed: bool = False
     midplane: bool = False
+
+
+class Loft(BaseModel):
+    """A loft feature: blend a solid through ordered profile sketches (Part::Loft).
+
+    The Part workbench (OCC kernel) computes the real NURBS surface on
+    recompute — this model only carries the parametric description. ``ruled``
+    False gives a smooth blended surface between profiles; True gives straight
+    line segments. ``closed`` True joins the last profile back to the first.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    profiles: list[str] = Field(
+        default_factory=list,
+        description="Ordered sketch node ids to loft through; at least 2 are required.",
+    )
+    ruled: bool = False
+    closed: bool = False
+
+
+class Sweep(BaseModel):
+    """A sweep feature: drive a profile along a path curve (Part::Sweep).
+
+    ``frenet`` True keeps the profile orientation following the path's
+    curvature naturally.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    profile: str = ""
+    path: str = ""
+    frenet: bool = False
+
+
+class Fillet(BaseModel):
+    """A fillet feature: round the edges of a feature's solid (Part::Fillet).
+
+    ``edges`` lists 1-based OCC edge indices on the target's shape; when it is
+    omitted (None) every edge of the target is filleted — the common case for
+    rounding an entire body.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    target: str = ""
+    radius: float
+    edges: list[int] | None = None
+
+
+class Shell(BaseModel):
+    """A shell feature: hollow a solid to a wall thickness (Part::Thickness).
+
+    ``faces_to_remove`` lists 1-based OCC face indices to leave open (e.g. the
+    top face of an enclosure). NOTE: FreeCAD's kernel cannot hollow a solid
+    with no opening — a shell with no ``faces_to_remove`` exports but produces
+    a null shape on recompute, so in practice leave at least one face open.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    target: str = ""
+    thickness: float
+    faces_to_remove: list[int] | None = None

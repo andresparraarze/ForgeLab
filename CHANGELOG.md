@@ -26,6 +26,24 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Part-workbench feature support in the mechanical domain: four new node types
+  — `loft` (blend a solid through ordered profile sketches; `ruled` and
+  `closed` flags), `sweep` (drive a profile sketch along a path sketch;
+  `frenet` flag), `fillet` (round a target feature's edges at a radius;
+  `edges` optional — omitted means every edge, resolved analytically at export
+  time), and `shell` (hollow a target solid to a wall `thickness`;
+  `faces_to_remove` lists 1-based face indices to leave open). The FreeCAD
+  exporter emits the matching native objects (`Part::Loft`, `Part::Sweep`,
+  `Part::Fillet` with its binary `FilletEdges` archive entry, and
+  `Part::Thickness` with a negative offset — the FreeCAD convention for
+  hollowing inward, verified against FreeCAD 1.1); the exporter writes only
+  the parametric description and FreeCAD's own OpenCASCADE kernel computes the
+  real NURBS geometry on recompute. Constraint validation checks loft profile
+  count (>= 2), positive fillet radius / shell thickness, and that every
+  profile/path/target reference resolves. New worked example
+  `examples/mechanical/organic_grip.forge.json` (smooth handle: four stacked
+  circular profiles lofted then filleted) is referenced from the mechanical
+  system prompt as the canonical organic-shape pattern.
 - Fabrication rule validation (`forgelab/validation/fabrication.py`): named PCB
   fab profiles (`jlcpcb`, `pcbway`, `oshpark`) and `check_fab_rules(document,
   fab='jlcpcb')`, which validates a hardware document's `design_rules` (trace

@@ -100,6 +100,14 @@ def _encode_property(parent: ET.Element, prop: FcProperty) -> None:
                     "name": con.get("name", ""),
                 },
             )
+    elif prop.ptype == "StringList":
+        for item in prop.value:
+            ET.SubElement(el, "Item", {"value": str(item)})
+    elif prop.ptype == "IntList":
+        # None (property unset) is distinct from an empty list, so only a
+        # non-None value writes the ``values`` attribute.
+        if prop.value is not None:
+            el.set("values", ",".join(str(int(v)) for v in prop.value))
     else:
         raise FcstdError(f"Unsupported property type {prop.ptype!r}")
 
@@ -141,6 +149,11 @@ def _decode_property(el: ET.Element) -> FcProperty:
             }
             for c in el.findall("Constraint")
         ]
+    elif ptype == "StringList":
+        value = [item.get("value", "") for item in el.findall("Item")]
+    elif ptype == "IntList":
+        raw = el.get("values")
+        value = None if raw is None else [int(part) for part in raw.split(",") if part]
     else:
         raise FcstdError(f"Unsupported property type {ptype!r}")
     return FcProperty(name=name, ptype=ptype, value=value)

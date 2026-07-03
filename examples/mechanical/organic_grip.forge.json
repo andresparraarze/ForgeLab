@@ -1,0 +1,115 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "organic-grip",
+    "generator": "forgelab",
+    "description": "A smooth ergonomic handle/grip built with the Part workbench: four circular profile sketches stacked along Z with increasing then decreasing radius, blended into one solid by a smooth (non-ruled) loft, then softened with an all-edges fillet. This is the canonical pattern for organic curved shapes - controller grips, tool handles, ergonomic surfaces - where PartDesign's prismatic pad/pocket cannot produce the geometry. FreeCAD's own OCC kernel computes the real NURBS surface on recompute."
+  },
+  "nodes": [
+    {
+      "id": "grip_body",
+      "type": "body",
+      "props": {
+        "name": "GripBody"
+      }
+    },
+    {
+      "id": "profile_base",
+      "type": "sketch",
+      "props": {
+        "name": "ProfileBase",
+        "body": "grip_body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [0.0, 0.0, 0.0]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [0.0, 0.0],
+            "radius": 9.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile_swell",
+      "type": "sketch",
+      "props": {
+        "name": "ProfileSwell",
+        "body": "grip_body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [0.0, 0.0, 25.0]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [0.0, 0.0],
+            "radius": 13.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile_taper",
+      "type": "sketch",
+      "props": {
+        "name": "ProfileTaper",
+        "body": "grip_body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [0.0, 0.0, 50.0]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [0.0, 0.0],
+            "radius": 11.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile_top",
+      "type": "sketch",
+      "props": {
+        "name": "ProfileTop",
+        "body": "grip_body",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [0.0, 0.0, 72.0]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "center": [0.0, 0.0],
+            "radius": 7.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "grip_loft",
+      "type": "loft",
+      "props": {
+        "name": "GripLoft",
+        "body": "grip_body",
+        "profiles": ["profile_base", "profile_swell", "profile_taper", "profile_top"],
+        "ruled": false,
+        "closed": false
+      }
+    },
+    {
+      "id": "grip_fillet",
+      "type": "fillet",
+      "props": {
+        "name": "GripFillet",
+        "body": "grip_body",
+        "target": "grip_loft",
+        "radius": 2.0
+      }
+    }
+  ]
+}

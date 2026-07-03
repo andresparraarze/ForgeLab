@@ -24,21 +24,30 @@ from __future__ import annotations
 
 import math
 import re
+import struct
 from collections.abc import Sequence
 from typing import NamedTuple
 
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_FILLET,
+    NODE_LOFT,
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_SHELL,
     NODE_SKETCH,
+    NODE_SWEEP,
     Body,
+    Fillet,
+    Loft,
     Pad,
     Part,
     Placement,
     Pocket,
+    Shell,
     Sketch,
+    Sweep,
 )
 
 _FCTYPE = {
@@ -47,12 +56,19 @@ _FCTYPE = {
     NODE_SKETCH: "Sketcher::SketchObject",
     NODE_PAD: "PartDesign::Pad",
     NODE_POCKET: "PartDesign::Pocket",
+    NODE_LOFT: "Part::Loft",
+    NODE_SWEEP: "Part::Sweep",
+    NODE_FILLET: "Part::Fillet",
+    NODE_SHELL: "Part::Thickness",
 }
 
-_FEATURES = (NODE_SKETCH, NODE_PAD, NODE_POCKET)
+_FEATURES = (NODE_SKETCH, NODE_PAD, NODE_POCKET, NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL)
 _SOLID_FEATURES = (NODE_PAD, NODE_POCKET)
+# Part-workbench (OCC) features: not part of a PartDesign feature chain, so
+# they never carry BaseFeature links or become a body's Tip.
+_PART_FEATURES = (NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL)
 
-AnyModel = Part | Body | Sketch | Pad | Pocket
+AnyModel = Part | Body | Sketch | Pad | Pocket | Loft | Sweep | Fillet | Shell
 
 # Quaternion (x, y, z, w) for each datum plane, taken from FreeCAD 1.1 output.
 _PLANE_QUAT: dict[str, tuple[float, float, float, float]] = {
@@ -255,6 +271,69 @@ def _feature_props(
     ]
 
 
+def _link_sub(name: str, target: str, subs: Sequence[str]) -> str:
+    subs_xml = "".join(f'<Sub value="{s}"/>' for s in subs)
+    return _prop(
+        name,
+        "App::PropertyLinkSub",
+        f'<LinkSub value="{target}" count="{len(subs)}">{subs_xml}</LinkSub>',
+    )
+
+
+def _enum(name: str, value: int) -> str:
+    return _prop(name, "App::PropertyEnumeration", f'<Integer value="{value}"/>')
+
+
+def _identity_placement() -> str:
+    return _placement_xml((0.0, 0.0, 0.0), _IDENTITY_QUAT)
+
+
+def fillet_edges_blob(edges: Sequence[int], radius: float) -> bytes:
+    """Binary payload of a ``Part::PropertyFilletEdges`` archive entry.
+
+    Format (verified against FreeCAD 1.1 output): uint32 edge count, then per
+    edge int32 edge id + two float64 radii (start/end — equal for a constant
+    fillet). All little-endian.
+    """
+    blob = struct.pack("<I", len(edges))
+    for edge_id in edges:
+        blob += struct.pack("<idd", int(edge_id), float(radius), float(radius))
+    return blob
+
+
+def _profile_segments(sketch: Sketch) -> int:
+    """The number of boundary curve segments in a profile sketch."""
+    return max(1, len(sketch.geometry))
+
+
+def _estimate_edge_count(target: AnyModel, sketch_of: dict[str, Sketch]) -> int | None:
+    """Edge count of a feature's recomputed shape, from its parametric definition.
+
+    The exporter has no OCC kernel, so an all-edges fillet resolves the edge
+    ids analytically. Counts below were pinned down experimentally against
+    FreeCAD 1.1 for profiles of ``m`` curve segments (``k`` = section count):
+    a prism/sweep/smooth open loft has ``m`` edges per end cap plus ``m`` side
+    seams (3m); a ruled loft adds a ring of edges per intermediate section.
+    Returns None for target types whose edge count cannot be derived (e.g. a
+    pocketed solid) — those need an explicit ``edges`` list.
+    """
+    if isinstance(target, Loft):
+        first = sketch_of.get(target.profiles[0]) if target.profiles else None
+        if first is None:
+            return None
+        m, k = _profile_segments(first), len(target.profiles)
+        if target.closed:
+            return 2 * k * m if target.ruled else (k - 1) * m
+        return (2 * k - 1) * m if target.ruled else 3 * m
+    if isinstance(target, Sweep):
+        profile = sketch_of.get(target.profile)
+        return None if profile is None else 3 * _profile_segments(profile)
+    if isinstance(target, Pad):
+        profile = sketch_of.get(target.profile)
+        return None if profile is None else 3 * _profile_segments(profile)
+    return None
+
+
 # App::Part requires a linked App::Origin to recompute; PartDesign::Body
 # tolerates its absence. Standard origin feature set (type, role, quaternion),
 # quaternions taken verbatim from a FreeCAD 1.1-authored document.
@@ -365,6 +444,39 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             return name_of[sketches_of[body][0]]
         return ""
 
+    # Part-workbench features reference other features (loft profiles, a
+    # fillet/shell target, a sweep path) by node id or display name; resolve
+    # both, like body/profile links above.
+    model_of: dict[str, AnyModel] = {nid: model for nid, _, model in items}
+    label_to_id: dict[str, str] = {}
+    for nid, _ntype, model in items:
+        label = getattr(model, "name", "")
+        if label:
+            label_to_id.setdefault(label, nid)
+    sketch_model_of: dict[str, Sketch] = {}
+    for nid, _ntype, model in items:
+        if isinstance(model, Sketch):
+            sketch_model_of[nid] = model
+            if model.name:
+                sketch_model_of.setdefault(model.name, model)
+
+    def resolve_ref(ref: str) -> str | None:
+        if ref in model_of:
+            return ref
+        return label_to_id.get(ref)
+
+    def resolve_sketch_fcname(owner: str, role: str, ref: str) -> str:
+        rid = resolve_ref(ref)
+        if rid is None or not isinstance(model_of[rid], Sketch):
+            raise ValueError(f"{role} {ref!r} of {owner!r} is not a sketch in the document")
+        return name_of[rid]
+
+    def resolve_target(owner: str, ref: str) -> str:
+        rid = resolve_ref(ref)
+        if rid is None:
+            raise ValueError(f"target {ref!r} of {owner!r} does not exist in the document")
+        return rid
+
     bodies_of_part: dict[str, list[str]] = {}
     for nid, _ntype, model in items:
         if isinstance(model, Body) and model.part:
@@ -389,11 +501,25 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
     for solids in solids_of.values():
         if solids:
             visible_names.add(name_of[solids[-1]])
+    # Part-workbench features: show the terminal ones — a loft consumed by a
+    # fillet stays hidden, the fillet (the finished shape) is what renders.
+    part_feature_ids = [nid for nid, ntype, _ in items if ntype in _PART_FEATURES]
+    consumed: set[str] = set()
+    for nid in part_feature_ids:
+        model = model_of[nid]
+        if isinstance(model, Fillet | Shell):
+            target_id = resolve_ref(model.target)
+            if target_id is not None:
+                consumed.add(target_id)
+    for nid in part_feature_ids:
+        if nid not in consumed:
+            visible_names.add(name_of[nid])
     object_names: list[str] = []
 
     decls = []
     datas = []
     extra_objects: list[tuple[str, str, list[str]]] = []
+    files: dict[str, bytes] = {}
     for nid, ntype, model in items:
         fcname = name_of[nid]
         object_names.append(fcname)
@@ -455,6 +581,69 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 )
                 props.append(_prop("MapMode", "App::PropertyEnumeration", '<Integer value="5"/>'))
                 props.append(_attachment_offset(model.placement))
+        elif isinstance(model, Loft):
+            sections = [resolve_sketch_fcname(nid, "loft profile", p) for p in model.profiles]
+            props = [
+                _label(model.name),
+                _identity_placement(),
+                _link_list("Sections", sections),
+                _bool("Ruled", model.ruled),
+                _bool("Closed", model.closed),
+                _bool("Solid", True),
+            ]
+        elif isinstance(model, Sweep):
+            props = [
+                _label(model.name),
+                _identity_placement(),
+                _link_list(
+                    "Sections", [resolve_sketch_fcname(nid, "sweep profile", model.profile)]
+                ),
+                _link_sub("Spine", resolve_sketch_fcname(nid, "sweep path", model.path), []),
+                _bool("Frenet", model.frenet),
+                _bool("Solid", True),
+                # Transition 1 = right corner, FreeCAD's own default for new sweeps.
+                _enum("Transition", 1),
+            ]
+        elif isinstance(model, Fillet):
+            target_id = resolve_target(nid, model.target)
+            edges = model.edges
+            if edges is None:
+                count = _estimate_edge_count(model_of[target_id], sketch_model_of)
+                if count is None:
+                    raise ValueError(
+                        f"fillet {nid!r}: cannot derive the edge count of target "
+                        f"{model.target!r}; give an explicit 'edges' list"
+                    )
+                edges = list(range(1, count + 1))
+            entry = f"{fcname}.Edges"
+            files[entry] = fillet_edges_blob(edges, model.radius)
+            props = [
+                _label(model.name),
+                _identity_placement(),
+                _link("Base", name_of[target_id]),
+                _prop("Edges", "Part::PropertyFilletEdges", f'<FilletEdges file="{entry}"/>'),
+            ]
+        elif isinstance(model, Shell):
+            target_id = resolve_target(nid, model.target)
+            faces = [f"Face{int(i)}" for i in (model.faces_to_remove or [])]
+            props = [
+                _label(model.name),
+                _identity_placement(),
+                _link_sub("Faces", name_of[target_id], faces),
+                # A negative offset hollows inward, preserving the outer surface
+                # (verified in FreeCAD 1.1: 20mm cube, 2mm wall, top face open
+                # -> volume 3392 = 8000 - 16*16*18; a positive value grows the
+                # walls outward instead).
+                _prop(
+                    "Value",
+                    "App::PropertyQuantity",
+                    f'<Float value="{_f(-abs(model.thickness))}"/>',
+                ),
+                _enum("Mode", 0),
+                _enum("Join", 0),
+                _bool("Intersection", False),
+                _bool("SelfIntersection", False),
+            ]
         else:  # pad / pocket
             assert isinstance(model, Pad | Pocket)
             base = base_of.get(nid)
@@ -487,14 +676,19 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         f"</Document>\n"
     )
     gui_xml = _gui_document_xml(object_names, visible_names, _camera_settings(items))
-    return RealDocument(document_xml, gui_xml)
+    return RealDocument(document_xml, gui_xml, files)
 
 
 class RealDocument(NamedTuple):
-    """The two XML members of a FreeCAD .FCStd archive."""
+    """The XML members of a FreeCAD .FCStd archive plus extra binary entries.
+
+    ``files`` holds named binary payloads referenced from Document.xml (today:
+    ``Part::PropertyFilletEdges`` edge tables, one entry per fillet).
+    """
 
     document_xml: str
     gui_document_xml: str
+    files: dict[str, bytes]
 
 
 def _estimate_bounds(

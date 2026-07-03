@@ -33,15 +33,23 @@ from forgelab.formats import (
 from forgelab.spec import ForgeDocument
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_FILLET,
+    NODE_LOFT,
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_SHELL,
     NODE_SKETCH,
+    NODE_SWEEP,
     Body,
+    Fillet,
+    Loft,
     Pad,
     Part,
     Pocket,
+    Shell,
     Sketch,
+    Sweep,
 )
 from forgelab.sync.hashing import document_hash
 
@@ -51,6 +59,10 @@ _FCTYPE_BY_NODE = {
     NODE_SKETCH: "Sketcher::SketchObject",
     NODE_PAD: "PartDesign::Pad",
     NODE_POCKET: "PartDesign::Pocket",
+    NODE_LOFT: "Part::Loft",
+    NODE_SWEEP: "Part::Sweep",
+    NODE_FILLET: "Part::Fillet",
+    NODE_SHELL: "Part::Thickness",
 }
 
 _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
@@ -59,6 +71,10 @@ _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
     NODE_SKETCH: Sketch,
     NODE_PAD: Pad,
     NODE_POCKET: Pocket,
+    NODE_LOFT: Loft,
+    NODE_SWEEP: Sweep,
+    NODE_FILLET: Fillet,
+    NODE_SHELL: Shell,
 }
 
 # field name -> property type, per node type, in canonical write order.
@@ -89,6 +105,34 @@ _FIELDS = {
         ("through_all", "Bool"),
         ("reversed", "Bool"),
         ("midplane", "Bool"),
+    ],
+    NODE_LOFT: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("profiles", "StringList"),
+        ("ruled", "Bool"),
+        ("closed", "Bool"),
+    ],
+    NODE_SWEEP: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("profile", "Link"),
+        ("path", "Link"),
+        ("frenet", "Bool"),
+    ],
+    NODE_FILLET: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("target", "Link"),
+        ("radius", "Float"),
+        ("edges", "IntList"),
+    ],
+    NODE_SHELL: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("target", "Link"),
+        ("thickness", "Float"),
+        ("faces_to_remove", "IntList"),
     ],
 }
 
@@ -142,6 +186,7 @@ class FreeCADExporter(Exporter):
                 "Document.xml": real.document_xml,
                 "GuiDocument.xml": real.gui_document_xml,
                 _SIDECAR: sidecar_xml,
+                **real.files,
             }
         )
 
