@@ -23,6 +23,7 @@ _EXPECTED = {
     "get_project_summary",
     "check_fabrication",
     "list_fab_profiles",
+    "auto_place",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",

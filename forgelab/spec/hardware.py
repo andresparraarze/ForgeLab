@@ -68,6 +68,15 @@ class Component(BaseModel):
     at: list[float]
     pads: list[Pad] = Field(default_factory=list)
     uuid: str | None = None
+    locked: bool = Field(
+        default=False,
+        description=(
+            "When true, automatic placement (auto_place) keeps this component "
+            "at its current 'at' position and packs the other components "
+            "around it as an obstacle — e.g. a connector manually placed on a "
+            "board edge."
+        ),
+    )
 
     @field_validator("at")
     @classmethod

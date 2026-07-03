@@ -71,6 +71,16 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 ✅ implemented · 🚧 stub (base classes in place, awaiting implementation)
 
+In the hardware domain, agents don't have to hand-guess XY coordinates: build
+the document with components and nets but rough (or no) positions, then call
+**`auto_place`** before `validate_document`/`export_document`. A shelf-packing
+algorithm sizes each component from its real pad geometry (plus a keepout
+margin) and packs everything inside the board outline — guaranteed zero
+overlap and zero components off the board. Mark a manually positioned
+component `"locked": true` (e.g. an edge connector) and the rest packs around
+it; the returned `board_utilization` percentage signals when the board needs
+to grow.
+
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
 brackets, mounts, plates, enclosures — built by extruding and cutting closed 2D
@@ -94,7 +104,7 @@ rounded shape, and a `boolean` difference carves indents and cutouts (see
 
 ## MCP tools
 
-Thirty-one tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Thirty-two tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -157,6 +167,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 | Tool | Description |
 | --- | --- |
 | `generate_document` | Natural language → validated ForgeDocument |
+| `auto_place` | Pack a hardware document's components inside the board outline (no overlaps, locked components respected) |
 | `analyze_image` | Photo → ForgeLab document skeleton (vision) |
 
 ## Token optimization
@@ -169,7 +180,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **31 MCP tools**, and **577 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **32 MCP tools**, and **599 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 
