@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Codex CLI install instructions** in the README's "Install in 30 seconds"
+  section: a one-line `codex mcp add forgelab ...` pointing Codex at the
+  existing `~/.forgelab/venv` stdio server (assumes ForgeLab itself is
+  already installed), with `/mcp` as the in-session verification step.
 - **Routing escape channels in automatic placement**: `auto_place` (and
   `place_components`) now keeps large components — keepout-inclusive
   footprint over an absolute 50mm², which catches QFPs/QFNs/modules but not
