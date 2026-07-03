@@ -124,9 +124,37 @@ organic shapes as primitives + modifiers instead of hand-computing triangles:
 rounded shape, and a `boolean` difference carves indents and cutouts (see
 `examples/threed/organic_handle.forge.json`).
 
+### Render-critique loop for iterative refinement
+
+Agents can now *see* what they built and fix it without Blender installed or
+a human checking screenshots. `preview_render` (the `preview` extra:
+matplotlib + numpy, pure pip) renders a document's triangle meshes flat-shaded
+from three angles into one PNG; `critique_render` sends that PNG — plus an
+optional reference image — to the vision model with the design intent and
+returns structured feedback. ForgeLab provides the primitives; the calling
+agent drives the loop:
+
+```
+preview_render("car.forge.json", "car.png")
+critique_render("car.png", "a low-slung sports car with a long hood")
+  -> {"matches_intent": false, "score": 6,
+      "issues": [{"severity": "critical",
+                  "description": "only three wheels are visible",
+                  "likely_cause": "missing rear-left wheel object"}],
+      "suggested_changes": ["add a fourth wheel at the rear-left"]}
+patch_document(...)          # apply the suggested changes
+preview_render(...)          # re-render
+critique_render(...)         # re-judge; repeat until the score is acceptable
+```
+
+Previews draw the baked triangle geometry (modifier stacks are evaluated by
+Blender, so they show the base meshes). Check `generation_status` first:
+`preview_render` needs `pip install "forgelab[preview]"`, and
+`critique_render` needs `ANTHROPIC_API_KEY` plus the `agent` extra.
+
 ## MCP tools
 
-Thirty-three tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Thirty-five tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -137,7 +165,8 @@ Thirty-three tools, same for every client. Over stdio all are local; over HTTP e
 | `get_domain_schema` | JSON Schema for a domain |
 | `get_prompt` | System-prompt template for a domain |
 | `get_projection_schema` | What each projection level keeps or strips |
-| `generation_status` | Whether `generate_document` is usable |
+| `generation_status` | Whether the API-backed and preview tools are usable |
+| `preview_render` | Flat-shaded multi-angle PNG preview of a threed document (local, no Blender; `preview` extra) |
 | `list_components` | Pre-built component names grouped by category |
 | `get_component` | A component's footprint + datasheet pad geometry |
 
@@ -192,6 +221,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 | `auto_place` | Pack a hardware document's components inside the board outline (no overlaps, locked components respected) |
 | `route_board` | Autoroute a placed board: 2-layer maze routing into real KiCad track/via copper (unroutable nets reported, not fatal) |
 | `analyze_image` | Photo → ForgeLab document skeleton (vision) |
+| `critique_render` | Vision critique of a rendered preview vs the design intent — structured issues + suggested changes |
 
 ## Token optimization
 
@@ -203,7 +233,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **633 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **645 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

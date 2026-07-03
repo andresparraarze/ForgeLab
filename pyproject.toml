@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 agent = ["anthropic>=0.40"]
+preview = ["matplotlib>=3.7", "numpy>=1.24"]
 api = ["uvicorn>=0.27"]
 auth = ["pyjwt>=2.8", "cryptography>=42", "python-multipart>=0.0.9"]
 mcp = ["mcp>=1.12"]
@@ -37,6 +38,8 @@ dev = [
   "cryptography>=42",
   "python-multipart>=0.0.9",
   "mcp>=1.12",
+  "matplotlib>=3.7",
+  "numpy>=1.24",
 ]
 
 [project.urls]
