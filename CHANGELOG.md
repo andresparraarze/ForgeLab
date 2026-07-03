@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Routing escape channels in automatic placement**: `auto_place` (and
+  `place_components`) now keeps large components — keepout-inclusive
+  footprint over an absolute 50mm², which catches QFPs/QFNs/modules but not
+  passives or headers — a configurable `large_component_inset` away from
+  every board edge, preserving the routing escape channels that flush corner
+  packing destroyed. Smaller parts pack flush as before, and the
+  zero-overlap/in-bounds guarantees, locked-component behavior and failure
+  message are unchanged. Both defaults were chosen empirically against
+  `route_board` on the Arduino Uno example rather than assumed: a
+  board-relative 5% threshold catches nothing on a board that size (a QFP is
+  1.8% of it) while over-triggering on tiny boards, and a 3mm inset actually
+  reshuffled congestion for the worse (20 routed); the shipped 50mm² + 5mm
+  defaults lift the routed count from 22 to 25 of 32 multi-pad nets.
 - **Render-critique loop for the threed domain** — two new MCP tools (35
   total) that let an agent see and iteratively fix what it built without
   Blender installed. `preview_render(document_path, output_path, views=3)`

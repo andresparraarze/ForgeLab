@@ -2,6 +2,7 @@
 
 from forgelab.layout.placement import (
     DEFAULT_KEEPOUT,
+    DEFAULT_LARGE_INSET,
     PlacementError,
     component_bbox,
     place_components,
@@ -14,6 +15,7 @@ from forgelab.layout.routing import (
 
 __all__ = [
     "DEFAULT_KEEPOUT",
+    "DEFAULT_LARGE_INSET",
     "DEFAULT_GRID_RESOLUTION",
     "PlacementError",
     "RoutingError",

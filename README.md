@@ -76,7 +76,11 @@ the document with components and nets but rough (or no) positions, then call
 **`auto_place`** before `validate_document`/`export_document`. A shelf-packing
 algorithm sizes each component from its real pad geometry (plus a keepout
 margin) and packs everything inside the board outline — guaranteed zero
-overlap and zero components off the board. Mark a manually positioned
+overlap and zero components off the board. Large parts (QFPs/QFNs/modules,
+by footprint area) are kept away from the board edges (`large_component_inset`,
+default 5mm) so the autorouter keeps escape channels on all their sides —
+tuned empirically, this lifted the Arduino Uno example from 22 to 25 routed
+nets. Mark a manually positioned
 component `"locked": true` (e.g. an edge connector) and the rest packs around
 it; the returned `board_utilization` percentage signals when the board needs
 to grow. `validate_document` backs this up with a hard board-outline
@@ -95,10 +99,10 @@ generate) the document → `auto_place` → `route_board` → `validate_document
 router for simple-to-moderate boards (the Arduino Uno / ESP32 dev-board
 range), not a replacement for a commercial autorouter on dense designs. Nets
 the maze search cannot connect come back in `nets_failed` for manual routing
-instead of failing the run — on the packed Arduino Uno example, 22 of 32
-multi-pad nets route at the default 0.2mm grid, with the failures
-concentrated around a fine-pitch QFP packed into the board corner and the
-highest-fanout power nets.
+instead of failing the run — on the packed Arduino Uno example, 25 of 32
+multi-pad nets route at the default 0.2mm grid (placement's escape-channel
+inset for large parts bought the last three), with the remaining failures
+concentrated on residual congestion and the highest-fanout power nets.
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
@@ -233,7 +237,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **645 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **649 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

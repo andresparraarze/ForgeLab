@@ -23,6 +23,22 @@ from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT
 
 DEFAULT_KEEPOUT = 0.5
 
+# Escape-channel inset for large components (mm): parts above the area
+# threshold stay this far from every board edge so the maze router keeps
+# escape room on all their sides. Packing a QFP flush into a board corner
+# kills the escape routes on those sides. The default was chosen empirically
+# against route_board on the Arduino Uno example: 5mm lifts it from 22 to 25
+# routed nets, while 2-4mm just reshuffles the congestion (20-22).
+DEFAULT_LARGE_INSET = 5.0
+
+# A component counts as "large" (QFP/QFN/module — not a passive or header)
+# when its keepout-inclusive footprint exceeds this absolute area. A
+# board-relative fraction sounds appealing but fails at both ends: 5% of an
+# Arduino-Uno-sized board is 183mm2 (misses every QFP), while 5% of a tiny
+# 10x10mm board is 5mm2 (insets passives it has no room to inset). Escape
+# needs follow the part's physical size, not the board's.
+_LARGE_AREA_MIN = 50.0
+
 # Footprint half-size (mm) assumed for a component whose pads carry no physical
 # positions — there is nothing to measure, but it still occupies real space.
 _FALLBACK_HALF = 1.0
@@ -94,7 +110,11 @@ def _cannot_fit(count: int, width: float, height: float) -> PlacementError:
     )
 
 
-def place_components(document: ForgeDocument, keepout: float = DEFAULT_KEEPOUT) -> dict[str, Any]:
+def place_components(
+    document: ForgeDocument,
+    keepout: float = DEFAULT_KEEPOUT,
+    large_component_inset: float = DEFAULT_LARGE_INSET,
+) -> dict[str, Any]:
     """Pack all non-locked components inside the board outline.
 
     Returns ``{"placements", "components_placed", "components_locked",
@@ -103,6 +123,13 @@ def place_components(document: ForgeDocument, keepout: float = DEFAULT_KEEPOUT) 
     components sit at rotation 0) and ``board_utilization`` is the total
     footprint area (keepout included, locked components counted) as a
     percentage of the board outline's bounding-box area.
+
+    Components whose footprint exceeds the large-part threshold (an absolute
+    50mm2 — QFPs/QFNs/modules, not passives/headers) are kept
+    ``large_component_inset`` millimetres away from every board edge so the
+    autorouter keeps escape channels on all their sides; smaller parts pack
+    flush as before. The zero-overlap and in-bounds guarantees are
+    unchanged.
 
     Raises ``PlacementError`` when the document is not a hardware document,
     the board outline is missing, or the components cannot all fit.
@@ -143,25 +170,42 @@ def place_components(document: ForgeDocument, keepout: float = DEFAULT_KEEPOUT) 
     cursor_x, cursor_y, row_h = x0, y0, 0.0
     for node, bbox in movable:
         w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        # Large parts get an escape-channel inset from every board edge; the
+        # effective packing bounds shrink for them, nothing else changes.
+        inset = large_component_inset if w * h > _LARGE_AREA_MIN else 0.0
+        lim_x, lim_y = x1 - inset, y1 - inset
         while True:
-            if cursor_x + w > x1 + _EPS:  # row full -> wrap to the next row
-                cursor_y += row_h
+            place_x = max(cursor_x, x0 + inset)
+            place_y = max(cursor_y, y0 + inset)
+            if place_x + w > lim_x + _EPS:  # row full -> wrap to the next row
+                if row_h > 0.0:
+                    cursor_y += row_h
+                else:
+                    # Nothing fit in this row (e.g. a locked obstacle spans
+                    # it): drop below the next obstacle edge — re-scanning the
+                    # identical row would loop forever.
+                    next_y = min(
+                        (ob[3] for ob in obstacles if ob[3] > cursor_y + _EPS), default=None
+                    )
+                    if next_y is None:
+                        raise _cannot_fit(len(components), board_w, board_h)
+                    cursor_y = next_y
                 cursor_x, row_h = x0, 0.0
-                if cursor_y + h > y1 + _EPS:
+                if max(cursor_y, y0 + inset) + h > lim_y + _EPS:
                     raise _cannot_fit(len(components), board_w, board_h)
                 continue
-            if cursor_y + h > y1 + _EPS:
+            if place_y + h > lim_y + _EPS:
                 raise _cannot_fit(len(components), board_w, board_h)
-            rect = (cursor_x, cursor_y, cursor_x + w, cursor_y + h)
+            rect = (place_x, place_y, place_x + w, place_y + h)
             hit = next((ob for ob in obstacles if _overlaps(rect, ob)), None)
             if hit is not None:
-                cursor_x = max(cursor_x, hit[2])  # skip past the obstacle
+                cursor_x = max(place_x, hit[2])  # skip past the obstacle
                 continue
             break
         placements[node.id] = [rect[0] - bbox[0], rect[1] - bbox[1], 0.0]
         obstacles.append(rect)
         cursor_x = rect[2]
-        row_h = max(row_h, h)
+        row_h = max(row_h, rect[3] - cursor_y)
 
     utilization = round(100.0 * footprint_area / board_area, 1) if board_area > 0 else 0.0
     return {
