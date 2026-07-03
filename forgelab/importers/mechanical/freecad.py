@@ -26,6 +26,7 @@ from forgelab.spec.mechanical import (
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_REVOLVE,
     NODE_SHELL,
     NODE_SKETCH,
     NODE_SWEEP,
@@ -35,6 +36,7 @@ from forgelab.spec.mechanical import (
     Pad,
     Part,
     Pocket,
+    Revolve,
     Shell,
     Sketch,
     Sweep,
@@ -51,6 +53,7 @@ _NODE_BY_FCTYPE = {
     "Part::Sweep": NODE_SWEEP,
     "Part::Fillet": NODE_FILLET,
     "Part::Thickness": NODE_SHELL,
+    "Part::Revolution": NODE_REVOLVE,
 }
 
 _MODEL_BY_NODE = {
@@ -63,6 +66,7 @@ _MODEL_BY_NODE = {
     NODE_SWEEP: Sweep,
     NODE_FILLET: Fillet,
     NODE_SHELL: Shell,
+    NODE_REVOLVE: Revolve,
 }
 
 assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), "FreeCAD type maps are out of sync"

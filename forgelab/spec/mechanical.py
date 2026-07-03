@@ -26,6 +26,7 @@ NODE_LOFT = "loft"
 NODE_SWEEP = "sweep"
 NODE_FILLET = "fillet"
 NODE_SHELL = "shell"
+NODE_REVOLVE = "revolve"
 
 
 class Placement(BaseModel):
@@ -187,6 +188,35 @@ class Sweep(BaseModel):
     profile: str = ""
     path: str = ""
     frenet: bool = False
+
+
+class Revolve(BaseModel):
+    """A revolve feature: spin a profile around an axis (Part::Revolution).
+
+    The natural fit for axially-symmetric organic shapes — knobs, handles,
+    bottle-like grips, rounded caps. ``profile`` is a closed 2D sketch drawn on
+    a plane that CONTAINS the revolution axis (e.g. a sketch on the XZ plane
+    revolved around Z); its geometry must stay on one side of the axis
+    (touching it is fine, crossing it self-intersects). ``axis`` is the global
+    X/Y/Z axis through the origin; ``angle`` in degrees supports partial
+    revolves (default a full 360).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    profile: str = ""
+    axis: str = "Z"
+    angle: float = 360.0
+
+    @field_validator("axis")
+    @classmethod
+    def _known_axis(cls, value: str) -> str:
+        axis = value.strip().upper()
+        if axis not in ("X", "Y", "Z"):
+            raise ValueError("axis must be 'X', 'Y' or 'Z'")
+        return axis
 
 
 class Fillet(BaseModel):
