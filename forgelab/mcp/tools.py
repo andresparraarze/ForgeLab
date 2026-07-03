@@ -39,6 +39,7 @@ from forgelab.components import get_component as _get_component
 from forgelab.components import list_components as _list_components
 from forgelab.core import LLMOutputError, UnknownToolError, default_registry, validate
 from forgelab.core import validate as _core_validate
+from forgelab.layout import DEFAULT_KEEPOUT, PlacementError, place_components
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
@@ -1069,6 +1070,84 @@ def list_fab_profiles() -> dict[str, dict[str, float]]:
     """
     require_scope("forge:read")
     return fab_profiles()
+
+
+def auto_place(
+    document_path: str, output_path: str, keepout: float = DEFAULT_KEEPOUT
+) -> dict[str, Any]:
+    """Automatically place a hardware document's components on the board.
+
+    Packs all non-locked components inside the board outline with a shelf/row
+    algorithm — largest footprint (pad bounding box + ``keepout`` margin, mm)
+    first, rows filled left-to-right — guaranteeing zero overlap and zero
+    components outside the outline, so agents never hand-guess XY coordinates.
+    Components with ``locked: true`` keep their position and are packed around
+    as obstacles (e.g. a connector manually placed on a board edge). Placement
+    ignores rotation; placed components sit at rotation 0.
+
+    Args:
+        document_path: path to the hardware ``.forge.json`` to place (a bare
+            filename resolves against ``FORGELAB_OUTPUT_DIR``).
+        output_path: where to write the placed document.
+        keepout: margin in millimetres added around every component footprint
+            (default 0.5).
+
+    Returns:
+        ``{"placed": true, "document_path", "components_placed",
+        "components_locked", "board_utilization"}`` — ``board_utilization`` is
+        the packed footprint area as a percentage of the board area, a useful
+        signal for whether the board needs to be bigger. When the components
+        cannot fit (or the board outline is missing) nothing is written and the
+        result is ``{"placed": false, "error": ...}``.
+    """
+    require_scope("forge:generate")
+    data = _read_document_file(document_path)
+    try:
+        document_model = _core_validate(data)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    try:
+        result = place_components(document_model, keepout=keepout)
+    except PlacementError as exc:
+        return {"placed": False, "error": str(exc)}
+
+    placements: dict[str, list[float]] = result["placements"]
+
+    def apply(nodes: list[Any]) -> None:
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            placement = placements.get(str(node.get("id", "")))
+            if placement is not None:
+                props = node.get("props")
+                if isinstance(props, dict):
+                    props["at"] = placement
+            apply(node.get("children") or [])
+
+    apply(data.get("nodes") or [])
+
+    target = _resolve_path(output_path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
+    _history.record(
+        target,
+        {
+            "tool": "auto_place",
+            "document_path": str(target),
+            "components_placed": result["components_placed"],
+            "board_utilization": result["board_utilization"],
+        },
+    )
+    return {
+        "placed": True,
+        "document_path": str(target),
+        "components_placed": result["components_placed"],
+        "components_locked": result["components_locked"],
+        "board_utilization": result["board_utilization"],
+    }
 
 
 # --------------------------------------------------------------------------- #

@@ -26,6 +26,20 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Automatic component placement for the hardware domain
+  (`forgelab/layout/placement.py`): a pure-Python shelf/row packing algorithm
+  sizes each component from its pad bounding box plus a keepout margin
+  (default 0.5mm), sorts largest-first, and packs rows left-to-right inside
+  the board outline — guaranteeing zero overlap and zero components outside
+  the board (the live layout bugs). Components gain an optional
+  `locked: true` prop: a locked component keeps its position and the others
+  pack around it as an obstacle. New MCP tool (forge:generate)
+  `auto_place(document_path, output_path, keepout=0.5)` writes the placed
+  document (rotation reset to 0) and returns
+  `{placed, components_placed, components_locked, board_utilization}`;
+  when the components cannot fit it returns a clear
+  "Cannot fit N components on a board of WxH mm" error instead of an
+  overlapping layout, and a missing board outline errors clearly.
 - Blender modifier stack support in the threed domain: object nodes gain an
   optional ordered `modifiers` list (`subsurf`, `bevel`, `boolean`,
   `solidify`) and the Blender script exporter compiles it to native
