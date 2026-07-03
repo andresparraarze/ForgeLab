@@ -33,6 +33,7 @@ from forgelab.spec import (
     Node,
     Object3D,
 )
+from forgelab.spec.threed import Modifier
 
 _TOL = 1e-4
 
@@ -192,6 +193,64 @@ def _camera_location(center: Vec3, radius: float) -> Vec3:
     return (center[0] + dx, center[1] + dy, center[2] + dz)
 
 
+def _sort_for_boolean_targets(roots: list[Node]) -> list[Node]:
+    """Order root object subtrees so every boolean modifier target exists first.
+
+    A boolean modifier references its target by node id, and the generated
+    script assigns ``_mod.object`` to the bpy object variable created earlier —
+    so the target's subtree must be emitted before the subtree that cuts with
+    it. Raises ``ValueError`` naming the objects when the dependencies form a
+    cycle.
+    """
+    owner: dict[str, int] = {}
+
+    def collect(node: Node, idx: int) -> None:
+        owner[node.id] = idx
+        for child in node.children:
+            if child.type == NODE_OBJECT:
+                collect(child, idx)
+
+    for i, root in enumerate(roots):
+        collect(root, i)
+
+    deps: dict[int, set[int]] = {i: set() for i in range(len(roots))}
+
+    def add_edges(node: Node, idx: int) -> None:
+        for mod in node.props.get("modifiers") or []:
+            if isinstance(mod, dict) and mod.get("type") == "boolean":
+                target_idx = owner.get(str(mod.get("target", "")))
+                if target_idx is not None and target_idx != idx:
+                    deps[idx].add(target_idx)
+        for child in node.children:
+            if child.type == NODE_OBJECT:
+                add_edges(child, idx)
+
+    for i, root in enumerate(roots):
+        add_edges(root, i)
+
+    ordered: list[int] = []
+    done: set[int] = set()
+    visiting: set[int] = set()
+
+    def visit(i: int, path: list[int]) -> None:
+        if i in done:
+            return
+        if i in visiting:
+            cycle = path[path.index(i) :] + [i]
+            names = " -> ".join(roots[j].id for j in cycle)
+            raise ValueError(f"boolean modifier dependency cycle between objects: {names}")
+        visiting.add(i)
+        for dep in sorted(deps[i]):
+            visit(dep, [*path, i])
+        visiting.discard(i)
+        done.add(i)
+        ordered.append(i)
+
+    for i in range(len(roots)):
+        visit(i, [])
+    return [roots[i] for i in ordered]
+
+
 class BlenderScriptExporter(Exporter):
     """Compile a ForgeLab threed document into a runnable Blender bpy script."""
 
@@ -220,8 +279,9 @@ class BlenderScriptExporter(Exporter):
         lines.append("")
         lines.append("objects = []")
         n_objects = 0
-        for node in root_objects:
-            n_objects += self._object_block(node, meshes, lines, parent="root")
+        var_of: dict[str, str] = {}
+        for node in _sort_for_boolean_targets(root_objects):
+            n_objects += self._object_block(node, meshes, lines, parent="root", var_of=var_of)
         lines.append("")
         lines += self._ground_plane(center, radius, lo)
         lines.append("")
@@ -297,10 +357,16 @@ class BlenderScriptExporter(Exporter):
         return lines
 
     def _object_block(
-        self, node: Node, meshes: dict[str, Mesh], lines: list[str], parent: str
+        self,
+        node: Node,
+        meshes: dict[str, Mesh],
+        lines: list[str],
+        parent: str,
+        var_of: dict[str, str],
     ) -> int:
         obj = Object3D.model_validate(node.props)
         var = f"obj_{len(lines)}"
+        var_of[node.id] = var
         mesh = meshes.get(obj.mesh) if obj.mesh else None
         geo_expr = "Matrix.Identity(4)"
 
@@ -317,6 +383,11 @@ class BlenderScriptExporter(Exporter):
             else:
                 lines += self._raw_mesh(var, obj.name, mesh)
         else:
+            if obj.modifiers:
+                raise ValueError(
+                    f"object {node.id!r} has modifiers but no mesh; "
+                    "modifiers need mesh geometry to act on"
+                )
             lines.append("bpy.ops.object.empty_add()")
             lines.append(f"{var} = bpy.context.active_object")
             lines.append(f"{var}.name = {obj.name!r}")
@@ -327,11 +398,52 @@ class BlenderScriptExporter(Exporter):
             f"{_vec(t.rotation)}, {_vec(t.scale)}) @ {geo_expr})"
         )
         lines.append(f"objects.append({var})")
+        for mod in obj.modifiers:
+            lines += self._modifier_lines(node.id, var, mod, var_of)
         count = 1
         for child in node.children:
             if child.type == NODE_OBJECT:
-                count += self._object_block(child, meshes, lines, parent=var)
+                count += self._object_block(child, meshes, lines, parent=var, var_of=var_of)
         return count
+
+    def _modifier_lines(
+        self, node_id: str, var: str, mod: Modifier, var_of: dict[str, str]
+    ) -> list[str]:
+        """Native bpy modifier-stack calls for one modifier, in stack order."""
+        if mod.type == "subsurf":
+            render_levels = mod.render_levels if mod.render_levels is not None else mod.levels
+            return [
+                f"_mod = {var}.modifiers.new('Subsurf', 'SUBSURF')",
+                f"_mod.levels = {int(mod.levels)}",
+                f"_mod.render_levels = {int(render_levels)}",
+            ]
+        if mod.type == "bevel":
+            return [
+                f"_mod = {var}.modifiers.new('Bevel', 'BEVEL')",
+                f"_mod.width = {_f(mod.width)}",
+                f"_mod.segments = {int(mod.segments)}",
+                f"_mod.limit_method = {mod.limit_method.upper()!r}",
+            ]
+        if mod.type == "boolean":
+            target_var = var_of.get(mod.target)
+            if target_var is None:
+                raise ValueError(
+                    f"object {node_id!r}: boolean modifier target {mod.target!r} "
+                    "is not an object node created earlier in the script"
+                )
+            return [
+                f"_mod = {var}.modifiers.new('Boolean', 'BOOLEAN')",
+                f"_mod.operation = {mod.operation.upper()!r}",
+                f"_mod.object = {target_var}",
+                "# the boolean consumes its target visually, so hide it",
+                f"{target_var}.hide_render = True",
+                f"{target_var}.hide_set(True)",
+            ]
+        # solidify
+        return [
+            f"_mod = {var}.modifiers.new('Solidify', 'SOLIDIFY')",
+            f"_mod.thickness = {_f(mod.thickness)}",
+        ]
 
     def _primitive_add(self, desc: dict[str, Any]) -> list[str]:
         if desc["kind"] == "cube":

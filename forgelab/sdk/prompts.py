@@ -8,20 +8,33 @@ from forgelab.spec.version import SPEC_VERSION
 
 _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
 
-# domain -> (example user request, path to a valid .forge.json under examples/)
-_FEW_SHOT: dict[str, tuple[str, str]] = {
-    "hardware": (
-        "an Arduino Uno clone board",
-        "hardware/arduino_uno.forge.json",
-    ),
-    "threed": (
-        "a sci-fi space station with a rotating ring, solar arrays, a docking port and a comm dish",
-        "threed/space_station.forge.json",
-    ),
-    "mechanical": (
-        "a NEMA17 stepper motor mount plate",
-        "mechanical/motor_mount.forge.json",
-    ),
+# domain -> [(example user request, path to a valid .forge.json under examples/)]
+_FEW_SHOT: dict[str, list[tuple[str, str]]] = {
+    "hardware": [
+        (
+            "an Arduino Uno clone board",
+            "hardware/arduino_uno.forge.json",
+        ),
+    ],
+    "threed": [
+        (
+            "a sci-fi space station with a rotating ring, solar arrays, "
+            "a docking port and a comm dish",
+            "threed/space_station.forge.json",
+        ),
+        # Canonical organic-shape pattern: primitive + modifier stack
+        # (subsurf/bevel/boolean) instead of hand-computed triangles.
+        (
+            "a smooth ergonomic handle with a thumb-rest indent",
+            "threed/organic_handle.forge.json",
+        ),
+    ],
+    "mechanical": [
+        (
+            "a NEMA17 stepper motor mount plate",
+            "mechanical/motor_mount.forge.json",
+        ),
+    ],
 }
 
 
@@ -118,9 +131,11 @@ def few_shot(domain: str) -> list[tuple[str, str]]:
     is guaranteed to be a valid ForgeLab document.
     """
     _check_domain(domain)
-    user, rel_path = _FEW_SHOT[domain]
-    document = json.loads((_EXAMPLES_DIR / rel_path).read_text())
-    # The shipped file carries the version it was generated at; always show
-    # the installed library's version so agents never copy a stale one.
-    document["forgelab_version"] = SPEC_VERSION
-    return [(user, json.dumps(document, indent=2))]
+    examples: list[tuple[str, str]] = []
+    for user, rel_path in _FEW_SHOT[domain]:
+        document = json.loads((_EXAMPLES_DIR / rel_path).read_text())
+        # The shipped file carries the version it was generated at; always show
+        # the installed library's version so agents never copy a stale one.
+        document["forgelab_version"] = SPEC_VERSION
+        examples.append((user, json.dumps(document, indent=2)))
+    return examples

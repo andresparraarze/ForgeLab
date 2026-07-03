@@ -65,7 +65,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
 | 3D / Game      | OBJ           |   ✅   |        | import `.obj` (+ companion `.mtl`); fan-triangulated, per-object meshes |
 | 3D / Game      | STL           |   ✅   |        | import ASCII or binary `.stl` (single mesh, default material) |
-| 3D / Game      | Blender script|        |   ✅   | export `tool='blender_script'` → runnable `.py` product render (native objects, daylight-sky world, CYCLES/EEVEE `PREVIEW` toggle, 85mm 3/4 camera, ground plane, auto-render to PNG) |
+| 3D / Game      | Blender script|        |   ✅   | export `tool='blender_script'` → runnable `.py` product render (native objects + modifier stack, daylight-sky world, CYCLES/EEVEE `PREVIEW` toggle, 85mm 3/4 camera, ground plane, auto-render to PNG) |
 | 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
 | 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
 
@@ -80,6 +80,17 @@ exported file carries only the feature description and FreeCAD's own
 OpenCASCADE kernel computes the real NURBS geometry on recompute (see
 `examples/mechanical/organic_grip.forge.json` for the canonical loft + fillet
 pattern).
+
+In the threed domain, objects can carry a **Blender modifier stack** — an
+ordered `modifiers` list of `subsurf`, `bevel`, `boolean` and `solidify`
+entries that the Blender script exporter compiles to native
+`obj.modifiers.new(...)` calls (boolean targets are created first via a
+dependency sort and hidden from render). Blender's own modifier evaluation
+computes the real smooth geometry when the script runs, so agents describe
+organic shapes as primitives + modifiers instead of hand-computing triangles:
+**cube (or cylinder) + `subsurf` + `bevel`** is the go-to pattern for a smooth
+rounded shape, and a `boolean` difference carves indents and cutouts (see
+`examples/threed/organic_handle.forge.json`).
 
 ## MCP tools
 
