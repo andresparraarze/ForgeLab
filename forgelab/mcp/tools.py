@@ -43,6 +43,7 @@ from forgelab.core import validate as _core_validate
 from forgelab.layout import (
     DEFAULT_GRID_RESOLUTION,
     DEFAULT_KEEPOUT,
+    DEFAULT_LARGE_INSET,
     PlacementError,
     RoutingError,
     place_components,
@@ -1081,7 +1082,10 @@ def list_fab_profiles() -> dict[str, dict[str, float]]:
 
 
 def auto_place(
-    document_path: str, output_path: str, keepout: float = DEFAULT_KEEPOUT
+    document_path: str,
+    output_path: str,
+    keepout: float = DEFAULT_KEEPOUT,
+    large_component_inset: float = DEFAULT_LARGE_INSET,
 ) -> dict[str, Any]:
     """Automatically place a hardware document's components on the board.
 
@@ -1099,6 +1103,11 @@ def auto_place(
         output_path: where to write the placed document.
         keepout: margin in millimetres added around every component footprint
             (default 0.5).
+        large_component_inset: minimum distance in millimetres between a
+            large component (footprint over 50mm2 — QFPs/QFNs/modules, not
+            passives/headers) and any board edge, preserving routing escape
+            channels on all its sides (default 5.0). Smaller parts pack
+            flush.
 
     Returns:
         ``{"placed": true, "document_path", "components_placed",
@@ -1115,7 +1124,9 @@ def auto_place(
     except Exception as exc:
         raise ValueError(f"invalid document: {exc}") from exc
     try:
-        result = place_components(document_model, keepout=keepout)
+        result = place_components(
+            document_model, keepout=keepout, large_component_inset=large_component_inset
+        )
     except PlacementError as exc:
         return {"placed": False, "error": str(exc)}
 

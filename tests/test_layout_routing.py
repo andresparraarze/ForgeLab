@@ -445,15 +445,14 @@ def test_route_board_reports_missing_outline_as_error(tmp_path, monkeypatch):
 def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypatch):
     """The real-board benchmark: auto_place + route_board on the Arduino Uno.
 
-    Empirical result at the default 0.2mm grid: 22 of 32 multi-pad nets route
-    (~2s). The 10 failures are all escape congestion around U1, the 0.8mm-pitch
-    QFP that shelf packing puts flush into the board corner (its pad ring ends
-    0.5mm from two board edges, so half its escape channels don't exist), plus
-    GND/+5V — the two highest-fanout nets, routed last, that lose their final
-    MST edges once the board fills up. That is the honest baseline for a basic
-    maze router on this board; the assertions carry a small margin so
-    incidental placement changes don't flap the test, while a real regression
-    (an ordering or clearance bug typically halves the count) still trips it.
+    Empirical result at the default 0.2mm grid: 25 of 32 multi-pad nets route
+    (~2s) now that auto_place insets large parts (the two big ICs) 5mm from
+    the board edges, preserving their routing escape channels — up from 22
+    when the QFP packed flush into the corner with its pad ring 0.5mm from
+    two board edges. The remaining failures are residual congestion plus
+    GND/+5V, the two highest-fanout nets routed last. The assertion carries a
+    small margin so incidental placement changes don't flap the test, but a
+    regression to flush packing (22) or worse still trips it.
     """
     monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
     src = _EXAMPLES / "hardware/arduino_uno.forge.json"
@@ -463,7 +462,7 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
     assert result["routed"] is True
     total = result["nets_routed"] + len(result["nets_failed"])
     assert total >= 30  # the Uno has 32 nets with 2+ positioned pads
-    assert result["nets_routed"] >= 19, result["nets_failed"]
+    assert result["nets_routed"] >= 23, result["nets_failed"]
     assert result["total_track_length_mm"] > 100.0
     assert result["vias_used"] > 0
 
