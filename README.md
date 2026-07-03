@@ -60,7 +60,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export |
 | Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
-| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell) |
+| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
 | 3D / Game      | OBJ           |   ✅   |        | import `.obj` (+ companion `.mtl`); fan-triangulated, per-object meshes |
@@ -103,12 +103,15 @@ highest-fanout power nets.
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
 brackets, mounts, plates, enclosures — built by extruding and cutting closed 2D
-profiles. Use the **Part workbench** (`loft`/`sweep`/`fillet`/`shell`) for
-organic or curved shapes — grips, handles, ergonomic surfaces — where the
-exported file carries only the feature description and FreeCAD's own
-OpenCASCADE kernel computes the real NURBS geometry on recompute (see
-`examples/mechanical/organic_grip.forge.json` for the canonical loft + fillet
-pattern).
+profiles. Use the **Part workbench** (`loft`/`sweep`/`fillet`/`shell`/`revolve`) for
+organic or curved shapes — grips, handles, knobs, ergonomic surfaces — where
+the exported file carries only the feature description and FreeCAD's own
+OpenCASCADE kernel computes the real NURBS geometry on recompute. Choose
+`loft` for asymmetric shapes whose cross-section changes along a path (see
+`examples/mechanical/organic_grip.forge.json`); choose `revolve` for
+axially-symmetric round shapes — knobs, caps, bottle-like grips — where one
+closed profile spun around an axis is easier to specify correctly than
+stacked loft sections (see `examples/mechanical/rounded_knob.forge.json`).
 
 In the threed domain, objects can carry a **Blender modifier stack** — an
 ordered `modifiers` list of `subsurf`, `bevel`, `boolean` and `solidify`
@@ -200,7 +203,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **618 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **633 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

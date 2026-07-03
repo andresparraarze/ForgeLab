@@ -1,0 +1,85 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "rounded_knob",
+    "generator": "forgelab-example",
+    "description": "A rounded control knob: a closed half-outline sketched on the XZ plane (all points at x >= 0, closing along the Z axis) revolved 360 degrees around Z. The canonical Part-workbench revolve pattern for axially-symmetric shapes \u2014 knobs, caps, grips."
+  },
+  "nodes": [
+    {
+      "id": "knob_body",
+      "type": "body",
+      "props": {
+        "name": "KnobBody"
+      }
+    },
+    {
+      "id": "knob_profile",
+      "type": "sketch",
+      "props": {
+        "name": "KnobProfile",
+        "body": "knob_body",
+        "plane": "XZ_Plane",
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              0.0,
+              8.0,
+              0.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              8.0,
+              0.0,
+              10.0,
+              3.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              10.0,
+              3.0,
+              6.0,
+              14.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              6.0,
+              14.0,
+              0.0,
+              16.0
+            ]
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              16.0,
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "knob_revolve",
+      "type": "revolve",
+      "props": {
+        "name": "KnobRevolve",
+        "body": "knob_body",
+        "profile": "knob_profile",
+        "axis": "Z",
+        "angle": 360.0
+      }
+    }
+  ]
+}

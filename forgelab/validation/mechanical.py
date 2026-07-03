@@ -20,6 +20,7 @@ from forgelab.spec.mechanical import (
     NODE_LOFT,
     NODE_PAD,
     NODE_POCKET,
+    NODE_REVOLVE,
     NODE_SHELL,
     NODE_SKETCH,
     NODE_SWEEP,
@@ -36,7 +37,40 @@ _FEATURE_TYPES = (
     NODE_SWEEP,
     NODE_FILLET,
     NODE_SHELL,
+    NODE_REVOLVE,
 )
+
+# The revolution axis expressed in a sketch's local (x, y) plane, per
+# (datum plane, global axis letter). None means the axis is perpendicular to
+# the sketch plane — a profile revolved around its own normal is degenerate.
+_AXIS_IN_PLANE: dict[tuple[str, str], tuple[float, float] | None] = {
+    ("XY", "X"): (1.0, 0.0),
+    ("XY", "Y"): (0.0, 1.0),
+    ("XY", "Z"): None,
+    ("XZ", "X"): (1.0, 0.0),
+    ("XZ", "Z"): (0.0, 1.0),
+    ("XZ", "Y"): None,
+    ("YZ", "Y"): (1.0, 0.0),
+    ("YZ", "Z"): (0.0, 1.0),
+    ("YZ", "X"): None,
+}
+
+# Sketch plane spellings, matching the exporter's normalization.
+_PLANE_KEYS = {
+    "XY": "XY",
+    "XY_PLANE": "XY",
+    "TOP": "XY",
+    "XZ": "XZ",
+    "XZ_PLANE": "XZ",
+    "FRONT": "XZ",
+    "YZ": "YZ",
+    "YZ_PLANE": "YZ",
+    "RIGHT": "YZ",
+}
+
+# Points within this distance (mm) of the axis are "touching", which is fine
+# (a solid of revolution commonly closes its profile along the axis).
+_AXIS_TOL = 0.001
 
 
 def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
@@ -186,8 +220,82 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
                     f"shell {node.id!r} references target {ref!r} "
                     f"which does not exist in the document"
                 )
+        elif node.type == NODE_REVOLVE:
+            angle = float(node.props.get("angle", 360.0))
+            if angle <= 0.0 or angle > 360.0:
+                errors.append(
+                    f"revolve {node.id!r} has angle {angle:g}; it must be > 0 and <= 360 degrees"
+                )
+            ref = str(node.props.get("profile", ""))
+            if unresolved(ref):
+                errors.append(
+                    f"revolve {node.id!r} references profile {ref!r} "
+                    f"which does not exist in the document"
+                )
+            else:
+                error = _revolve_axis_error(node.id, node.props, nodes)
+                if error:
+                    errors.append(error)
 
     return errors, warnings
+
+
+def _revolve_axis_error(revolve_id: str, props: dict, nodes: list) -> str | None:
+    """An error message when a revolve profile crosses (or is normal to) its axis.
+
+    A profile with geometry on both sides of the revolution axis produces
+    self-intersecting geometry in FreeCAD, so every profile point must sit on
+    one side of the axis (touching it is allowed) within the sketch's local
+    plane. The axis is taken through the sketch-local origin, matching the
+    exporter's Base of (0, 0, 0).
+    """
+    ref = str(props.get("profile", ""))
+    sketch = next(
+        (
+            n
+            for n in nodes
+            if n.type == NODE_SKETCH and (n.id == ref or str(n.props.get("name", "")) == ref)
+        ),
+        None,
+    )
+    if sketch is None:
+        return None  # not a sketch: the exporter reports that separately
+    axis = str(props.get("axis", "Z")).strip().upper()
+    plane = _PLANE_KEYS.get(str(sketch.props.get("plane", "XY")).strip().upper(), "XY")
+    direction = _AXIS_IN_PLANE.get((plane, axis))
+    if direction is None:
+        return (
+            f"revolve {revolve_id!r} axis {axis} is perpendicular to profile "
+            f"{ref!r}'s sketch plane ({plane}); the profile must be sketched on "
+            f"a plane containing the revolution axis"
+        )
+    dx, dy = direction
+    sides = set()
+    for geo in sketch.props.get("geometry") or []:
+        if not isinstance(geo, dict):
+            continue
+        points: list[tuple[float, float]] = []
+        if geo.get("geo_type") == "line" and len(geo.get("points") or []) == 4:
+            x1, y1, x2, y2 = (float(v) for v in geo["points"])
+            points = [(x1, y1), (x2, y2)]
+        elif geo.get("geo_type") == "circle" and len(geo.get("center") or []) == 2:
+            cx, cy = (float(v) for v in geo["center"])
+            r = float(geo.get("radius", 0.0))
+            # The circle's extreme points perpendicular to the axis.
+            points = [(cx - dy * r, cy + dx * r), (cx + dy * r, cy - dx * r)]
+        for px, py in points:
+            signed = dx * py - dy * px  # signed side of the axis line
+            if signed > _AXIS_TOL:
+                sides.add(1)
+            elif signed < -_AXIS_TOL:
+                sides.add(-1)
+    if len(sides) == 2:
+        return (
+            f"revolve {revolve_id!r} profile {ref!r} crosses the revolution axis "
+            f"{axis}; all profile geometry must stay on one side of the axis "
+            f"(touching it is allowed)"
+        )
+    return None
 
 
 def _lines_form_closed_loop(lines: list[list[float]]) -> bool:

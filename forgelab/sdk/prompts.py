@@ -71,19 +71,28 @@ _REFERENCE_HINTS: dict[str, str] = {
         "is for prismatic engineering parts — brackets, mounts, plates, "
         "enclosures — built by extruding and cutting closed 2D profiles. The "
         "Part workbench (loft/sweep/fillet/shell) is for organic or curved "
-        "shapes — grips, handles, ergonomic surfaces — where FreeCAD's OCC "
+        "shapes — grips, handles, knobs, ergonomic surfaces — where FreeCAD's OCC "
         "kernel computes real NURBS geometry. The canonical organic pattern "
         "(see examples/mechanical/organic_grip.forge.json) is: stack several "
         "circle-profile sketches along the loft axis by giving each sketch a "
         "placement position [0, 0, z], loft through them in order via a loft "
         'node\'s "profiles" list (sketch node ids, at least 2), then soften '
         'the result with a fillet node whose "target" is the loft (omit '
-        '"edges" to round every edge). Use sweep to drive a profile sketch '
+        '"edges" to round every edge). Choose loft for ASYMMETRIC shapes whose '
+        "cross-section changes along a path; choose revolve for SYMMETRIC "
+        "round shapes — knobs, caps, bottle-like grips — where one closed "
+        "profile sketch spun around an axis is easier to specify correctly "
+        "than stacked loft sections. The canonical revolve pattern (see "
+        "examples/mechanical/rounded_knob.forge.json) is: sketch the shape's "
+        "half-outline as a closed line loop on the XZ plane, keep every point "
+        "at x >= 0 (the profile may touch the Z axis but must not cross it), "
+        'then revolve it with axis "Z" and angle 360 (smaller angles give '
+        "partial revolves). Use sweep to drive a profile sketch "
         "along a path sketch, and shell to hollow a solid — list the faces to "
         'leave open in "faces_to_remove" (at least one face must stay open '
-        "for the kernel to hollow it). Reach for loft/sweep/fillet/shell only "
-        "when the shape genuinely curves; prismatic parts stay in "
-        "sketch/pad/pocket."
+        "for the kernel to hollow it). Reach for loft/sweep/fillet/shell/"
+        "revolve only when the shape genuinely curves; prismatic parts stay "
+        "in sketch/pad/pocket."
     ),
 }
 

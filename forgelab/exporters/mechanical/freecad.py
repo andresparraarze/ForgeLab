@@ -38,6 +38,7 @@ from forgelab.spec.mechanical import (
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_REVOLVE,
     NODE_SHELL,
     NODE_SKETCH,
     NODE_SWEEP,
@@ -47,6 +48,7 @@ from forgelab.spec.mechanical import (
     Pad,
     Part,
     Pocket,
+    Revolve,
     Shell,
     Sketch,
     Sweep,
@@ -63,6 +65,7 @@ _FCTYPE_BY_NODE = {
     NODE_SWEEP: "Part::Sweep",
     NODE_FILLET: "Part::Fillet",
     NODE_SHELL: "Part::Thickness",
+    NODE_REVOLVE: "Part::Revolution",
 }
 
 _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
@@ -75,6 +78,7 @@ _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
     NODE_SWEEP: Sweep,
     NODE_FILLET: Fillet,
     NODE_SHELL: Shell,
+    NODE_REVOLVE: Revolve,
 }
 
 # field name -> property type, per node type, in canonical write order.
@@ -133,6 +137,13 @@ _FIELDS = {
         ("target", "Link"),
         ("thickness", "Float"),
         ("faces_to_remove", "IntList"),
+    ],
+    NODE_REVOLVE: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("profile", "Link"),
+        ("axis", "String"),
+        ("angle", "Float"),
     ],
 }
 

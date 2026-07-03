@@ -35,6 +35,7 @@ from forgelab.spec.mechanical import (
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_REVOLVE,
     NODE_SHELL,
     NODE_SKETCH,
     NODE_SWEEP,
@@ -45,6 +46,7 @@ from forgelab.spec.mechanical import (
     Part,
     Placement,
     Pocket,
+    Revolve,
     Shell,
     Sketch,
     Sweep,
@@ -60,15 +62,32 @@ _FCTYPE = {
     NODE_SWEEP: "Part::Sweep",
     NODE_FILLET: "Part::Fillet",
     NODE_SHELL: "Part::Thickness",
+    NODE_REVOLVE: "Part::Revolution",
 }
 
-_FEATURES = (NODE_SKETCH, NODE_PAD, NODE_POCKET, NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL)
+_FEATURES = (
+    NODE_SKETCH,
+    NODE_PAD,
+    NODE_POCKET,
+    NODE_LOFT,
+    NODE_SWEEP,
+    NODE_FILLET,
+    NODE_SHELL,
+    NODE_REVOLVE,
+)
 _SOLID_FEATURES = (NODE_PAD, NODE_POCKET)
 # Part-workbench (OCC) features: not part of a PartDesign feature chain, so
 # they never carry BaseFeature links or become a body's Tip.
-_PART_FEATURES = (NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL)
+_PART_FEATURES = (NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL, NODE_REVOLVE)
 
-AnyModel = Part | Body | Sketch | Pad | Pocket | Loft | Sweep | Fillet | Shell
+AnyModel = Part | Body | Sketch | Pad | Pocket | Loft | Sweep | Fillet | Shell | Revolve
+
+# Global unit vector for each revolve axis letter.
+_AXIS_VECTORS = {
+    "X": (1.0, 0.0, 0.0),
+    "Y": (0.0, 1.0, 0.0),
+    "Z": (0.0, 0.0, 1.0),
+}
 
 # Quaternion (x, y, z, w) for each datum plane, taken from FreeCAD 1.1 output.
 _PLANE_QUAT: dict[str, tuple[float, float, float, float]] = {
@@ -277,6 +296,14 @@ def _link_sub(name: str, target: str, subs: Sequence[str]) -> str:
         name,
         "App::PropertyLinkSub",
         f'<LinkSub value="{target}" count="{len(subs)}">{subs_xml}</LinkSub>',
+    )
+
+
+def _vector(name: str, x: float, y: float, z: float) -> str:
+    return _prop(
+        name,
+        "App::PropertyVector",
+        f'<PropertyVector valueX="{_f(x)}" valueY="{_f(y)}" valueZ="{_f(z)}"/>',
     )
 
 
@@ -603,6 +630,31 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 _bool("Solid", True),
                 # Transition 1 = right corner, FreeCAD's own default for new sweeps.
                 _enum("Transition", 1),
+            ]
+        elif isinstance(model, Revolve):
+            # Property set verified against a FreeCAD 1.1-authored
+            # Part::Revolution (Axis/Base are global-frame vectors; Angle is a
+            # FloatConstraint; FaceMakerBullseye builds the face from the
+            # closed profile wires).
+            ax, ay, az = _AXIS_VECTORS[model.axis]
+            props = [
+                _label(model.name),
+                _identity_placement(),
+                _link("Source", resolve_sketch_fcname(nid, "revolve profile", model.profile)),
+                _vector("Axis", ax, ay, az),
+                _vector("Base", 0.0, 0.0, 0.0),
+                _prop(
+                    "Angle",
+                    "App::PropertyFloatConstraint",
+                    f'<Float value="{_f(model.angle)}"/>',
+                ),
+                _bool("Solid", True),
+                _bool("Symmetric", False),
+                _prop(
+                    "FaceMakerClass",
+                    "App::PropertyString",
+                    '<String value="Part::FaceMakerBullseye"/>',
+                ),
             ]
         elif isinstance(model, Fillet):
             target_id = resolve_target(nid, model.target)

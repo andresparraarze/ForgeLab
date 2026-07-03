@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`revolve` node type in the mechanical domain** (Part workbench, alongside
+  loft/sweep/fillet/shell): spin a closed 2D profile sketch around a global
+  X/Y/Z axis — with partial-revolve support via `angle` (degrees, default
+  360) — for axially-symmetric organic shapes like knobs, caps and
+  bottle-like grips. The FreeCAD exporter emits a native `Part::Revolution`
+  (Source/Axis/Base/Angle verified against FreeCAD 1.1); validation checks
+  that the profile reference resolves, the angle is in (0, 360], and the
+  profile stays on one side of the revolution axis (crossing it
+  self-intersects; touching it is allowed — and required to close a solid
+  profile). New worked example `examples/mechanical/rounded_knob.forge.json`
+  (a rounded control knob), live-verified in FreeCAD: recomputes clean with
+  the exact analytic volume (3099.7mm³). The mechanical system prompt now
+  teaches loft-for-asymmetric vs revolve-for-symmetric shape selection.
 - **Board-outline containment check** in hardware validation: `check_hardware`
   (and therefore `validate_document`) now fails — hard error, same tier as an
   undefined net reference — when any component's pad footprint extends outside
