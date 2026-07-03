@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from forgelab.layout import component_bbox
 from forgelab.spec import Domain, ForgeDocument, Node
 from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, NODE_NET
 
@@ -190,4 +191,52 @@ def check_hardware(document: ForgeDocument) -> tuple[list[str], list[str]]:
                 "Board has no outline defined — add Edge.Cuts segments to define the board shape"
             )
 
+    # 6. Component outside the board outline (error): the board literally will
+    #    not fabricate correctly. Footprints are sized from positioned pads via
+    #    the same bbox the auto-placer uses (without its keepout margin, which
+    #    is a packing preference, not a physical bound); components with no
+    #    positioned pads have nothing to bound and are skipped, as is the whole
+    #    check when there is no outline (check 5 already warns about that).
+    bounds = _outline_bbox(board_nodes)
+    if bounds is not None:
+        min_x, min_y, max_x, max_y = bounds
+        outline_w, outline_h = max_x - min_x, max_y - min_y
+        eps = 1e-6
+        for comp in components:
+            if not any(isinstance(p.get("at"), list) and len(p["at"]) == 2 for p in _pads(comp)):
+                continue
+            at = comp.props.get("at") or [0.0, 0.0]
+            x, y = float(at[0]), float(at[1])
+            x0, y0, x1, y1 = component_bbox(comp.props, keepout=0.0)
+            if (
+                x + x0 < min_x - eps
+                or y + y0 < min_y - eps
+                or x + x1 > max_x + eps
+                or y + y1 > max_y + eps
+            ):
+                errors.append(
+                    f"Component {_reference(comp)} extends outside the board outline — "
+                    f"at ({x:g}, {y:g}) with footprint {x1 - x0:g}x{y1 - y0:g}mm exceeds "
+                    f"board bounds ({outline_w:g}x{outline_h:g}mm). "
+                    f"Run auto_place to fix automatically."
+                )
+
     return errors, warnings
+
+
+def _outline_bbox(board_nodes: list[Node]) -> tuple[float, float, float, float] | None:
+    """(min_x, min_y, max_x, max_y) over the first board's outline segments."""
+    for board in board_nodes:
+        xs: list[float] = []
+        ys: list[float] = []
+        for seg in board.props.get("outline") or []:
+            if not isinstance(seg, dict):
+                continue
+            for key in ("start", "end"):
+                point = seg.get(key)
+                if isinstance(point, list) and len(point) == 2:
+                    xs.append(float(point[0]))
+                    ys.append(float(point[1]))
+        if xs:
+            return (min(xs), min(ys), max(xs), max(ys))
+    return None

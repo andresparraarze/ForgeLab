@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Board-outline containment check** in hardware validation: `check_hardware`
+  (and therefore `validate_document`) now fails — hard error, same tier as an
+  undefined net reference — when any component's pad footprint extends outside
+  the board outline, instead of the problem being discovered after opening
+  KiCad. Footprints are sized with the same pad-bounding-box logic the
+  auto-placer uses, and the error message names the fix:
+  `Run auto_place to fix automatically.` Boards with no outline (already a
+  warning) and components with no positioned pads are skipped gracefully.
 - **Basic autorouting for the hardware domain** — KiCad exports can now carry
   real copper traces, not just a placed netlist. `forgelab/layout/routing.py`
   implements a pure-Python, zero-dependency 2-layer grid-based maze router

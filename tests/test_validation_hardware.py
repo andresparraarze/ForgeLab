@@ -226,3 +226,96 @@ def test_validate_document_fails_on_hardware_error():
     result = tools.validate_document(document=doc)
     assert result["valid"] is False
     assert "undefined net MISSING" in result["error"]
+
+
+# --------------------------------------------------------------------------- #
+# 6. component outside the board outline
+# --------------------------------------------------------------------------- #
+def _placed_component(ref, at, half_w=1.0, half_h=1.0):
+    """A component whose pads span a (2*half_w)x(2*half_h)mm footprint."""
+    return {
+        "id": ref,
+        "type": "component",
+        "props": {
+            "reference": ref,
+            "value": "X",
+            "footprint": f"Test:{ref}",
+            "layer": "F.Cu",
+            "at": at,
+            "pads": [
+                {"number": "1", "net": "GND", "at": [-half_w, -half_h]},
+                {"number": "2", "net": "GND", "at": [half_w, half_h]},
+            ],
+        },
+    }
+
+
+def test_component_fully_within_bounds_passes():
+    errors, _ = _errors_warnings(
+        [_board(_rect_outline()), _net("GND", 1), _placed_component("U1", [5.0, 5.0, 0.0])]
+    )
+    assert not any("outside the board outline" in e for e in errors)
+
+
+def test_component_partially_outside_bounds_fails_with_auto_place_hint():
+    # Footprint spans x 8.5..10.5 on a 10mm board: 0.5mm hangs off the edge.
+    errors, _ = _errors_warnings(
+        [_board(_rect_outline()), _net("GND", 1), _placed_component("U1", [9.5, 5.0, 0.0])]
+    )
+    assert any(
+        "Component U1 extends outside the board outline" in e
+        and "footprint 2x2mm" in e
+        and "board bounds (10x10mm)" in e
+        and "Run auto_place to fix automatically" in e
+        for e in errors
+    ), errors
+
+
+def test_component_fully_outside_bounds_fails():
+    errors, _ = _errors_warnings(
+        [_board(_rect_outline()), _net("GND", 1), _placed_component("U1", [25.0, 25.0, 0.0])]
+    )
+    assert any("Component U1 extends outside the board outline" in e for e in errors)
+
+
+def test_out_of_bounds_check_skipped_without_outline():
+    errors, warnings = _errors_warnings(
+        [_board([]), _net("GND", 1), _placed_component("U1", [25.0, 25.0, 0.0])]
+    )
+    assert not any("outside the board outline" in e for e in errors)
+    assert any("no outline" in w for w in warnings)  # the existing warning still fires
+
+
+def test_component_without_positioned_pads_skips_bounds_check():
+    comp = _placed_component("U1", [25.0, 25.0, 0.0])
+    comp["props"]["pads"] = [{"number": "1", "net": "GND"}]  # no physical 'at'
+    errors, _ = _errors_warnings([_board(_rect_outline()), _net("GND", 1), comp])
+    assert not any("outside the board outline" in e for e in errors)
+
+
+def test_auto_place_fixes_out_of_bounds_document(tmp_path, monkeypatch):
+    """The advertised fix path works: auto_place makes a failing board pass."""
+    import json
+
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    doc = {
+        "forgelab_version": SPEC_VERSION,
+        "domain": "hardware",
+        "meta": {"name": "t", "generator": "test"},
+        "nodes": [
+            _board(_rect_outline()),
+            _net("GND", 1),
+            _placed_component("U1", [9.5, 5.0, 0.0]),
+            _placed_component("U2", [5.0, -3.0, 0.0]),
+        ],
+    }
+    before = tools.validate_document(document=doc)
+    assert before["valid"] is False
+    assert "outside the board outline" in before["error"]
+
+    (tmp_path / "bad.forge.json").write_text(json.dumps(doc))
+    placed = tools.auto_place("bad.forge.json", "fixed.forge.json")
+    assert placed["placed"] is True
+    fixed = json.loads((tmp_path / "fixed.forge.json").read_text())
+    after = tools.validate_document(document=fixed)
+    assert after["valid"] is True, after.get("error")

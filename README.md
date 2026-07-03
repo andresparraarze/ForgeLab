@@ -79,7 +79,10 @@ margin) and packs everything inside the board outline — guaranteed zero
 overlap and zero components off the board. Mark a manually positioned
 component `"locked": true` (e.g. an edge connector) and the rest packs around
 it; the returned `board_utilization` percentage signals when the board needs
-to grow.
+to grow. `validate_document` backs this up with a hard board-outline
+containment check: a component whose pad footprint extends outside the
+outline fails validation at document time — not after opening KiCad — and the
+error message points at `auto_place` as the fix.
 
 After placement, **`route_board`** turns the netlist into real copper: a
 2-layer grid-based maze router (Lee's algorithm) connects every net with
@@ -197,7 +200,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **612 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **618 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 
