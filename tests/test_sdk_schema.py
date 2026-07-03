@@ -9,7 +9,7 @@ def _variants(schema):
 
 def test_registry_covers_all_domains():
     assert set(DOMAIN_VOCAB) == {"hardware", "threed", "mechanical"}
-    assert set(DOMAIN_VOCAB["hardware"]) == {"board", "net", "component"}
+    assert set(DOMAIN_VOCAB["hardware"]) == {"board", "net", "component", "track", "via"}
     assert set(DOMAIN_VOCAB["threed"]) == {"scene", "material", "mesh", "object"}
     assert set(DOMAIN_VOCAB["mechanical"]) == {
         "part",

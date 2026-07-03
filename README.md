@@ -57,7 +57,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 | Domain         | Tool          | Import | Export | Notes                                        |
 | -------------- | ------------- | :----: | :----: | -------------------------------------------- |
-| Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board) |
+| Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export |
 | Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell) |
@@ -80,6 +80,22 @@ overlap and zero components off the board. Mark a manually positioned
 component `"locked": true` (e.g. an edge connector) and the rest packs around
 it; the returned `board_utilization` percentage signals when the board needs
 to grow.
+
+After placement, **`route_board`** turns the netlist into real copper: a
+2-layer grid-based maze router (Lee's algorithm) connects every net with
+`track` and `via` nodes that the KiCad exporter emits as actual
+`(segment ...)`/`(via ...)` S-expressions, and `check_fabrication` validates
+the routed geometry — not just the declared design rules — against the fab's
+minimum trace width and clearance. The full hardware workflow is: build (or
+generate) the document → `auto_place` → `route_board` → `validate_document` →
+`export_document(tool='kicad')`. Set expectations correctly: this is a basic
+router for simple-to-moderate boards (the Arduino Uno / ESP32 dev-board
+range), not a replacement for a commercial autorouter on dense designs. Nets
+the maze search cannot connect come back in `nets_failed` for manual routing
+instead of failing the run — on the packed Arduino Uno example, 22 of 32
+multi-pad nets route at the default 0.2mm grid, with the failures
+concentrated around a fine-pitch QFP packed into the board corner and the
+highest-fanout power nets.
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
@@ -104,7 +120,7 @@ rounded shape, and a `boolean` difference carves indents and cutouts (see
 
 ## MCP tools
 
-Thirty-two tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Thirty-three tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -168,6 +184,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 | --- | --- |
 | `generate_document` | Natural language → validated ForgeDocument |
 | `auto_place` | Pack a hardware document's components inside the board outline (no overlaps, locked components respected) |
+| `route_board` | Autoroute a placed board: 2-layer maze routing into real KiCad track/via copper (unroutable nets reported, not fatal) |
 | `analyze_image` | Photo → ForgeLab document skeleton (vision) |
 
 ## Token optimization
@@ -180,7 +197,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **32 MCP tools**, and **599 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **33 MCP tools**, and **612 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

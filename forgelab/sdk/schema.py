@@ -18,6 +18,8 @@ from forgelab.spec import (
     NODE_NET,
     NODE_OBJECT,
     NODE_SCENE,
+    NODE_TRACK,
+    NODE_VIA,
     BoardConstraints,
     Component,
     Material,
@@ -25,6 +27,8 @@ from forgelab.spec import (
     Net,
     Object3D,
     Scene,
+    Track,
+    Via,
 )
 from forgelab.spec.mechanical import (
     NODE_BODY,
@@ -53,6 +57,8 @@ DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
         NODE_BOARD: BoardConstraints,
         NODE_NET: Net,
         NODE_COMPONENT: Component,
+        NODE_TRACK: Track,
+        NODE_VIA: Via,
     },
     "threed": {
         NODE_SCENE: Scene,

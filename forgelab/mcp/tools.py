@@ -39,7 +39,14 @@ from forgelab.components import get_component as _get_component
 from forgelab.components import list_components as _list_components
 from forgelab.core import LLMOutputError, UnknownToolError, default_registry, validate
 from forgelab.core import validate as _core_validate
-from forgelab.layout import DEFAULT_KEEPOUT, PlacementError, place_components
+from forgelab.layout import (
+    DEFAULT_GRID_RESOLUTION,
+    DEFAULT_KEEPOUT,
+    PlacementError,
+    RoutingError,
+    place_components,
+    route_document,
+)
 from forgelab.mcp.auth_bridge import require_scope
 from forgelab.mcp.content import decode_content, encode_bytes
 from forgelab.patch import PatchError, apply_patch, diff
@@ -1147,6 +1154,86 @@ def auto_place(
         "components_placed": result["components_placed"],
         "components_locked": result["components_locked"],
         "board_utilization": result["board_utilization"],
+    }
+
+
+def route_board(
+    document_path: str,
+    output_path: str,
+    grid_resolution: float = DEFAULT_GRID_RESOLUTION,
+    layers: int = 2,
+) -> dict[str, Any]:
+    """Autoroute a placed hardware document: turn its netlist into real copper.
+
+    Runs a 2-layer grid-based maze router (Lee's algorithm) over the board:
+    each net's pads are connected with ``track`` nodes (plus ``via`` nodes
+    where a route changes layer), which the KiCad exporter emits as real
+    ``(segment ...)``/``(via ...)`` copper. The document must already be
+    placed — run ``auto_place`` first if components still overlap. This is a
+    basic router for simple-to-moderate boards: nets the maze search cannot
+    connect are returned in ``nets_failed`` for manual routing rather than
+    failing the whole operation. Re-routing replaces any existing track/via
+    nodes.
+
+    Args:
+        document_path: path to the placed hardware ``.forge.json`` (a bare
+            filename resolves against ``FORGELAB_OUTPUT_DIR``).
+        output_path: where to write the routed document.
+        grid_resolution: routing grid cell size in millimetres (default 0.2,
+            matching typical minimum trace/clearance).
+        layers: 1 routes on F.Cu only; 2 (default) adds B.Cu joined by vias.
+
+    Returns:
+        ``{"routed": true, "document_path", "nets_routed", "nets_failed":
+        [net names], "total_track_length_mm", "vias_used"}``. When the board
+        cannot be routed at all (e.g. no outline) nothing is written and the
+        result is ``{"routed": false, "error": ...}``.
+    """
+    require_scope("forge:generate")
+    data = _read_document_file(document_path)
+    try:
+        document_model = _core_validate(data)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    try:
+        result = route_document(document_model, grid_resolution=grid_resolution, layers=layers)
+    except RoutingError as exc:
+        return {"routed": False, "error": str(exc)}
+
+    nodes = [n for n in (data.get("nodes") or []) if n.get("type") not in ("track", "via")]
+    nodes.extend(
+        {"id": f"track_{i + 1}", "type": "track", "props": props}
+        for i, props in enumerate(result["tracks"])
+    )
+    nodes.extend(
+        {"id": f"via_{i + 1}", "type": "via", "props": props}
+        for i, props in enumerate(result["vias"])
+    )
+    data["nodes"] = nodes
+
+    target = _resolve_path(output_path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not write {str(target)!r}: {exc}") from exc
+    _history.record(
+        target,
+        {
+            "tool": "route_board",
+            "document_path": str(target),
+            "nets_routed": len(result["nets_routed"]),
+            "nets_failed": result["nets_failed"],
+            "total_track_length_mm": result["total_track_length_mm"],
+        },
+    )
+    return {
+        "routed": True,
+        "document_path": str(target),
+        "nets_routed": len(result["nets_routed"]),
+        "nets_failed": result["nets_failed"],
+        "total_track_length_mm": result["total_track_length_mm"],
+        "vias_used": result["vias_used"],
     }
 
 

@@ -15,11 +15,15 @@ from forgelab.spec import (
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_NET,
+    NODE_TRACK,
+    NODE_VIA,
     BoardConstraints,
     Component,
     DesignRules,
     ForgeDocument,
     Net,
+    Track,
+    Via,
 )
 from forgelab.sync.hashing import HASH_KEY, document_hash
 
@@ -108,6 +112,31 @@ class KiCadExporter(Exporter):
         tree.append(self._net_class_block(board.design_rules, nets))
         for comp in components:
             tree.append(self._footprint(comp, name_to_code))
+        for node in document.nodes:
+            if node.type == NODE_TRACK:
+                track = Track.model_validate(node.props)
+                tree.append(
+                    _s(
+                        "segment",
+                        _s("start", _num(track.start[0]), _num(track.start[1])),
+                        _s("end", _num(track.end[0]), _num(track.end[1])),
+                        _s("width", _num(track.width)),
+                        _s("layer", track.layer),
+                        _s("net", name_to_code.get(track.net, 0)),
+                    )
+                )
+            elif node.type == NODE_VIA:
+                via = Via.model_validate(node.props)
+                tree.append(
+                    _s(
+                        "via",
+                        _s("at", _num(via.at[0]), _num(via.at[1])),
+                        _s("size", _num(via.size)),
+                        _s("drill", _num(via.drill)),
+                        _s("layers", "F.Cu", "B.Cu"),
+                        _s("net", name_to_code.get(via.net, 0)),
+                    )
+                )
         for seg in board.outline:
             tree.append(
                 _s(
