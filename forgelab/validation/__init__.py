@@ -2,6 +2,7 @@
 
 from forgelab.validation.fabrication import (
     check_fab_rules,
+    check_gerber_completeness,
     fab_profile_names,
     fab_profiles,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "check_hardware",
     "check_mechanical",
     "check_fab_rules",
+    "check_gerber_completeness",
     "fab_profile_names",
     "fab_profiles",
 ]
