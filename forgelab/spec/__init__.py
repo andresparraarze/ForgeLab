@@ -4,6 +4,8 @@ from forgelab.spec.hardware import (
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_NET,
+    NODE_TRACK,
+    NODE_VIA,
     BoardConstraints,
     BoardLayer,
     Component,
@@ -11,6 +13,8 @@ from forgelab.spec.hardware import (
     Net,
     OutlineSegment,
     Pad,
+    Track,
+    Via,
 )
 from forgelab.spec.models import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.schema import json_schema
@@ -39,6 +43,8 @@ __all__ = [
     "NODE_BOARD",
     "NODE_COMPONENT",
     "NODE_NET",
+    "NODE_TRACK",
+    "NODE_VIA",
     "BoardConstraints",
     "BoardLayer",
     "Component",
@@ -46,6 +52,8 @@ __all__ = [
     "Net",
     "OutlineSegment",
     "Pad",
+    "Track",
+    "Via",
     "NODE_MATERIAL",
     "NODE_MESH",
     "NODE_OBJECT",

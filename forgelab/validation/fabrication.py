@@ -12,10 +12,11 @@ measure). Pure standard library; node payloads are read as plain dicts.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from forgelab.spec import Domain, ForgeDocument
-from forgelab.spec.hardware import NODE_BOARD
+from forgelab.spec.hardware import NODE_BOARD, NODE_TRACK, NODE_VIA
 
 # Floating-point slack so an exactly-at-minimum value (0.1 vs 0.1) passes.
 _EPS = 1e-9
@@ -104,6 +105,97 @@ def _outline_bounds(outline: Any) -> tuple[float, float] | None:
     return max(xs) - min(xs), max(ys) - min(ys)
 
 
+def _segment_distance(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+) -> float:
+    """Minimum distance between two 2D line segments."""
+
+    def point_seg(p: tuple[float, float], s1: tuple[float, float], s2: tuple[float, float]):
+        dx, dy = s2[0] - s1[0], s2[1] - s1[1]
+        length2 = dx * dx + dy * dy
+        if length2 == 0:
+            return math.dist(p, s1)
+        t = max(0.0, min(1.0, ((p[0] - s1[0]) * dx + (p[1] - s1[1]) * dy) / length2))
+        return math.dist(p, (s1[0] + t * dx, s1[1] + t * dy))
+
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    # Proper intersection -> distance zero.
+    d1, d2 = orient(b1, b2, a1), orient(b1, b2, a2)
+    d3, d4 = orient(a1, a2, b1), orient(a1, a2, b2)
+    if ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)):
+        return 0.0
+    return min(
+        point_seg(a1, b1, b2),
+        point_seg(a2, b1, b2),
+        point_seg(b1, a1, a2),
+        point_seg(b2, a1, a2),
+    )
+
+
+def _check_routed_copper(
+    document: ForgeDocument, fab: str, profile: dict[str, float], errors: list[str]
+) -> None:
+    """Validate actually-routed tracks and vias, not just declared design rules."""
+    tracks: list[dict[str, Any]] = []
+    for node in document.walk():
+        if node.type == NODE_TRACK:
+            props = node.props
+            width = float(props.get("width", 0.0))
+            if _below(width, profile["min_trace_width"]):
+                errors.append(
+                    f"routed track on net {props.get('net', '?')} has width {width}mm, "
+                    f"below {fab} minimum trace width {profile['min_trace_width']}mm"
+                )
+            tracks.append(props)
+        elif node.type == NODE_VIA:
+            size = float(node.props.get("size", 0.0))
+            drill = float(node.props.get("drill", 0.0))
+            if _below(size, profile["min_via_diameter"]):
+                errors.append(
+                    f"routed via on net {node.props.get('net', '?')} has size {size}mm, "
+                    f"below {fab} minimum via diameter {profile['min_via_diameter']}mm"
+                )
+            if _below(drill, profile["min_via_drill"]):
+                errors.append(
+                    f"routed via on net {node.props.get('net', '?')} has drill {drill}mm, "
+                    f"below {fab} minimum via drill {profile['min_via_drill']}mm"
+                )
+
+    # Copper-to-copper clearance between tracks of different nets on the same
+    # layer: edge-to-edge gap = centreline distance minus half of each width.
+    min_spacing = profile.get("min_trace_spacing")
+    if min_spacing is None:
+        return
+    reported: set[tuple[str, str]] = set()
+    for i, a in enumerate(tracks):
+        for b in tracks[i + 1 :]:
+            if a.get("layer") != b.get("layer") or a.get("net") == b.get("net"):
+                continue
+            pair = tuple(sorted((str(a.get("net")), str(b.get("net")))))
+            if pair in reported:
+                continue
+            gap = (
+                _segment_distance(
+                    (float(a["start"][0]), float(a["start"][1])),
+                    (float(a["end"][0]), float(a["end"][1])),
+                    (float(b["start"][0]), float(b["start"][1])),
+                    (float(b["end"][0]), float(b["end"][1])),
+                )
+                - (float(a.get("width", 0.0)) + float(b.get("width", 0.0))) / 2
+            )
+            if _below(gap, min_spacing):
+                reported.add(pair)  # type: ignore[arg-type]
+                errors.append(
+                    f"routed tracks on nets {pair[0]} and {pair[1]} ({a.get('layer')}) are "
+                    f"{max(gap, 0.0):.3f}mm apart, below {fab} minimum clearance {min_spacing}mm"
+                )
+
+
 def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str, Any]:
     """Validate a hardware document's design rules against a fab profile.
 
@@ -157,6 +249,8 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
                     f"drill_size {float(drill_size)}mm is below {fab} minimum drill size "
                     f"{profile['min_drill_size']}mm"
                 )
+
+    _check_routed_copper(document, fab, profile, errors)
 
     # Board-size envelope — only when the profile defines limits and there is an
     # outline to measure.

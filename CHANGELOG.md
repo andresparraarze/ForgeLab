@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Basic autorouting for the hardware domain** — KiCad exports can now carry
+  real copper traces, not just a placed netlist. `forgelab/layout/routing.py`
+  implements a pure-Python, zero-dependency 2-layer grid-based maze router
+  (Lee's algorithm): the board outline is discretized at a configurable
+  resolution (default 0.2mm), pads become fixed cells, F.Cu/B.Cu are two grid
+  planes joined by vias at a cost penalty, and nets are routed shortest-span
+  first so constrained connections go in before long ones block them.
+  Multi-pin nets (GND/VCC) route as a minimum spanning tree, with later pads
+  connecting into the net's existing copper. Unroutable nets are reported in
+  `nets_failed` rather than failing the whole board. Two new IR node types —
+  `track` (net, layer, start, end, width) and `via` (at, net, size, drill) —
+  are emitted by the KiCad exporter as real `(segment ...)`/`(via ...)`
+  S-expressions, and `check_fabrication` now validates the actually-routed
+  geometry (track widths, via sizes, copper-to-copper clearance) against the
+  fab profile, not just the declared design rules. New MCP tool
+  **`route_board(document_path, output_path, grid_resolution=0.2, layers=2)`**
+  (forge:generate scope) completes the hardware workflow: build → `auto_place`
+  → `route_board` → `validate_document` → `export_document(tool='kicad')`.
+  Honest scoping: this is a basic router for simple-to-moderate boards, not a
+  commercial autorouter — on the Arduino Uno example it routes 22 of 32
+  multi-pad nets in ~2s, with the rest (a corner-packed fine-pitch QFP's
+  escapes and the highest-fanout power nets) reported for manual routing.
+
 ### Changed
 - The Blender script exporter (`tool='blender_script'`) now generates a
   product-render scene rather than a bare viewport. Every script gains: a World

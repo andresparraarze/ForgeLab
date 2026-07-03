@@ -31,6 +31,7 @@ _TOOLS = [
     tools.check_fabrication,
     tools.list_fab_profiles,
     tools.auto_place,
+    tools.route_board,
     tools.get_projection_schema,
     tools.calculate_pad_positions,
     tools.calculate_polygon,
