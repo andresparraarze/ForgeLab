@@ -7,6 +7,7 @@ from forgelab.spec import ForgeDocument
 class AltiumImporter(Importer):
     """Import an Altium design into ForgeLab IR. (stub)"""
 
+    implemented = False
     tool_name = "altium"
 
     def to_ir(self, source: bytes) -> ForgeDocument:

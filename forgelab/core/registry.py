@@ -31,12 +31,17 @@ class Registry:
             raise UnknownToolError(f"No exporter registered for tool {tool_name!r}") from None
 
     def tool_names(self) -> dict[str, dict[str, bool]]:
-        """Map every registered tool to its import/export availability."""
+        """Map every registered tool to its REAL import/export availability.
+
+        A registered stub (``implemented = False``) reports False: an agent
+        reading ``list_formats`` must never be told a path exists when the
+        implementation would just raise NotImplementedError.
+        """
         names = set(self._importers) | set(self._exporters)
         return {
             name: {
-                "import": name in self._importers,
-                "export": name in self._exporters,
+                "import": name in self._importers and self._importers[name].implemented,
+                "export": name in self._exporters and self._exporters[name].implemented,
             }
             for name in sorted(names)
         }

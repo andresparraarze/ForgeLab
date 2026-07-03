@@ -7,6 +7,7 @@ from forgelab.spec import ForgeDocument
 class BlenderImporter(Importer):
     """Import a Blender scene into ForgeLab IR. (stub)"""
 
+    implemented = False
     tool_name = "blender"
 
     def to_ir(self, source: bytes) -> ForgeDocument:
@@ -16,6 +17,7 @@ class BlenderImporter(Importer):
 class UnrealImporter(Importer):
     """Import an Unreal Engine asset into ForgeLab IR. (stub)"""
 
+    implemented = False
     tool_name = "unreal"
 
     def to_ir(self, source: bytes) -> ForgeDocument:

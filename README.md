@@ -72,7 +72,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | -------------- | ------------- | :----: | :----: | -------------------------------------------- |
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export |
 | Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
-| Hardware       | Gerber        |   🚧   |   🚧   | stub — contributions welcome                 |
+| Hardware       | Gerber        |   🚧   |   ✅   | export RS-274X layer set + Excellon drill, zipped (F/B copper, mask, silk, outline) |
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
@@ -100,6 +100,17 @@ to grow. `validate_document` backs this up with a hard board-outline
 containment check: a component whose pad footprint extends outside the
 outline fails validation at document time — not after opening KiCad — and the
 error message points at `auto_place` as the fix.
+
+The pipeline ends fab-ready: `export_document(tool='gerber',
+output_path='board_gerbers.zip')` writes a zip a fab house can accept —
+front/back copper (routed tracks, via annulars, flashed pad apertures),
+soldermask openings, silkscreen reference designators, board outline, and an
+Excellon drill file with one hole per via — validated against a real Gerber
+parser (gerbonara reads back every layer and recognizes the full stack). Run
+`check_gerber_completeness` first: it re-checks the fab rules on the routed
+geometry and warns if the board has no tracks yet. The full workflow:
+**build → `auto_place` → `route_board` → `check_fabrication` →
+`export_document(tool='gerber')` → upload to JLCPCB/PCBWay/OSH Park.**
 
 After placement, **`route_board`** turns the netlist into real copper: a
 2-layer grid-based maze router (Lee's algorithm) connects every net with
@@ -250,7 +261,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **649 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **660 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 
@@ -259,7 +270,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 - [x] OAuth 2.0 auth + MCP server (stdio + Streamable HTTP)
 - [x] Multi-tool workflows + zero-friction agent setup (installer, `forgelab init`, bootstrap prompts)
 - [ ] Publish to PyPI so `pip install forgelab` works without cloning
-- [ ] Hardware: Gerber, Altium · Mechanical: Fusion 360 · 3D: Unreal, glTF textures/animations, `.glb`
+- [ ] Hardware: Gerber import, Altium · Mechanical: Fusion 360 · 3D: Unreal, glTF textures/animations, `.glb`
 - [ ] Transform passes (design-rule checks, layer remaps) over the IR; HTTP `/import` endpoint
 
 **Planned domains** — new vocabularies and compile targets beyond the current hardware/mechanical/3D trio:

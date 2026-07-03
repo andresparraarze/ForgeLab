@@ -16,6 +16,7 @@ class Importer(ABC):
     """
 
     tool_name: str = ""
+    implemented: bool = True
     base_dir: Path | None = None
     source_name: str | None = None
 

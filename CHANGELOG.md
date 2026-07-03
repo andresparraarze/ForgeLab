@@ -7,6 +7,37 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Real Gerber (RS-274X) export** — the missing final step of the hardware
+  pipeline: `export_document(tool='gerber', output_path='board_gerbers.zip')`
+  now writes a fab-ready zip (pure stdlib) containing F/B copper (routed
+  tracks, via annulars, flashed pad apertures with correct C/R/O aperture
+  definitions), F/B soldermask (pad openings with 0.05mm/side expansion), F/B
+  silkscreen (reference designators in a built-in stroke font), the Edge.Cuts
+  outline, and an Excellon drill file with one plated hole per via. Every
+  layer carries a proper `%FSLAX46Y46*%`/`%MOMM*%` header, and the output is
+  verified in tests with **gerbonara, a real Gerber parser** (new dev
+  dependency): each layer parses, the full layer stack is recognized, and the
+  routed Arduino Uno exports end-to-end with drill count matching the
+  router's vias. New `check_gerber_completeness` pre-flight (validation
+  module) re-runs the fab-rule checks and warns when a board has no routed
+  tracks. The ForgeLab pad model has no through-hole concept (pads are SMD),
+  so the drill file contains via holes only. Full workflow: build →
+  `auto_place` → `route_board` → `check_fabrication` →
+  `export_document(tool='gerber')`.
+
+### Fixed
+- **`list_formats` no longer overclaims.** Audit findings: `altium`,
+  `fusion360`, `unreal`, native `blender`, and (until now) `gerber` were
+  registered stubs whose import/export methods only raise
+  `NotImplementedError`, yet `list_formats` reported `import: true, export:
+  true` for all of them because the registry reported *registration*, not
+  capability. (`unreal` is a plain stub, not a glTF alias — no description
+  needed correcting, it needed to stop reporting true.) Importer/Exporter
+  base classes gained an `implemented` flag; stubs set it False and
+  `list_formats` now reports `altium`/`fusion360`/`unreal`/`blender` as
+  `{import: false, export: false}` and `gerber` as export-only. The stubs
+  stay registered so explicitly calling them still raises their helpful
+  errors (e.g. blender's pointer to glTF).
 - **Codex CLI install instructions** in the README's "Install in 30 seconds"
   section: a one-line `codex mcp add forgelab ...` pointing Codex at the
   existing `~/.forgelab/venv` stdio server (assumes ForgeLab itself is

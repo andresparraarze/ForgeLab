@@ -272,3 +272,26 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
                     )
 
     return {"fab": fab, "passed": not errors, "errors": errors, "warnings": warnings}
+
+
+def check_gerber_completeness(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str, Any]:
+    """Pre-flight for Gerber export: is this document worth sending to a fab?
+
+    Returns ``{"ready", "fab", "errors", "warnings"}``. ``errors`` are the fab
+    profile's hard violations (via ``check_fab_rules``, including the routed
+    geometry checks) — ``ready`` is False while any exist. A board with no
+    routed tracks gets a warning: the Gerbers would carry pads and outline but
+    no connections, which is nearly useless to a fab — run ``route_board``
+    first.
+    """
+    fab_result = check_fab_rules(document, fab)
+    errors = list(fab_result["errors"])
+    warnings = list(fab_result["warnings"])
+    if document.domain == Domain.HARDWARE and not any(
+        n.type == NODE_TRACK for n in document.walk()
+    ):
+        warnings.append(
+            "board has no routed tracks — the Gerber set would contain no copper "
+            "connections; run route_board (or hand-place track nodes) before export"
+        )
+    return {"ready": not errors, "fab": fab, "errors": errors, "warnings": warnings}

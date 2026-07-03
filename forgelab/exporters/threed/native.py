@@ -7,6 +7,7 @@ from forgelab.spec import ForgeDocument
 class BlenderExporter(Exporter):
     """Export ForgeLab IR to a Blender scene. (stub)"""
 
+    implemented = False
     tool_name = "blender"
 
     def from_ir(self, document: ForgeDocument) -> bytes:
@@ -19,6 +20,7 @@ class BlenderExporter(Exporter):
 class UnrealExporter(Exporter):
     """Export ForgeLab IR to an Unreal Engine asset. (stub)"""
 
+    implemented = False
     tool_name = "unreal"
 
     def from_ir(self, document: ForgeDocument) -> bytes:
