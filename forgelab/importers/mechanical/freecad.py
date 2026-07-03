@@ -21,15 +21,23 @@ from forgelab.importers.mechanical.realxml import parse_real_document
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_FILLET,
+    NODE_LOFT,
     NODE_PAD,
     NODE_PART,
     NODE_POCKET,
+    NODE_SHELL,
     NODE_SKETCH,
+    NODE_SWEEP,
     Body,
+    Fillet,
+    Loft,
     Pad,
     Part,
     Pocket,
+    Shell,
     Sketch,
+    Sweep,
 )
 from forgelab.spec.version import SPEC_VERSION
 
@@ -39,6 +47,10 @@ _NODE_BY_FCTYPE = {
     "Sketcher::SketchObject": NODE_SKETCH,
     "PartDesign::Pad": NODE_PAD,
     "PartDesign::Pocket": NODE_POCKET,
+    "Part::Loft": NODE_LOFT,
+    "Part::Sweep": NODE_SWEEP,
+    "Part::Fillet": NODE_FILLET,
+    "Part::Thickness": NODE_SHELL,
 }
 
 _MODEL_BY_NODE = {
@@ -47,6 +59,10 @@ _MODEL_BY_NODE = {
     NODE_SKETCH: Sketch,
     NODE_PAD: Pad,
     NODE_POCKET: Pocket,
+    NODE_LOFT: Loft,
+    NODE_SWEEP: Sweep,
+    NODE_FILLET: Fillet,
+    NODE_SHELL: Shell,
 }
 
 assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), "FreeCAD type maps are out of sync"

@@ -11,14 +11,34 @@ def test_registry_covers_all_domains():
     assert set(DOMAIN_VOCAB) == {"hardware", "threed", "mechanical"}
     assert set(DOMAIN_VOCAB["hardware"]) == {"board", "net", "component"}
     assert set(DOMAIN_VOCAB["threed"]) == {"scene", "material", "mesh", "object"}
-    assert set(DOMAIN_VOCAB["mechanical"]) == {"part", "body", "sketch", "pad", "pocket"}
+    assert set(DOMAIN_VOCAB["mechanical"]) == {
+        "part",
+        "body",
+        "sketch",
+        "pad",
+        "pocket",
+        "loft",
+        "sweep",
+        "fillet",
+        "shell",
+    }
 
 
 def test_mechanical_schema_pins_domain_and_includes_pad():
     schema = domain_schema("mechanical")
     assert schema["properties"]["domain"] == {"const": "mechanical"}
     consts = {v["properties"]["type"]["const"] for v in _variants(schema)}
-    assert consts == {"part", "body", "sketch", "pad", "pocket"}
+    assert consts == {
+        "part",
+        "body",
+        "sketch",
+        "pad",
+        "pocket",
+        "loft",
+        "sweep",
+        "fillet",
+        "shell",
+    }
 
 
 def test_hardware_schema_pins_domain_const():
