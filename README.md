@@ -34,6 +34,19 @@ Paste this prompt:
 
 > Install ForgeLab and add it to your MCP configuration. Clone https://github.com/andresparraarze/ForgeLab, create a venv at ~/.forgelab/venv, install forgelab[mcp,agent], add the stdio MCP server to your config at ~/.forgelab/venv/bin/forgelab-mcp --transport stdio, verify by calling list_domains, and confirm what design domains are available.
 
+### Codex CLI
+
+Assumes ForgeLab is already installed (the Claude Code curl script above, or
+a manual install, has been run) — Codex just needs to be pointed at the same
+venv:
+
+```bash
+codex mcp add forgelab --env FORGELAB_OUTPUT_DIR=$HOME/forgelab-output -- $HOME/.forgelab/venv/bin/forgelab-mcp --transport stdio
+```
+
+That's it. Ask Codex to design anything. Run `/mcp` inside a Codex session to
+confirm ForgeLab's tools are listed.
+
 ## What you can do
 
 Just tell your agent what you want:
