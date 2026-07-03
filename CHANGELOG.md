@@ -26,6 +26,21 @@ All notable changes to this project are documented here. The format is based on
   KiCad exporter places such components at rotation 0 rather than raising.
 
 ### Added
+- Blender modifier stack support in the threed domain: object nodes gain an
+  optional ordered `modifiers` list (`subsurf`, `bevel`, `boolean`,
+  `solidify`) and the Blender script exporter compiles it to native
+  `obj.modifiers.new(...)` calls in stack order, so agents describe
+  organic/smooth geometry as primitives + modifiers and Blender's own modifier
+  evaluation computes the real result when the script runs. Boolean modifiers
+  resolve their `target` node id to the bpy object created earlier in the
+  script — objects are emitted in dependency (topological) order, a dependency
+  cycle raises a clear error, and the consumed target is hidden from render
+  and viewport. Composes with primitive detection: cube/cylinder + `subsurf` +
+  `bevel` is the canonical smooth-organic pattern. New worked example
+  `examples/threed/organic_handle.forge.json` (cylinder + subsurf + bevel,
+  thumb-rest carved by a boolean-difference sphere) ships as a second threed
+  few-shot alongside space_station. glTF export ignores `modifiers` (nothing
+  is baked).
 - Part-workbench feature support in the mechanical domain: four new node types
   — `loft` (blend a solid through ordered profile sketches; `ruled` and
   `closed` flags), `sweep` (drive a profile sketch along a path sketch;

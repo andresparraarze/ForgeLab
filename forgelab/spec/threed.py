@@ -16,7 +16,7 @@ land tipped on its side.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 NODE_SCENE = "scene"
 NODE_OBJECT = "object"
@@ -107,6 +107,69 @@ class Transform(BaseModel):
         return value
 
 
+_MODIFIER_TYPES = ("subsurf", "bevel", "boolean", "solidify")
+_BOOLEAN_OPERATIONS = ("difference", "union", "intersect")
+
+
+class Modifier(BaseModel):
+    """One entry in an object's Blender modifier stack.
+
+    Modifiers describe procedural geometry (smoothing, rounded edges, cuts,
+    wall thickness) that Blender's own modifier evaluation computes when the
+    exported script runs — the IR carries only the description. Each type
+    reads its own fields; the others are ignored:
+
+    - ``subsurf``: ``levels`` (viewport, default 2), ``render_levels``
+      (defaults to ``levels`` when omitted).
+    - ``bevel``: ``width`` (default 0.02), ``segments`` (default 3),
+      ``limit_method`` ('angle', 'none', 'weight' or 'vgroup'; default
+      'angle').
+    - ``boolean``: ``operation`` ('difference', 'union' or 'intersect') and
+      ``target`` (the node id of the object supplying the cutting/joining
+      volume; it is hidden from render since the boolean consumes it).
+    - ``solidify``: ``thickness`` (default 0.02).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    levels: int = 2
+    render_levels: int | None = None
+    width: float = 0.02
+    segments: int = 3
+    limit_method: str = "angle"
+    operation: str = "difference"
+    target: str = ""
+    thickness: float = 0.02
+
+    @field_validator("type")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        if value not in _MODIFIER_TYPES:
+            raise ValueError(f"modifier type must be one of {_MODIFIER_TYPES}")
+        return value
+
+    @field_validator("limit_method")
+    @classmethod
+    def _known_limit_method(cls, value: str) -> str:
+        if value.lower() not in ("angle", "none", "weight", "vgroup"):
+            raise ValueError("limit_method must be 'angle', 'none', 'weight' or 'vgroup'")
+        return value.lower()
+
+    @field_validator("operation")
+    @classmethod
+    def _known_operation(cls, value: str) -> str:
+        if value.lower() not in _BOOLEAN_OPERATIONS:
+            raise ValueError(f"boolean operation must be one of {_BOOLEAN_OPERATIONS}")
+        return value.lower()
+
+    @model_validator(mode="after")
+    def _boolean_needs_target(self) -> Modifier:
+        if self.type == "boolean" and not self.target:
+            raise ValueError("a boolean modifier needs a 'target' object node id")
+        return self
+
+
 class Object3D(BaseModel):
     """A scene object (glTF node): a transform and an optional mesh."""
 
@@ -120,5 +183,14 @@ class Object3D(BaseModel):
             "Node id of the mesh to attach — the referenced mesh node's "
             "top-level 'id' field, e.g. 'mesh_cube'. Do NOT use the mesh's "
             "display name (its props.name)."
+        ),
+    )
+    modifiers: list[Modifier] = Field(
+        default_factory=list,
+        description=(
+            "Ordered Blender modifier stack applied to this object's mesh, "
+            "first to last — exactly Blender's own stack order. Only honoured "
+            "by the Blender script exporter; glTF export bakes nothing and "
+            "ignores it."
         ),
     )
