@@ -42,7 +42,8 @@ def _hardware_doc():
                     "value": "330R",
                     "footprint": "Resistor_SMD:R_0402",
                     "layer": "F.Cu",
-                    "at": [0.0, 0.0, 0.0],
+                    # Mid-board: check_hardware now fails out-of-bounds parts.
+                    "at": [5.0, 5.0, 0.0],
                     "pads": [{"number": "1", "net": "GND", "at": [-1.0, 0.0]}],
                 },
             },
