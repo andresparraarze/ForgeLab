@@ -25,6 +25,8 @@ _EXPECTED = {
     "list_fab_profiles",
     "auto_place",
     "route_board",
+    "preview_render",
+    "critique_render",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",

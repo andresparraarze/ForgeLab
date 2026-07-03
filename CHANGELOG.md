@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Render-critique loop for the threed domain** — two new MCP tools (35
+  total) that let an agent see and iteratively fix what it built without
+  Blender installed. `preview_render(document_path, output_path, views=3)`
+  (forge:read; new `forgelab[preview]` extra — matplotlib + numpy, pure pip,
+  no system dependencies) walks the object graph composing transforms onto
+  mesh triangles and renders a flat-shaded multi-angle PNG (front-3/4, side,
+  rear-3/4; Y-up remapped for display; baked geometry only — Blender modifier
+  stacks show their base meshes). `critique_render(render_path, intent,
+  reference_image_path=None)` (forge:generate; same ANTHROPIC_API_KEY +
+  `agent`-extra gating as `analyze_image`, injectable client) asks the vision
+  model to judge the render against the intent and returns structured JSON:
+  `matches_intent`, `score` 0-10, `issues` (severity/description/likely
+  cause) and actionable `suggested_changes`, tolerating fenced/prose-wrapped
+  responses. Deliberately two primitives, not an orchestrated loop — the
+  calling agent drives render → critique → `patch_document` → re-render.
+  `generation_status` now reports `preview_render`/`critique_render`
+  availability alongside the existing booleans.
 - **`revolve` node type in the mechanical domain** (Part workbench, alongside
   loft/sweep/fillet/shell): spin a closed 2D profile sketch around a global
   X/Y/Z axis — with partial-revolve support via `angle` (degrees, default

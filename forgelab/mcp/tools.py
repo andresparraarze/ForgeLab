@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import importlib.util
 import io
 import json
 import os
@@ -1354,25 +1355,35 @@ def generation_status() -> dict[str, Any]:
     document yourself against the schema instead.
 
     Returns ``{"available": bool, "generate_document": bool, "analyze_image":
-    bool}``; when unavailable, also ``"reason"`` and an ``"alternative"``
-    describing how to proceed. ``available`` mirrors ``generate_document`` for
-    backward compatibility (both API tools share the same requirements).
+    bool, "critique_render": bool, "preview_render": bool}``; when the API
+    tools are unavailable, also ``"reason"`` and an ``"alternative"``
+    describing how to proceed. ``critique_render`` shares the API tools'
+    requirements; ``preview_render`` is pure-local and only needs the
+    ``preview`` extra (``preview_reason`` says so when it is missing).
+    ``available`` mirrors ``generate_document`` for backward compatibility.
     """
     require_scope("forge:read")
     available, reason = _generation_availability()
-    if available:
-        return {"available": True, "generate_document": True, "analyze_image": True}
-    return {
-        "available": False,
-        "generate_document": False,
-        "analyze_image": False,
-        "reason": reason,
-        "alternative": (
+    preview_ok = _preview_extra_installed()
+    status: dict[str, Any] = {
+        "available": available,
+        "generate_document": available,
+        "analyze_image": available,
+        "critique_render": available,
+        "preview_render": preview_ok,
+    }
+    if not preview_ok:
+        status["preview_reason"] = (
+            'the preview extra is not installed (pip install "forgelab[preview]")'
+        )
+    if not available:
+        status["reason"] = reason
+        status["alternative"] = (
             "Build the document yourself: call get_domain_schema and get_prompt "
             "for the domain, construct the complete document in one pass, then "
             "call validate_document once."
-        ),
-    }
+        )
+    return status
 
 
 def export_document(
@@ -1672,3 +1683,182 @@ def analyze_image(image_path: str, domain: str, hints: str = "") -> dict[str, An
         ],
     )
     return _parse_skeleton_json(_message_text(message))
+
+
+# --------------------------------------------------------------------------- #
+# Render-critique loop primitives. Two deliberately separate tools — the
+# calling agent drives the iteration itself: preview_render -> critique_render
+# -> patch_document from the suggested changes -> render again.
+# --------------------------------------------------------------------------- #
+def _import_preview() -> Any:
+    """Import the preview renderer. Indirection so tests can simulate absence."""
+    from forgelab import preview
+
+    return preview
+
+
+def _preview_extra_installed() -> bool:
+    return (
+        importlib.util.find_spec("matplotlib") is not None
+        and importlib.util.find_spec("numpy") is not None
+    )
+
+
+def preview_render(document_path: str, output_path: str, views: int = 3) -> dict[str, Any]:
+    """Render a threed document to a flat-shaded multi-angle preview PNG.
+
+    Pure-local computation (matplotlib, no Blender, no GPU): each object's
+    transform is applied to its mesh triangles and up to four camera angles
+    (front-3/4, side, rear-3/4, top) are laid side by side in one PNG, so an
+    agent can *see* the shape it built without the user screenshotting
+    anything. Renders the baked triangle geometry; Blender modifier stacks are
+    evaluated by Blender itself, so previews show the base meshes. Pair with
+    ``critique_render`` for the iterative refine loop.
+
+    Args:
+        document_path: path to the threed ``.forge.json`` (a bare filename
+            resolves against ``FORGELAB_OUTPUT_DIR``).
+        output_path: where to write the preview PNG.
+        views: how many camera angles to render, 1-4 (default 3).
+
+    Returns:
+        ``{"rendered": true, "path", "triangle_count", "views"}``. Requires
+        the ``preview`` extra (see ``generation_status``); scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    data = _read_document_file(document_path)
+    try:
+        document_model = _core_validate(data)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    try:
+        preview = _import_preview()
+    except ImportError as exc:
+        raise ValueError(
+            "preview rendering unavailable: install the preview extra "
+            '(pip install "forgelab[preview]")'
+        ) from exc
+    target = _resolve_path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = preview.render_preview(document_model, str(target), views=views)
+    except ImportError as exc:
+        raise ValueError(
+            "preview rendering unavailable: install the preview extra "
+            '(pip install "forgelab[preview]")'
+        ) from exc
+    return {
+        "rendered": True,
+        "path": str(target),
+        "triangle_count": result["triangle_count"],
+        "views": result["views"],
+    }
+
+
+_CRITIQUE_SYSTEM = """\
+You are a meticulous 3D art director reviewing a render of a model against \
+the designer's stated intent{reference_clause}. Judge shape, proportions, \
+composition and completeness — not render quality (the preview is a simple \
+flat-shaded diagnostic, so ignore lighting/materials/resolution).
+
+Respond with ONLY a single JSON object, no prose and no Markdown fences:
+{{
+  "matches_intent": <bool — does the model plausibly realize the intent?>,
+  "score": <0-10 integer; 8+ means ship it>,
+  "issues": [
+    {{
+      "severity": "critical" | "minor",
+      "description": "<what is wrong, visually specific>",
+      "likely_cause": "<the probable modelling cause, e.g. a missing object \
+or a wrong transform/scale>"
+    }}
+  ],
+  "suggested_changes": [
+    "<specific, actionable edit, e.g. 'increase greenhouse height by ~30%', \
+'add a fourth wheel at the rear-left', 'wheel arches are too small — \
+increase radius'>"
+  ]
+}}"""
+
+
+def critique_render(
+    render_path: str, intent: str, reference_image_path: str | None = None
+) -> dict[str, Any]:
+    """Critique a rendered preview against the design intent via the vision API.
+
+    Sends the preview PNG (from ``preview_render``) — plus an optional
+    reference image — to the vision model with the intent description, and
+    returns its structured verdict: ``{"matches_intent": bool, "score": 0-10,
+    "issues": [{"severity", "description", "likely_cause"}],
+    "suggested_changes": [...]}``. Drive the refine loop yourself: apply the
+    suggested changes with ``patch_document``, re-render, and re-critique
+    until the score is acceptable or your turn budget runs out.
+
+    Args:
+        render_path: path to the rendered preview image; a bare filename
+            resolves against ``FORGELAB_OUTPUT_DIR``.
+        intent: what the model is supposed to be, in plain language (e.g.
+            "a low-slung sports car with a long hood and a fastback roof").
+        reference_image_path: optional photo/concept image the model should
+            match; sent alongside the render when provided.
+
+    Returns:
+        The parsed critique dict. Requires ``ANTHROPIC_API_KEY`` and the
+        ``agent`` extra (see ``generation_status``); scope ``forge:generate``.
+    """
+    require_scope("forge:generate")
+    if not intent.strip():
+        raise ValueError("critique_render needs an 'intent' description to judge against")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("render critique unavailable: ANTHROPIC_API_KEY is not set on the server")
+
+    def image_block(path_str: str) -> dict[str, Any]:
+        path = _resolve_path(path_str)
+        media_type = _image_media_type(path)
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"could not read image {str(path)!r}: {exc}") from exc
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64.b64encode(raw).decode("ascii"),
+            },
+        }
+
+    content: list[dict[str, Any]] = [image_block(render_path)]
+    reference_clause = ""
+    if reference_image_path:
+        content.append(image_block(reference_image_path))
+        reference_clause = " and a reference image (the second image; the first is the render)"
+    content.append({"type": "text", "text": f"Design intent: {intent.strip()}"})
+
+    try:
+        client = _make_vision_client()
+    except ImportError as exc:
+        raise ValueError(
+            'render critique unavailable: install the agent extra (pip install "forgelab[agent]")'
+        ) from exc
+    message = client.messages.create(
+        model=_VISION_MODEL,
+        max_tokens=2048,
+        system=_CRITIQUE_SYSTEM.format(reference_clause=reference_clause),
+        messages=[{"role": "user", "content": content}],
+    )
+    text = _message_text(message)
+    try:
+        critique = json.loads(text)
+    except json.JSONDecodeError:
+        extracted = _extract_json(text)  # tolerate fenced/prose-wrapped JSON
+        if extracted is None:
+            raise ValueError(
+                f"vision model did not return parseable critique JSON: {text[:200]!r}"
+            ) from None
+        critique = json.loads(extracted)
+    if not isinstance(critique, dict):
+        raise ValueError("vision model returned JSON that is not a critique object")
+    critique.setdefault("issues", [])
+    critique.setdefault("suggested_changes", [])
+    return critique
