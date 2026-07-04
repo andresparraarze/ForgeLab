@@ -3,6 +3,13 @@
 Parses the KiCad board file into the typed hardware vocabulary and stores each
 component/net/board as a node in the generic IR graph. Depends only on
 ``forgelab.spec`` and ``forgelab.formats`` (never on importers/exporters/core).
+
+Coordinate frames: KiCad files are Y-down, the IR is Y-up (see
+``forgelab.spec.hardware``). This importer mirrors every absolute Y about the
+Edge.Cuts outline's vertical centre (``y_ir = ymin + ymax - y_file``; pure
+negation when the file has no outline) and negates pad-local Y offsets —
+the exact inverse of the exporter's flip, so round-trips stay identity.
+Rotation angles pass through (CCW-on-screen in both conventions).
 """
 
 from __future__ import annotations
@@ -54,6 +61,24 @@ def _floats(values: list) -> list[float]:
     return [float(v) for v in values]
 
 
+def _outline_mirror_axis(tree: list) -> float:
+    """``ymin + ymax`` over the file's Edge.Cuts endpoints (0.0 without one)."""
+    ys: list[float] = []
+    for line in _find_all(tree, "gr_line"):
+        if _value(line, "layer") != "Edge.Cuts":
+            continue
+        for tag in ("start", "end"):
+            point = _find(line, tag)
+            if point and len(point) >= 3:
+                ys.append(float(point[2]))
+    return (min(ys) + max(ys)) if ys else 0.0
+
+
+def _flip_y(y: float, axis: float) -> float:
+    """KiCad Y-down -> IR Y-up (involutive; rounded so round-trips are exact)."""
+    return round(axis - y, 6) + 0.0  # + 0.0 normalizes -0.0
+
+
 class KiCadImporter(Importer):
     """Import a KiCad PCB into ForgeLab IR."""
 
@@ -67,9 +92,12 @@ class KiCadImporter(Importer):
         if not tree or tree[0] != "kicad_pcb":
             raise KiCadParseError("root element is not (kicad_pcb ...)")
 
-        board = self._read_board(tree)
+        # KiCad is Y-down, the IR is Y-up: every absolute Y read below goes
+        # through _flip_y about the outline's vertical centre.
+        axis = _outline_mirror_axis(tree)
+        board = self._read_board(tree, axis)
         nets = self._read_nets(tree)
-        components = self._read_components(tree)
+        components = self._read_components(tree, axis)
 
         nodes: list[Node] = [Node(id=NODE_BOARD, type=NODE_BOARD, props=board.model_dump())]
         for net in sorted(nets, key=lambda n: n.code):
@@ -84,7 +112,7 @@ class KiCadImporter(Importer):
             nodes=nodes,
         )
 
-    def _read_board(self, tree: list) -> BoardConstraints:
+    def _read_board(self, tree: list, axis: float) -> BoardConstraints:
         version = str(_value(tree, "version", "20221018"))
         generator = str(_value(tree, "generator", "pcbnew"))
 
@@ -125,7 +153,13 @@ class KiCadImporter(Importer):
             start = _find(line, "start")
             end = _find(line, "end")
             if start and end:
-                outline.append(OutlineSegment(start=_floats(start[1:3]), end=_floats(end[1:3])))
+                s_pt, e_pt = _floats(start[1:3]), _floats(end[1:3])
+                outline.append(
+                    OutlineSegment(
+                        start=[s_pt[0], _flip_y(s_pt[1], axis)],
+                        end=[e_pt[0], _flip_y(e_pt[1], axis)],
+                    )
+                )
 
         return BoardConstraints(
             kicad_version=version,
@@ -144,7 +178,7 @@ class KiCadImporter(Importer):
                 nets.append(Net(code=int(net[1]), name=""))
         return nets
 
-    def _read_components(self, tree: list) -> list[Component]:
+    def _read_components(self, tree: list, axis: float) -> list[Component]:
         components: list[Component] = []
         for fp in _find_all(tree, "footprint"):
             footprint_id = str(fp[1]) if len(fp) > 1 else ""
@@ -154,6 +188,8 @@ class KiCadImporter(Importer):
             at = _floats(at_node[1:4]) if at_node else [0.0, 0.0, 0.0]
             if len(at) == 2:
                 at = [at[0], at[1], 0.0]
+            # Absolute Y into the IR's Y-up frame; rotation passes through.
+            at = [at[0], _flip_y(at[1], axis), at[2]]
 
             reference = ""
             value = ""
@@ -170,6 +206,9 @@ class KiCadImporter(Importer):
                 net_name = str(net_node[2]) if net_node and len(net_node) >= 3 else ""
                 at_node = _find(pad, "at")
                 pad_at = _floats(at_node[1:3]) if at_node and len(at_node) >= 3 else None
+                if pad_at is not None:
+                    # Pad-local offsets: negate into the Y-up footprint frame.
+                    pad_at = [pad_at[0], -pad_at[1] + 0.0]
                 size_node = _find(pad, "size")
                 pad_size = _floats(size_node[1:3]) if size_node and len(size_node) >= 3 else None
                 # (pad "1" smd roundrect ...) — type at [2], shape at [3].

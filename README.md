@@ -101,6 +101,16 @@ containment check: a component whose pad footprint extends outside the
 outline fails validation at document time — not after opening KiCad — and the
 error message points at `auto_place` as the fix.
 
+**Coordinate convention (hardware domain):** the IR is **Y-up** — millimetres,
+origin at the board outline's lower-left corner, +X right, +Y up, rotation in
+degrees counterclockwise — the way a person naturally reasons about parts on a
+board. Format tools translate at the boundary, never inside the IR: Gerber
+output is natively Y-up and passes coordinates through unchanged, while KiCad
+files are Y-down, so the KiCad exporter/importer mirror Y about the outline's
+vertical centre (and negate pad-local offsets) on the way out and in — round
+trips stay exact. A dedicated test pins specific coordinates on both sides so
+a frame regression fails CI immediately.
+
 The pipeline ends fab-ready: `export_document(tool='gerber',
 output_path='board_gerbers.zip')` writes a zip a fab house can accept —
 front/back copper (routed tracks, via annulars, flashed pad apertures),
@@ -262,7 +272,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **669 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **672 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

@@ -474,9 +474,10 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
 
 
 def test_routing_connects_pads_of_a_rotated_component():
-    # U1 is rotated 90 degrees: its pad offset (2, 0) really sits at (0, -2)
-    # relative to the component (KiCad rotation convention). The router must
-    # attach copper at the rotated position, matching KiCad and the Gerbers.
+    # U1 is rotated 90 degrees: in the Y-up IR frame with CCW-positive
+    # rotation, its pad offset (2, 0) really sits at (0, +2) relative to the
+    # component. The router must attach copper at the rotated position,
+    # matching the Gerbers and KiCad's rendering of the Y-flipped export.
     document = _doc(
         [
             _component("U1", [10.0, 10.0, 90.0], [_pin("1", "SIG", [2.0, 0.0])]),
@@ -488,5 +489,5 @@ def test_routing_connects_pads_of_a_rotated_component():
     assert result["nets_routed"] == ["SIG"]
     endpoints = {tuple(t["start"]) for t in result["tracks"]}
     endpoints |= {tuple(t["end"]) for t in result["tracks"]}
-    assert any(math.dist(p, (10.0, 8.0)) < 0.3 for p in endpoints), sorted(endpoints)
+    assert any(math.dist(p, (10.0, 12.0)) < 0.3 for p in endpoints), sorted(endpoints)
     assert not any(math.dist(p, (12.0, 10.0)) < 0.3 for p in endpoints)

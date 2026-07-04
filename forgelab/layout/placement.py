@@ -57,16 +57,17 @@ Rect = tuple[float, float, float, float]  # (min_x, min_y, max_x, max_y)
 def rotate_offset(px: float, py: float, rotation_deg: float) -> tuple[float, float]:
     """Rotate a footprint-relative offset by the component rotation.
 
-    Uses KiCad's convention: a positive angle rotates counterclockwise on
-    screen, which in the file's Y-down coordinates maps ``(1, 0)`` at 90
-    degrees to ``(0, -1)``. Exporters and layout tools share this so routed
-    copper, Gerbers and the KiCad rendering agree on rotated components.
+    The IR is Y-up with positive rotation counterclockwise (see
+    ``forgelab.spec.hardware``), so this is the standard 2D rotation:
+    ``(1, 0)`` at 90 degrees maps to ``(0, 1)``. Exporters and layout tools
+    share this so routed copper, Gerbers and the KiCad rendering (which
+    receives Y-flipped coordinates) agree on rotated components.
     """
     if rotation_deg % 360.0 == 0.0:
         return px, py
     theta = math.radians(rotation_deg)
     c, s = math.cos(theta), math.sin(theta)
-    return px * c + py * s, -px * s + py * c
+    return px * c - py * s, px * s + py * c
 
 
 def component_rotation(props: dict[str, Any]) -> float:

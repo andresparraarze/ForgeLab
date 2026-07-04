@@ -10,6 +10,11 @@ format (millimetres, 6 decimal places) and every layer carries proper
 aperture definitions before its draw commands, so the output opens in real
 Gerber viewers rather than merely resembling the format.
 
+Coordinate frames: the IR is Y-up (see ``forgelab.spec.hardware``) and
+RS-274X/Excellon are natively Y-up too, so **coordinates pass through
+unchanged — deliberately no flip here** (the KiCad exporter is the one that
+mirrors Y into KiCad's Y-down file frame).
+
 Scope notes: the ForgeLab pad model has no through-hole concept (pads are
 SMD, as in the KiCad exporter), so the drill file contains via holes only.
 Pads without a physical ``at`` fall back to the same deterministic grid the
@@ -165,19 +170,19 @@ def _pad_grid_offset(index: int, total: int) -> tuple[float, float]:
 
 
 def _rotate_offset(px: float, py: float, rotation_deg: float) -> tuple[float, float]:
-    """Rotate a pad offset by the component rotation, KiCad convention.
+    """Rotate a pad offset by the component rotation.
 
-    Positive angles rotate counterclockwise on screen; in the Y-down
-    coordinate frame shared with the KiCad export, ``(1, 0)`` at 90 degrees
-    lands at ``(0, -1)``. Duplicates the formula in ``forgelab.layout`` (the
-    boundary rule keeps exporters off that package) so the Gerbers agree with
-    both the router and KiCad's own rendering of ``(at x y rot)``.
+    The IR is Y-up with positive rotation counterclockwise (see
+    ``forgelab.spec.hardware``): ``(1, 0)`` at 90 degrees lands at ``(0, 1)``.
+    Duplicates the formula in ``forgelab.layout`` (the boundary rule keeps
+    exporters off that package) so the Gerbers agree with both the router and
+    KiCad's rendering of the Y-flipped export.
     """
     if rotation_deg % 360.0 == 0.0:
         return px, py
     theta = math.radians(rotation_deg)
     c, s = math.cos(theta), math.sin(theta)
-    return px * c + py * s, -px * s + py * c
+    return px * c - py * s, px * s + py * c
 
 
 def _pad_template(width: float, height: float, shape: str) -> str:

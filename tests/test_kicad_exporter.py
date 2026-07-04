@@ -100,7 +100,9 @@ def test_component_at_xy_normalizes_to_zero_rotation():
     tree = parse(KiCadExporter().from_ir(doc).decode("utf-8"))
     (footprint,) = [c for c in tree if isinstance(c, list) and c and c[0] == "footprint"]
     at = next(c for c in footprint if isinstance(c, list) and c and c[0] == "at")
-    assert [at[1], at[2], at[3]] == [100.0, 50.0, 0.0]
+    # IR (100, 50) Y-up -> KiCad Y-down; no outline, so the mirror axis is
+    # y=0 and the flip is pure negation.
+    assert [at[1], at[2], at[3]] == [100.0, -50.0, 0.0]
 
 
 def test_export_contains_nets_and_footprint():
@@ -212,12 +214,13 @@ def test_unpositioned_pads_do_not_stack_at_origin():
 
 
 def test_pad_at_offset_is_emitted_when_provided():
-    # Agent-supplied pad offsets are honored verbatim, not overwritten.
+    # Agent-supplied pad offsets are honored (X verbatim; Y negated into
+    # KiCad's Y-down footprint-local frame per the Y-up IR convention).
     tree = parse(KiCadExporter().from_ir(_multi_pad_doc(4, with_positions=True)).decode())
     (fp,) = _blocks(tree, "footprint")
     pads = [e for e in fp if isinstance(e, list) and str(e[0]) == "pad"]
     positions = [_pad_at(p) for p in pads]
-    assert positions == [(0, 0), (1, 2), (2, 4), (3, 6)]
+    assert positions == [(0, 0), (1, -2), (2, -4), (3, -6)]
 
 
 def test_outline_uses_stroke_syntax():
