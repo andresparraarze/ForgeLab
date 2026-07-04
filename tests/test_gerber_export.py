@@ -327,12 +327,13 @@ def _rotated_component(rotation, shape="rect"):
 
 
 def test_rotated_component_pads_flash_at_kicad_rotated_positions():
-    # KiCad rotates footprint pads by (at x y rot); the Gerbers must agree.
-    # +90 degrees is counterclockwise on screen (Y-down file coords), so a pad
-    # offset (1, 0) lands at (0, -1) relative to the component origin.
+    # The IR is Y-up with positive rotation counterclockwise (see
+    # forgelab.spec.hardware), so a pad offset (1, 0) at +90 degrees lands at
+    # (0, +1) relative to the component origin — matching KiCad's CCW visual
+    # rotation of the Y-flipped export.
     archive = _export(_board_doc(extra_nodes=[_rotated_component(90.0)]))
     text = _read(archive, "F_Cu.gbr")
-    assert "X10000000Y9000000D03*" in text
+    assert "X10000000Y11000000D03*" in text
     # The rectangular aperture is rotated with the pad: dimensions swap.
     assert "%ADD" in text and "R,1.200000X0.500000" in text
 
@@ -352,5 +353,5 @@ def test_arbitrary_rotation_with_rect_pad_raises_actionable_error():
 def test_arbitrary_rotation_with_circle_pad_is_fine():
     archive = _export(_board_doc(extra_nodes=[_rotated_component(45.0, shape="circle")]))
     text = _read(archive, "F_Cu.gbr")
-    # cos45 = sin45 ~ 0.7071068: offset (1, 0) -> (0.707107, -0.707107).
-    assert "X10707107Y9292893D03*" in text
+    # cos45 = sin45 ~ 0.7071068: offset (1, 0) CCW in Y-up -> (0.707107, 0.707107).
+    assert "X10707107Y10707107D03*" in text

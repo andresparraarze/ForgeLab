@@ -3,6 +3,15 @@
 Rebuilds the typed hardware vocabulary from the IR node graph and emits a
 complete, functional ``kicad_pcb`` S-expression. Depends only on
 ``forgelab.spec`` and ``forgelab.formats`` (never on importers/exporters/core).
+
+Coordinate frames: the IR is Y-up (see ``forgelab.spec.hardware``); KiCad
+files are Y-down. This exporter therefore mirrors every absolute Y about the
+board outline's vertical centre (``y_file = ymin + ymax - y_ir``; pure
+negation when there is no outline) and negates pad-local Y offsets. Rotation
+angles pass through unchanged: KiCad's positive rotation is counterclockwise
+on screen, the same visual meaning as the IR's — the frame mirror is absorbed
+by the local-offset negation. The importer applies the exact inverse, so
+round-trips stay identity.
 """
 
 from __future__ import annotations
@@ -70,6 +79,19 @@ def _format_version(raw: str) -> int:
     return _DEFAULT_FORMAT_VERSION
 
 
+def _mirror_axis(outline) -> float:
+    """``ymin + ymax`` of the outline: mirroring about it maps the board's Y
+    range onto itself, keeping coordinates positive and round-trippable.
+    Without an outline there is no board frame, so mirror about y=0."""
+    ys = [float(p[1]) for seg in outline for p in (seg.start, seg.end)]
+    return (min(ys) + max(ys)) if ys else 0.0
+
+
+def _flip_y(y: float, axis: float) -> float:
+    """IR Y-up -> KiCad Y-down (involutive; rounded so round-trips are exact)."""
+    return round(axis - y, 6) + 0.0  # + 0.0 normalizes -0.0
+
+
 _PAD_GRID_PITCH = 2.0
 
 
@@ -98,6 +120,9 @@ class KiCadExporter(Exporter):
         nets = self._nets(document)
         components = self._components(document)
         name_to_code = {n.name: n.code for n in nets}
+        # IR is Y-up, KiCad is Y-down: every absolute Y below goes through
+        # _flip_y about the outline's vertical centre.
+        axis = _mirror_axis(board.outline)
 
         tree: list = [Symbol("kicad_pcb")]
         tree.append(_s("version", _format_version(board.kicad_version)))
@@ -111,15 +136,15 @@ class KiCadExporter(Exporter):
             tree.append(_s("net", net.code, net.name))
         tree.append(self._net_class_block(board.design_rules, nets))
         for comp in components:
-            tree.append(self._footprint(comp, name_to_code))
+            tree.append(self._footprint(comp, name_to_code, axis))
         for node in document.nodes:
             if node.type == NODE_TRACK:
                 track = Track.model_validate(node.props)
                 tree.append(
                     _s(
                         "segment",
-                        _s("start", _num(track.start[0]), _num(track.start[1])),
-                        _s("end", _num(track.end[0]), _num(track.end[1])),
+                        _s("start", _num(track.start[0]), _num(_flip_y(track.start[1], axis))),
+                        _s("end", _num(track.end[0]), _num(_flip_y(track.end[1], axis))),
                         _s("width", _num(track.width)),
                         _s("layer", track.layer),
                         _s("net", name_to_code.get(track.net, 0)),
@@ -130,7 +155,7 @@ class KiCadExporter(Exporter):
                 tree.append(
                     _s(
                         "via",
-                        _s("at", _num(via.at[0]), _num(via.at[1])),
+                        _s("at", _num(via.at[0]), _num(_flip_y(via.at[1], axis))),
                         _s("size", _num(via.size)),
                         _s("drill", _num(via.drill)),
                         _s("layers", "F.Cu", "B.Cu"),
@@ -141,8 +166,8 @@ class KiCadExporter(Exporter):
             tree.append(
                 _s(
                     "gr_line",
-                    _s("start", _num(seg.start[0]), _num(seg.start[1])),
-                    _s("end", _num(seg.end[0]), _num(seg.end[1])),
+                    _s("start", _num(seg.start[0]), _num(_flip_y(seg.start[1], axis))),
+                    _s("end", _num(seg.end[0]), _num(_flip_y(seg.end[1], axis))),
                     _s("stroke", _s("width", 0.1), _s("type", Symbol("solid"))),
                     _s("layer", "Edge.Cuts"),
                 )
@@ -212,11 +237,13 @@ class KiCadExporter(Exporter):
                 block.append(_s("add_net", net.name))
         return block
 
-    def _footprint(self, comp: Component, name_to_code: dict[str, int]) -> list:
+    def _footprint(self, comp: Component, name_to_code: dict[str, int], axis: float) -> list:
         fp: list = [Symbol("footprint"), comp.footprint, _s("layer", comp.layer)]
         if comp.uuid is not None:
             fp.append(_s("uuid", comp.uuid))
-        fp.append(_s("at", _num(comp.at[0]), _num(comp.at[1]), _num(comp.at[2])))
+        # Absolute Y is mirrored into KiCad's Y-down frame; the rotation angle
+        # passes through (CCW-on-screen in both conventions).
+        fp.append(_s("at", _num(comp.at[0]), _num(_flip_y(comp.at[1], axis)), _num(comp.at[2])))
         fp.append(_s("property", "Reference", comp.reference))
         fp.append(_s("property", "Value", comp.value))
         total = len(comp.pads)
@@ -225,9 +252,14 @@ class KiCadExporter(Exporter):
             # Honor an explicit pad offset; otherwise spread pads on a grid so
             # a multi-pin part doesn't collapse onto the footprint origin.
             if pad.at is not None:
-                x, y = pad.at[0], pad.at[1]
+                # Pad-local offsets are Y-up in the IR, Y-down in KiCad:
+                # negate (not mirror — this is a footprint-relative frame).
+                x, y = pad.at[0], -pad.at[1] + 0.0
             else:
+                # The fallback grid is computed in IR (Y-up) space — the same
+                # grid the Gerber exporter uses — so its Y is negated too.
                 x, y = _grid_offset(index, total)
+                y = -y + 0.0
             width, height = (pad.size[0], pad.size[1]) if pad.size else (1.6, 1.6)
             shape = pad.shape if pad.shape else "roundrect"
             fp.append(

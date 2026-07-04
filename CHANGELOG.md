@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **The hardware IR's Y-axis convention is now pinned and enforced: Y-up,
+  origin at the board outline's lower-left corner, rotation counterclockwise**
+  — resolving the ambiguity flagged by the health audit, where KiCad output
+  (Y-down), Gerber output (Y-up) and `calculate_board_layout`'s documented
+  lower-left origin only agreed by accident. The convention is normative in
+  `forgelab.spec.hardware` (module + Board/Component/Pad/Track/Via
+  docstrings). Consequences, each explicit and commented rather than
+  incidental:
+  - The **KiCad exporter now really flips Y** (it previously passed IR values
+    through verbatim — the audit's "confirm the flip" turned out to be "add
+    the flip"): absolute Y is mirrored about the outline's vertical centre
+    (`y_file = ymin + ymax − y_ir`, pure negation without an outline),
+    pad-local Y offsets are negated, rotation angles pass through (CCW on
+    screen in both frames). The **KiCad importer applies the exact inverse**
+    (with 6-decimal rounding so round-trips stay byte-identical), and
+    `examples/hardware/blinky.forge.json` was regenerated with the flipping
+    importer.
+  - The **Gerber exporter passes IR coordinates through unchanged** —
+    RS-274X/Excellon are natively Y-up — now stated explicitly in its module
+    docstring as a deliberate no-flip.
+  - The shared **rotation formula switched from the Y-down to the standard
+    Y-up CCW form** (`(1, 0)` at 90° → `(0, 1)`) in `forgelab.layout` and the
+    Gerber exporter; last release's rotation tests were updated to the pinned
+    convention.
+  - New `tests/test_y_axis_convention.py` pins concrete numbers on both
+    sides: a component at IR `(10, 5)` on a 20mm-tall board must land at
+    KiCad `(10, 15)` and Gerber `X10000000Y6000000` — a frame regression in
+    either exporter now fails immediately. 672 tests green.
+
 ### Added
 - **`check_gerber_completeness` MCP tool** (36 tools total). Health-audit
   finding: the Gerber pre-flight shipped as a library function only, so
