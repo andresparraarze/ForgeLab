@@ -72,6 +72,9 @@ from forgelab.validation import (
     check_mechanical,
     fab_profiles,
 )
+from forgelab.validation import (
+    check_gerber_completeness as _check_gerber_completeness,
+)
 
 _registry = default_registry()
 
@@ -1050,10 +1053,12 @@ def check_fabrication(document_path: str, fab: str = _DEFAULT_FAB) -> dict[str, 
     """Check a hardware document against a PCB fab's manufacturing rules.
 
     Reads the ``.forge.json`` (a bare filename resolves against
-    ``FORGELAB_OUTPUT_DIR``) and validates its board ``design_rules`` and outline
-    against the named fab profile — minimum trace width, via diameter, via drill,
-    and the board-size envelope. Call ``list_fab_profiles`` for the available fab
-    names (e.g. ``jlcpcb``, ``pcbway``, ``oshpark``).
+    ``FORGELAB_OUTPUT_DIR``) and validates its board ``design_rules``, outline
+    and any routed copper against the named fab profile — minimum trace width,
+    via diameter, via drill, the board-size envelope, and (when ``track``/``via``
+    nodes exist, e.g. after ``route_board``) the actually-routed track widths,
+    via geometry and copper-to-copper clearance. Call ``list_fab_profiles`` for
+    the available fab names (e.g. ``jlcpcb``, ``pcbway``, ``oshpark``).
 
     Returns ``{"fab", "passed", "errors", "warnings"}``: ``errors`` are hard rule
     violations the fab would reject; ``warnings`` flag things that could not be
@@ -1067,6 +1072,27 @@ def check_fabrication(document_path: str, fab: str = _DEFAULT_FAB) -> dict[str, 
     except Exception as exc:
         raise ValueError(f"invalid document: {exc}") from exc
     return check_fab_rules(model, fab)
+
+
+def check_gerber_completeness(document_path: str, fab: str = _DEFAULT_FAB) -> dict[str, Any]:
+    """Pre-flight a hardware document before ``export_document(tool='gerber')``.
+
+    Runs the full fab-rule check (design rules, board size, and routed
+    track/via geometry) and additionally warns when the board has no routed
+    tracks — the Gerbers would carry pads and outline but no copper
+    connections, so run ``route_board`` first.
+
+    Returns ``{"ready": bool, "fab", "errors", "warnings"}``. ``ready`` is
+    False while any hard fab violation exists; warnings never block. Call
+    ``list_fab_profiles`` for the available fab names.
+    """
+    require_scope("forge:read")
+    source = _read_document_file(document_path)
+    try:
+        model = _core_validate(source)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    return _check_gerber_completeness(model, fab)
 
 
 def list_fab_profiles() -> dict[str, dict[str, float]]:
@@ -1862,12 +1888,12 @@ def critique_render(
     try:
         critique = json.loads(text)
     except json.JSONDecodeError:
-        extracted = _extract_json(text)  # tolerate fenced/prose-wrapped JSON
-        if extracted is None:
+        try:
+            critique = json.loads(_extract_json(text))  # tolerate fenced/prose-wrapped JSON
+        except (LLMOutputError, json.JSONDecodeError) as exc:
             raise ValueError(
                 f"vision model did not return parseable critique JSON: {text[:200]!r}"
-            ) from None
-        critique = json.loads(extracted)
+            ) from exc
     if not isinstance(critique, dict):
         raise ValueError("vision model returned JSON that is not a critique object")
     critique.setdefault("issues", [])

@@ -319,3 +319,29 @@ def test_auto_place_fixes_out_of_bounds_document(tmp_path, monkeypatch):
     fixed = json.loads((tmp_path / "fixed.forge.json").read_text())
     after = tools.validate_document(document=fixed)
     assert after["valid"] is True, after.get("error")
+
+
+def test_bounds_check_honors_component_rotation():
+    # A 6mm-wide, 2mm-tall part at x=8.5 on a 10x10 board: unrotated its pads
+    # span x 5.5..11.5 (outside); rotated 90 degrees they span y-wise and fit.
+    def part(rotation):
+        return {
+            "id": "U1",
+            "type": "component",
+            "props": {
+                "reference": "U1",
+                "value": "x",
+                "footprint": "fp",
+                "layer": "F.Cu",
+                "at": [8.5, 5.0, rotation],
+                "pads": [
+                    {"number": "1", "at": [-3.0, 0.0], "size": [0.5, 0.5]},
+                    {"number": "2", "at": [3.0, 0.0], "size": [0.5, 0.5]},
+                ],
+            },
+        }
+
+    errors, _ = check_hardware(_doc([_board(_rect_outline()), part(0.0)]))
+    assert any("extends outside the board outline" in e for e in errors)
+    errors, _ = check_hardware(_doc([_board(_rect_outline()), part(90.0)]))
+    assert not errors

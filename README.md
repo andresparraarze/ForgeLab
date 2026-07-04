@@ -209,6 +209,7 @@ Thirty-five tools, same for every client. Over stdio all are local; over HTTP ea
 | `verify_sync` | Check a native file is still in sync with its source document |
 | `generate_bom` | Bill of materials from a hardware document (JSON or CSV) |
 | `check_fabrication` | Validate a board against a PCB fab's rules (JLCPCB/PCBWay/OSH Park) |
+| `check_gerber_completeness` | Pre-flight a board before Gerber export (fab rules + routed copper) |
 | `list_fab_profiles` | Available fab profiles and their key constraints |
 
 ### Project
@@ -261,7 +262,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **35 MCP tools**, and **660 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Gerber, Fusion 360, Unreal) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **669 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

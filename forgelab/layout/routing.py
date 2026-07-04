@@ -22,6 +22,7 @@ import heapq
 import math
 from typing import Any
 
+from forgelab.layout.placement import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT
 
@@ -296,13 +297,15 @@ def route_document(
             continue
         at = node.props.get("at") or [0.0, 0.0]
         cx, cy = float(at[0]), float(at[1])
+        rotation = component_rotation(node.props)
         for pad in node.props.get("pads") or []:
             if not isinstance(pad, dict):
                 continue
             offset = pad.get("at")
             if not (isinstance(offset, list) and len(offset) == 2):
                 continue  # no physical position: nothing to route to
-            px, py = cx + float(offset[0]), cy + float(offset[1])
+            rx, ry = rotate_offset(float(offset[0]), float(offset[1]), rotation)
+            px, py = cx + rx, cy + ry
             net = str(pad.get("net", ""))
             if net:
                 net_id = net_ids.setdefault(net, len(net_ids) + 1)
@@ -311,8 +314,12 @@ def route_document(
                 net_id = _BLOCKED
             size = pad.get("size")
             if isinstance(size, list) and len(size) == 2:
-                half_w = float(size[0]) / 2 + rules["clearance"]
-                half_h = float(size[1]) / 2 + rules["clearance"]
+                # Obstacle extents: the axis-aligned bbox of the (possibly
+                # rotated) pad rectangle, plus clearance.
+                theta = math.radians(rotation)
+                c, s = abs(math.cos(theta)), abs(math.sin(theta))
+                half_w = (float(size[0]) * c + float(size[1]) * s) / 2 + rules["clearance"]
+                half_h = (float(size[0]) * s + float(size[1]) * c) / 2 + rules["clearance"]
                 grid.mark_rect(0, px - half_w, py - half_h, px + half_w, py + half_h, net_id)
             else:
                 grid.owner[0][grid.cell(px, py)] = net_id

@@ -298,3 +298,59 @@ def test_list_formats_reports_stubs_honestly():
     assert formats["gerber"] == {"import": False, "export": True}
     for stub in ("altium", "fusion360", "unreal", "blender"):
         assert formats[stub] == {"import": False, "export": False}, stub
+
+
+# ------------------------------------------------------------------- rotation
+
+
+def _rotated_component(rotation, shape="rect"):
+    return {
+        "id": "U9",
+        "type": "component",
+        "props": {
+            "reference": "U9",
+            "value": "x",
+            "footprint": "fp",
+            "layer": "F.Cu",
+            "at": [10.0, 10.0, rotation],
+            "pads": [
+                {
+                    "number": "1",
+                    "net": "SIG",
+                    "at": [1.0, 0.0],
+                    "size": [0.5, 1.2],
+                    "shape": shape,
+                }
+            ],
+        },
+    }
+
+
+def test_rotated_component_pads_flash_at_kicad_rotated_positions():
+    # KiCad rotates footprint pads by (at x y rot); the Gerbers must agree.
+    # +90 degrees is counterclockwise on screen (Y-down file coords), so a pad
+    # offset (1, 0) lands at (0, -1) relative to the component origin.
+    archive = _export(_board_doc(extra_nodes=[_rotated_component(90.0)]))
+    text = _read(archive, "F_Cu.gbr")
+    assert "X10000000Y9000000D03*" in text
+    # The rectangular aperture is rotated with the pad: dimensions swap.
+    assert "%ADD" in text and "R,1.200000X0.500000" in text
+
+
+def test_rotated_180_keeps_aperture_and_mirrors_offset():
+    archive = _export(_board_doc(extra_nodes=[_rotated_component(180.0)]))
+    text = _read(archive, "F_Cu.gbr")
+    assert "X9000000Y10000000D03*" in text
+    assert "R,0.500000X1.200000" in text
+
+
+def test_arbitrary_rotation_with_rect_pad_raises_actionable_error():
+    with pytest.raises(ValueError, match="multiples of 90"):
+        _export(_board_doc(extra_nodes=[_rotated_component(37.0)]))
+
+
+def test_arbitrary_rotation_with_circle_pad_is_fine():
+    archive = _export(_board_doc(extra_nodes=[_rotated_component(45.0, shape="circle")]))
+    text = _read(archive, "F_Cu.gbr")
+    # cos45 = sin45 ~ 0.7071068: offset (1, 0) -> (0.707107, -0.707107).
+    assert "X10707107Y9292893D03*" in text
