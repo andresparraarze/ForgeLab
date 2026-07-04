@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from forgelab.spec import SPEC_VERSION
 
@@ -74,7 +74,10 @@ def load_project_file(path: Path) -> Project:
         raise ValueError(f"project {str(path)!r} is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"project {str(path)!r} is not a JSON object")
-    return parse_project(data)
+    try:
+        return parse_project(data)
+    except ValidationError as exc:
+        raise ValueError(f"project {str(path)!r} is not a valid ForgeLab project: {exc}") from exc
 
 
 def dump_project(project: Project) -> str:

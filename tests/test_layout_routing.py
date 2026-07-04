@@ -471,3 +471,22 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
     # The routed board still exports to KiCad with real copper in it.
     text = KiCadExporter().from_ir(doc).decode("utf-8")
     assert text.count("(segment") == len([n for n in routed["nodes"] if n["type"] == "track"])
+
+
+def test_routing_connects_pads_of_a_rotated_component():
+    # U1 is rotated 90 degrees: its pad offset (2, 0) really sits at (0, -2)
+    # relative to the component (KiCad rotation convention). The router must
+    # attach copper at the rotated position, matching KiCad and the Gerbers.
+    document = _doc(
+        [
+            _component("U1", [10.0, 10.0, 90.0], [_pin("1", "SIG", [2.0, 0.0])]),
+            _component("U2", [20.0, 10.0, 0.0], [_pin("1", "SIG", [0.0, 0.0])]),
+        ],
+        ["SIG"],
+    )
+    result = route_document(document)
+    assert result["nets_routed"] == ["SIG"]
+    endpoints = {tuple(t["start"]) for t in result["tracks"]}
+    endpoints |= {tuple(t["end"]) for t in result["tracks"]}
+    assert any(math.dist(p, (10.0, 8.0)) < 0.3 for p in endpoints), sorted(endpoints)
+    assert not any(math.dist(p, (12.0, 10.0)) < 0.3 for p in endpoints)

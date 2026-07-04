@@ -22,6 +22,7 @@ _EXPECTED = {
     "get_history",
     "get_project_summary",
     "check_fabrication",
+    "check_gerber_completeness",
     "list_fab_profiles",
     "auto_place",
     "route_board",

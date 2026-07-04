@@ -192,3 +192,23 @@ def test_validate_document_clean_board_has_no_fab_warnings():
     result = tools.validate_document(document=doc)
     assert result["valid"] is True
     assert not any("fab(" in w for w in result.get("warnings", []))
+
+
+def test_check_gerber_completeness_tool(tmp_path, monkeypatch):
+    # The pre-flight is exposed as an MCP tool so agents can call it before
+    # export_document(tool='gerber'), not just as a library function.
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    (tmp_path / "b.forge.json").write_text(
+        json.dumps(_doc().model_dump(mode="json")), encoding="utf-8"
+    )
+    result = tools.check_gerber_completeness("b.forge.json")
+    assert result["fab"] == "jlcpcb"
+    assert result["ready"] is True
+    assert any("no routed tracks" in w for w in result["warnings"])
+
+    (tmp_path / "bad.forge.json").write_text(
+        json.dumps(_doc(track_width=0.05).model_dump(mode="json")), encoding="utf-8"
+    )
+    bad = tools.check_gerber_completeness("bad.forge.json", fab="jlcpcb")
+    assert bad["ready"] is False
+    assert any("trace width" in e for e in bad["errors"])

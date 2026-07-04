@@ -309,3 +309,11 @@ def test_generation_status_reports_preview_and_critique(monkeypatch):
     status = tools.generation_status()
     assert status["preview_render"] is False
     assert "forgelab[preview]" in status["preview_reason"]
+
+
+def test_critique_render_prose_response_raises_actionable_error(tmp_path, monkeypatch):
+    # A pure-prose response (no JSON object at all) must surface as the
+    # tool's ValueError, not leak the SDK-internal LLMOutputError.
+    _install_client(monkeypatch, "I cannot critique this render, sorry.")
+    with pytest.raises(ValueError, match="did not return parseable critique JSON"):
+        tools.critique_render(_render_png(tmp_path), "a sleek sports car")

@@ -29,6 +29,7 @@ _TOOLS = [
     tools.get_history,
     tools.get_project_summary,
     tools.check_fabrication,
+    tools.check_gerber_completeness,
     tools.list_fab_profiles,
     tools.auto_place,
     tools.route_board,

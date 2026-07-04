@@ -7,6 +7,61 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`check_gerber_completeness` MCP tool** (36 tools total). Health-audit
+  finding: the Gerber pre-flight shipped as a library function only, so
+  agents could not actually call it before `export_document(tool='gerber')`
+  despite the README describing that workflow. Now exposed as
+  `check_gerber_completeness(document_path, fab='jlcpcb')` (scope
+  `forge:read`).
+
+### Fixed
+- **Component rotation is now honored consistently across the hardware
+  pipeline** (health-audit finding). The KiCad exporter passes `at: [x, y,
+  rotation]` through and KiCad rotates footprint pads natively — but the
+  Gerber exporter, the maze router, and the placement/bounds footprint bbox
+  all ignored the rotation, so a board with a rotated component (e.g.
+  imported from KiCad) produced Gerber copper, routed tracks, and bounds
+  checks that disagreed with KiCad's own rendering. All three now rotate pad
+  offsets with KiCad's convention (positive = counterclockwise on screen in
+  the shared Y-down frame): the router attaches copper at real rotated pad
+  positions, `component_bbox` rotates offsets (locked obstacles and the
+  board-outline containment check are rotation-aware; movable parts still
+  pack at rotation 0), and the Gerber exporter rotates flashes and swaps
+  rectangular/oval aperture dimensions at 90/270. A rectangular pad at a
+  non-multiple-of-90 angle cannot be expressed as a standard Gerber aperture,
+  so Gerber export refuses it with an actionable error instead of emitting
+  copper KiCad would render elsewhere (circle pads rotate at any angle).
+- **`critique_render` no longer leaks `LLMOutputError`** on a pure-prose
+  vision response: the fallback JSON extractor *raises* rather than
+  returning `None`, so the `is None` guard was dead code and the internal
+  exception escaped. Non-JSON responses now raise the intended
+  `ValueError("vision model did not return parseable critique JSON: ...")`.
+- **Malformed `.forge.project` files now raise a clear `ValueError`**
+  (`"project '...' is not a valid ForgeLab project: ..."`) instead of a raw
+  pydantic `ValidationError` escaping `load_project`/`export_project`.
+- **`check_fabrication`'s description undersold itself**: it also validates
+  actually-routed track/via geometry (widths, via sizes, copper clearance),
+  not just declared design rules — the docstring now says so.
+- **README staleness**: the project-status paragraph still listed Gerber
+  among the "scaffolded stubs" after the real RS-274X exporter shipped; it
+  now correctly scopes the stub to Gerber *import*. Tool/test counts
+  refreshed (36 tools, 669 tests).
+
+### Audit notes (2026-07-04 health audit, no code change needed)
+- Cross-exporter consistency verified numerically on the routed Arduino Uno:
+  KiCad segments/vias and Gerber draws/flashes/drills agree exactly (184
+  F.Cu segments, 44 vias, 119 pad flashes each).
+- Edge cases verified green: zero-component and one-component boards through
+  place → route → Gerber; 1-profile loft and 0-degree revolve rejected with
+  actionable errors; 360-degree revolve valid; missing project documents
+  reported per-document without aborting; empty patch arrays are no-ops;
+  `generate_bom` handles zero components and pad-less/net-less parts.
+- Performance at moderate scale (72 components / 40 nets / 90x70mm):
+  `auto_place` <0.01s, `route_board` ~4.7s, Gerber export <0.01s — no
+  quadratic blowup. The dense random netlist routes 19/40, consistent with
+  the documented basic-router scope.
+
+### Added
 - **Real Gerber (RS-274X) export** — the missing final step of the hardware
   pipeline: `export_document(tool='gerber', output_path='board_gerbers.zip')`
   now writes a fab-ready zip (pure stdlib) containing F/B copper (routed

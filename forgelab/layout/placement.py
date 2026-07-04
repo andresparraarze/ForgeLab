@@ -16,6 +16,7 @@ pack around. Pure standard library; depends only on ``forgelab.spec``.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from forgelab.spec import Domain, ForgeDocument, Node
@@ -53,20 +54,55 @@ class PlacementError(ValueError):
 Rect = tuple[float, float, float, float]  # (min_x, min_y, max_x, max_y)
 
 
-def component_bbox(props: dict[str, Any], keepout: float = DEFAULT_KEEPOUT) -> Rect:
+def rotate_offset(px: float, py: float, rotation_deg: float) -> tuple[float, float]:
+    """Rotate a footprint-relative offset by the component rotation.
+
+    Uses KiCad's convention: a positive angle rotates counterclockwise on
+    screen, which in the file's Y-down coordinates maps ``(1, 0)`` at 90
+    degrees to ``(0, -1)``. Exporters and layout tools share this so routed
+    copper, Gerbers and the KiCad rendering agree on rotated components.
+    """
+    if rotation_deg % 360.0 == 0.0:
+        return px, py
+    theta = math.radians(rotation_deg)
+    c, s = math.cos(theta), math.sin(theta)
+    return px * c + py * s, -px * s + py * c
+
+
+def component_rotation(props: dict[str, Any]) -> float:
+    """The component's rotation in degrees from its ``at`` (0 when absent)."""
+    at = props.get("at")
+    if isinstance(at, list) and len(at) >= 3:
+        try:
+            return float(at[2])
+        except (TypeError, ValueError):
+            return 0.0
+    return 0.0
+
+
+def component_bbox(
+    props: dict[str, Any],
+    keepout: float = DEFAULT_KEEPOUT,
+    rotation: float | None = None,
+) -> Rect:
     """Footprint bounding box relative to the component origin, keepout included.
 
     Computed over the pads' physical ``at`` offsets (min/max x and y), grown by
     ``keepout`` on every side. A component with no positioned pads falls back
-    to a small default footprint rather than a zero-size point.
+    to a small default footprint rather than a zero-size point. Pad offsets are
+    rotated by the component's ``at`` rotation (pass ``rotation`` to override —
+    e.g. ``0.0`` when the component is about to be re-placed at rotation 0).
     """
+    if rotation is None:
+        rotation = component_rotation(props)
     xs: list[float] = []
     ys: list[float] = []
     for pad in props.get("pads") or []:
         at = pad.get("at") if isinstance(pad, dict) else None
         if isinstance(at, list) and len(at) == 2:
-            xs.append(float(at[0]))
-            ys.append(float(at[1]))
+            rx, ry = rotate_offset(float(at[0]), float(at[1]), rotation)
+            xs.append(rx)
+            ys.append(ry)
     if not xs:
         xs = [-_FALLBACK_HALF, _FALLBACK_HALF]
         ys = [-_FALLBACK_HALF, _FALLBACK_HALF]
@@ -145,13 +181,17 @@ def place_components(
     obstacles: list[Rect] = []
     movable: list[tuple[Node, Rect]] = []
     for node in components:
-        bbox = component_bbox(node.props, keepout)
         if node.props.get("locked"):
+            # Locked parts keep their position AND rotation: the obstacle is
+            # their rotated footprint.
+            bbox = component_bbox(node.props, keepout)
             at = node.props.get("at") or [0.0, 0.0]
             ox, oy = float(at[0]), float(at[1])
             obstacles.append((ox + bbox[0], oy + bbox[1], ox + bbox[2], oy + bbox[3]))
         else:
-            movable.append((node, bbox))
+            # Movable parts are re-placed at rotation 0, so pack their
+            # unrotated footprint regardless of any current rotation.
+            movable.append((node, component_bbox(node.props, keepout, rotation=0.0)))
 
     footprint_area = 0.0
     for _node, bbox in movable:

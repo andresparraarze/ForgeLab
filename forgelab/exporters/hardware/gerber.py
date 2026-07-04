@@ -164,6 +164,22 @@ def _pad_grid_offset(index: int, total: int) -> tuple[float, float]:
     )
 
 
+def _rotate_offset(px: float, py: float, rotation_deg: float) -> tuple[float, float]:
+    """Rotate a pad offset by the component rotation, KiCad convention.
+
+    Positive angles rotate counterclockwise on screen; in the Y-down
+    coordinate frame shared with the KiCad export, ``(1, 0)`` at 90 degrees
+    lands at ``(0, -1)``. Duplicates the formula in ``forgelab.layout`` (the
+    boundary rule keeps exporters off that package) so the Gerbers agree with
+    both the router and KiCad's own rendering of ``(at x y rot)``.
+    """
+    if rotation_deg % 360.0 == 0.0:
+        return px, py
+    theta = math.radians(rotation_deg)
+    c, s = math.cos(theta), math.sin(theta)
+    return px * c + py * s, -px * s + py * c
+
+
 def _pad_template(width: float, height: float, shape: str) -> str:
     if shape == "circle":
         return f"C,{width:.6f}"
@@ -203,13 +219,14 @@ class GerberExporter(Exporter):
             props = node.props
             at = props.get("at") or [0.0, 0.0]
             cx, cy = float(at[0]), float(at[1])
+            rotation = float(at[2]) if len(at) >= 3 else 0.0
             side = "B.Cu" if str(props.get("layer", "F.Cu")) == "B.Cu" else "F.Cu"
             pads = [p for p in (props.get("pads") or []) if isinstance(p, dict)]
             max_pad_y = 0.0
             for index, pad in enumerate(pads):
                 offset = pad.get("at")
                 if isinstance(offset, list) and len(offset) == 2:
-                    px, py = float(offset[0]), float(offset[1])
+                    px, py = _rotate_offset(float(offset[0]), float(offset[1]), rotation)
                 else:
                     px, py = _pad_grid_offset(index, len(pads))
                 size = pad.get("size")
@@ -218,6 +235,19 @@ class GerberExporter(Exporter):
                 else:
                     width, height = _DEFAULT_PAD_SIZE
                 shape = str(pad.get("shape") or "roundrect")
+                # The aperture rotates with the pad: swap the rectangle/oval
+                # dimensions at 90/270. An arbitrary angle cannot be expressed
+                # with a standard R/O aperture, so refuse it honestly rather
+                # than emit copper KiCad would render elsewhere.
+                if shape != "circle" and rotation % 90.0 != 0.0:
+                    reference = str(props.get("reference", "") or node.id)
+                    raise ValueError(
+                        f"component {reference!r} is rotated {rotation:g} degrees; Gerber "
+                        "rectangular/oval pad apertures support only multiples of 90 — "
+                        "set the rotation to 0/90/180/270 or use circle pads"
+                    )
+                if rotation % 180.0 == 90.0:
+                    width, height = height, width
                 copper[side].flash(
                     cx + px, cy + py, copper[side].aperture(_pad_template(width, height, shape))
                 )

@@ -284,3 +284,11 @@ def test_dump_project_round_trips_through_parse(tmp_path):
     assert reloaded["name"] == "p"
     assert reloaded["shared"] == {"w": 1.0}
     assert text.endswith("\n")
+
+
+def test_load_project_rejects_malformed_project_with_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    bad = tmp_path / "bad.forge.project"
+    bad.write_text(json.dumps({"name": "p", "unexpected_key": 1}), encoding="utf-8")
+    with pytest.raises(ValueError, match="not a valid ForgeLab project"):
+        tools.load_project("bad.forge.project")
