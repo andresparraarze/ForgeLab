@@ -33,7 +33,13 @@ class Scene(BaseModel):
 
 
 class Material(BaseModel):
-    """A PBR metallic-roughness material (scalars only)."""
+    """A PBR metallic-roughness material (scalars only).
+
+    ``base_color`` is RGBA; an alpha below 1.0 marks the material as
+    translucent, and the glTF exporter emits ``alphaMode: "BLEND"`` for it so
+    viewers actually blend it (glTF defaults to OPAQUE and ignores the alpha
+    channel otherwise).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -45,8 +51,12 @@ class Material(BaseModel):
     @field_validator("base_color")
     @classmethod
     def _base_color_is_rgba(cls, value: list[float]) -> list[float]:
+        # [r, g, b] is accepted as shorthand for [r, g, b, 1.0]: fully opaque
+        # (mirrors Component.at accepting [x, y] for [x, y, 0]).
+        if len(value) == 3:
+            return [value[0], value[1], value[2], 1.0]
         if len(value) != 4:
-            raise ValueError("base_color must be [r, g, b, a]")
+            raise ValueError("base_color must be [r, g, b, a] (or [r, g, b] for opaque)")
         return value
 
 

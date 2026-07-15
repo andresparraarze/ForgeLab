@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- **A real bug that silently broke every translucent material in glTF export,
+  found by importing an export into Blender:** the exporter wrote a
+  material's base-color alpha into `baseColorFactor` but never set
+  `alphaMode`, and per the glTF 2.0 spec the default `OPAQUE` mode makes
+  compliant viewers ignore that alpha entirely — a glass material with alpha
+  0.3 imported into Blender (File → Import → glTF 2.0) rendered as solid
+  opaque blue. Any threed document with glass, water, or any other
+  translucent material was exporting broken glTF. The exporter now emits
+  `alphaMode: "BLEND"` whenever base-color alpha < 1.0 and still leaves
+  `alphaMode` unset for fully opaque materials (glTF's `OPAQUE` default is
+  correct there — opaque output is byte-for-byte unchanged, verified against
+  the re-exported `space_station` example). `Material.base_color` also now
+  accepts `[r, g, b]` as shorthand for `[r, g, b, 1.0]` (fully opaque),
+  mirroring the `[x, y]` → `[x, y, 0]` shorthand of `Component.at`.
+  Regression-tested: alpha 0.3 → explicit `BLEND`, alpha 1.0 and RGB-only →
+  no `alphaMode` key, and the translucent value survives the import → export
+  round-trip.
 - **A real correctness/trust bug that could produce shorted boards, found by
   running KiCad's own DRC on a routed export: `route_board` placed vias as
   dimensionless grid points (on top of foreign pads and other vias), and
