@@ -272,6 +272,23 @@ def test_component_partially_outside_bounds_fails_with_auto_place_hint():
     ), errors
 
 
+def test_explicit_pad_sizes_count_toward_bounds_check():
+    # Regression (real-world 0805 case): pads at (-0.95, 0)/(0.95, 0) with
+    # explicit [1.0, 1.45]mm sizes. At x=8.8 the pad CENTRES stay inside the
+    # 10mm board (9.75 < 10) — the old centre-only bbox passed this — but the
+    # pad copper reaches 8.8 + 0.95 + 0.5 = 10.25mm: it hangs off the edge.
+    comp = _placed_component("C1", [8.8, 5.0, 0.0])
+    comp["props"]["pads"] = [
+        {"number": "1", "net": "GND", "at": [-0.95, 0.0], "size": [1.0, 1.45]},
+        {"number": "2", "net": "GND", "at": [0.95, 0.0], "size": [1.0, 1.45]},
+    ]
+    errors, _ = _errors_warnings([_board(_rect_outline()), _net("GND", 1), comp])
+    assert any(
+        "Component C1 extends outside the board outline" in e and "footprint 2.9x1.45mm" in e
+        for e in errors
+    ), errors
+
+
 def test_component_fully_outside_bounds_fails():
     errors, _ = _errors_warnings(
         [_board(_rect_outline()), _net("GND", 1), _placed_component("U1", [25.0, 25.0, 0.0])]

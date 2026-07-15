@@ -200,6 +200,34 @@ def test_component_with_no_positioned_pads_gets_fallback_footprint():
     assert (x1 - x0, y1 - y0) == (2.6, 2.6)
 
 
+def test_explicitly_sized_pads_contribute_their_copper_to_the_bbox():
+    """Regression: an 0805 with explicit pad sizes gets a copper-true bbox.
+
+    Real-world case from manual testing — two pads at (-0.95, 0) and
+    (0.95, 0), each explicitly [1.0, 1.45]mm (given in the document, not
+    defaulted). The pre-fix bbox measured pad centres only: 1.9 x 0.0mm. The
+    copper truly spans 2.9 x 1.45mm (each 1.0mm-wide pad extends 0.5mm past
+    its centre), and that is what placement, routing and the board-outline
+    containment check must all see.
+    """
+    props = {
+        "reference": "C1",
+        "value": "100n",
+        "footprint": "C_0805",
+        "layer": "F.Cu",
+        "at": [10.0, 10.0, 0.0],
+        "pads": [
+            {"number": "1", "net": "VCC", "at": [-0.95, 0.0], "size": [1.0, 1.45]},
+            {"number": "2", "net": "GND", "at": [0.95, 0.0], "size": [1.0, 1.45]},
+        ],
+    }
+    x0, y0, x1, y1 = component_bbox(props, keepout=0.0)
+    assert (round(x1 - x0, 6), round(y1 - y0, 6)) == (2.9, 1.45)
+    # And with the default keepout, exactly 0.5mm more per side.
+    x0, y0, x1, y1 = component_bbox(props)
+    assert (round(x1 - x0, 6), round(y1 - y0, 6)) == (3.9, 2.45)
+
+
 # ------------------------------------------------------------- MCP auto_place
 
 
