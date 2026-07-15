@@ -88,3 +88,49 @@ def test_objects_nested_under_scene_node_are_exported():
     gltf = json.loads(GltfExporter().from_ir(doc))
     assert [n["name"] for n in gltf.get("nodes", [])] == ["Cube"]
     assert gltf["scenes"][0]["nodes"] == [0]
+
+
+def _material_doc(base_color):
+    from forgelab.spec import SPEC_VERSION, ForgeDocument
+
+    return ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "threed",
+            "meta": {"name": "scene", "generator": "test"},
+            "nodes": [
+                {
+                    "id": "mat_glass",
+                    "type": "material",
+                    "props": {"name": "glass", "base_color": base_color},
+                }
+            ],
+        }
+    )
+
+
+def test_translucent_material_exports_alpha_mode_blend():
+    # Live-testing regression (Blender import): baseColorFactor alpha 0.3 was
+    # written but alphaMode never set, so per the glTF spec every compliant
+    # viewer rendered the material fully opaque.
+    gltf = json.loads(GltfExporter().from_ir(_material_doc([0.2, 0.4, 0.9, 0.3])))
+    mat = gltf["materials"][0]
+    assert mat["alphaMode"] == "BLEND"
+    assert mat["pbrMetallicRoughness"]["baseColorFactor"] == [0.2, 0.4, 0.9, 0.3]
+
+
+def test_opaque_material_exports_no_alpha_mode():
+    # Alpha 1.0 must leave alphaMode unset: glTF defaults to OPAQUE, which is
+    # correct, and the pre-fix output for opaque materials must not change.
+    gltf = json.loads(GltfExporter().from_ir(_material_doc([0.2, 0.4, 0.9, 1.0])))
+    mat = gltf["materials"][0]
+    assert "alphaMode" not in mat
+    assert mat["pbrMetallicRoughness"]["baseColorFactor"] == [0.2, 0.4, 0.9, 1.0]
+
+
+def test_rgb_only_base_color_is_opaque_with_no_alpha_mode():
+    # [r, g, b] is shorthand for [r, g, b, 1.0]: fully opaque, no override.
+    gltf = json.loads(GltfExporter().from_ir(_material_doc([0.2, 0.4, 0.9])))
+    mat = gltf["materials"][0]
+    assert "alphaMode" not in mat
+    assert mat["pbrMetallicRoughness"]["baseColorFactor"] == [0.2, 0.4, 0.9, 1.0]

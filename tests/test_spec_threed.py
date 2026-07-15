@@ -29,8 +29,13 @@ def test_material_defaults():
 
 
 def test_material_base_color_must_be_rgba():
+    # [r, g, b] is accepted as opaque shorthand and normalized to RGBA;
+    # anything else of the wrong length still fails validation.
+    assert Material(name="rgb", base_color=[1.0, 0.0, 0.0]).base_color == [1.0, 0.0, 0.0, 1.0]
     with pytest.raises(ValidationError):
-        Material(name="bad", base_color=[1.0, 0.0, 0.0])
+        Material(name="bad", base_color=[1.0, 0.0])
+    with pytest.raises(ValidationError):
+        Material(name="bad", base_color=[1.0, 0.0, 0.0, 1.0, 0.0])
 
 
 def test_transform_length_validators():

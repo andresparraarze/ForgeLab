@@ -75,7 +75,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | Hardware       | Gerber        |   🚧   |   ✅   | export RS-274X layer set + Excellon drill, zipped (F/B copper, mask, silk, outline) |
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
 | Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
-| 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene)  |
+| 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene); translucent materials (base-color alpha < 1) export `alphaMode: "BLEND"` |
 | 3D / Game      | OBJ           |   ✅   |        | import `.obj` (+ companion `.mtl`); fan-triangulated, per-object meshes |
 | 3D / Game      | STL           |   ✅   |        | import ASCII or binary `.stl` (single mesh, default material) |
 | 3D / Game      | Blender script|        |   ✅   | export `tool='blender_script'` → runnable `.py` product render (native objects + modifier stack, daylight-sky world, CYCLES/EEVEE `PREVIEW` toggle, 85mm 3/4 camera, ground plane, auto-render to PNG) |
@@ -280,7 +280,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **686 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **691 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

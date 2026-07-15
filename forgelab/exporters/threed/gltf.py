@@ -81,16 +81,20 @@ class GltfExporter(Exporter):
         materials = []
         for n in material_nodes:
             m = Material.model_validate(n.props)
-            materials.append(
-                {
-                    "name": m.name,
-                    "pbrMetallicRoughness": {
-                        "baseColorFactor": m.base_color,
-                        "metallicFactor": m.metallic,
-                        "roughnessFactor": m.roughness,
-                    },
-                }
-            )
+            mat_entry: dict[str, Any] = {
+                "name": m.name,
+                "pbrMetallicRoughness": {
+                    "baseColorFactor": m.base_color,
+                    "metallicFactor": m.metallic,
+                    "roughnessFactor": m.roughness,
+                },
+            }
+            # glTF materials default to alphaMode OPAQUE, under which viewers
+            # ignore baseColorFactor's alpha entirely — a translucent material
+            # must say BLEND explicitly or it renders solid.
+            if m.base_color[3] < 1.0:
+                mat_entry["alphaMode"] = "BLEND"
+            materials.append(mat_entry)
         if materials:
             gltf["materials"] = materials
 
