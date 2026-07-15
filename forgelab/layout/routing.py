@@ -9,10 +9,17 @@ routed as a minimum spanning tree, each new pad connecting into the net's
 existing copper. Nets the maze search cannot connect are recorded as failed
 rather than aborting the whole board.
 
-This is deliberately a *basic* router: it produces a valid, DRC-clean routed
-board for simple-to-moderate designs, not commercial-quality traces on dense
-ones. Pads without a physical ``at`` offset cannot be located and are skipped;
-component rotation is ignored (``auto_place`` leaves everything at rotation 0).
+Copper is modelled physically, not as grid points: pads block their real
+copper rectangle (explicit ``size`` or the shared exporter default) plus
+clearance, pad offsets honor the component rotation, and **a via is a real
+circle of ``via_diameter`` copper piercing every layer** — the search only
+allows a layer change where the via barrel keeps ``clearance`` to every other
+net's pads, tracks and vias (and a drill-to-drill margin to its own), else it
+finds another path or fails the net cleanly. Pads without a physical ``at``
+offset cannot be routed to, but their fallback-grid copper is still blocked.
+
+This is deliberately a *basic* router: it produces valid, DRC-honest copper
+for simple-to-moderate designs, not commercial-quality traces on dense ones.
 Pure standard library; depends only on ``forgelab.spec``.
 """
 
@@ -24,9 +31,21 @@ from typing import Any
 
 from forgelab.layout.placement import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
-from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT
+from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, pad_default_size, pad_grid_offset
 
-DEFAULT_GRID_RESOLUTION = 0.2
+# Minimum drill-to-drill wall (mm) between via holes, any net: closer than
+# this the drill bit breaks into the neighbouring hole. KiCad's default
+# hole-to-hole constraint; our design_rules carry no equivalent field.
+_MIN_HOLE_TO_HOLE = 0.25
+
+# Default grid pitch (mm per cell). Chosen empirically on the Arduino Uno
+# example against *honest* copper obstacles (pads at their real rendered
+# size, vias with their real diameter): 0.15mm routes 25/32 nets in ~4s,
+# while 0.2mm manages only 17/32 (a 0.8mm-pitch QFP's escape corridors do
+# not survive 0.2mm quantization, and the 0.45mm track+clearance halo
+# rounds up to 0.6mm) and 0.1mm drops back to 20/32 at twice the runtime.
+# 0.15 divides the default track_width + clearance (0.45mm) exactly.
+DEFAULT_GRID_RESOLUTION = 0.15
 
 # Extra path cost (in cell steps) for changing layers: vias are legal anywhere
 # but expensive, so routes stay on one layer unless blocked.
@@ -87,6 +106,10 @@ class _Grid:
         self.ny = max(2, int(math.floor((y1 - self.y0) / resolution + _EPS)) + 1)
         self.layers = layers
         self.owner = [[_FREE] * (self.nx * self.ny) for _ in range(layers)]
+        # Via legality, one layer-agnostic plane (a via pierces every layer):
+        # _FREE = any net may via here, a net id = only that net, _BLOCKED =
+        # nobody. Claimed by pad copper, routed copper and committed vias.
+        self.via_owner = [_FREE] * (self.nx * self.ny)
 
     def cell(self, x: float, y: float) -> int:
         i = min(self.nx - 1, max(0, round((x - self.x0) / self.res)))
@@ -100,6 +123,14 @@ class _Grid:
     def mark_rect(
         self, layer: int, x_min: float, y_min: float, x_max: float, y_max: float, net_id: int
     ) -> None:
+        """Claim a rectangle of cells for ``net_id``.
+
+        Where two different nets' rectangles overlap (adjacent pads whose
+        clearance zones meet), the contested cells turn ``_BLOCKED`` for
+        everyone: letting the later pad overwrite them would hand out cells
+        that physically lie over the earlier pad's copper, and a track routed
+        through those cells is a real short circuit.
+        """
         i0 = max(0, math.ceil((x_min - self.x0) / self.res - _EPS))
         i1 = min(self.nx - 1, math.floor((x_max - self.x0) / self.res + _EPS))
         j0 = max(0, math.ceil((y_min - self.y0) / self.res - _EPS))
@@ -108,7 +139,11 @@ class _Grid:
         for j in range(j0, j1 + 1):
             base = j * self.nx
             for i in range(i0, i1 + 1):
-                owner[base + i] = net_id
+                current = owner[base + i]
+                if current == _FREE:
+                    owner[base + i] = net_id
+                elif current != net_id:
+                    owner[base + i] = _BLOCKED
 
     def mark_buffer(self, layer: int, idx: int, radius: int, net_id: int) -> None:
         """Claim free cells within Chebyshev ``radius`` of ``idx`` for ``net_id``.
@@ -124,6 +159,38 @@ class _Grid:
                 if owner[base + ii] == _FREE:
                     owner[base + ii] = net_id
 
+    def claim_via_zone(
+        self, x_min: float, y_min: float, x_max: float, y_max: float, margin: float, net_id: int
+    ) -> None:
+        """Forbid foreign via centres within Euclidean ``margin`` of a copper rect.
+
+        Stamps the layer-agnostic via plane: a cell claimed by one net stays
+        legal for that net's own vias; a second net's claim (or ``_BLOCKED``)
+        turns it illegal for everyone. Distance is exact point-to-rectangle,
+        so a via barrel is kept ``margin`` from the copper edge, corners
+        included. Exactly-at-margin stays legal (clearance is a minimum).
+        """
+        i0 = max(0, math.ceil((x_min - margin - self.x0) / self.res - _EPS))
+        i1 = min(self.nx - 1, math.floor((x_max + margin - self.x0) / self.res + _EPS))
+        j0 = max(0, math.ceil((y_min - margin - self.y0) / self.res - _EPS))
+        j1 = min(self.ny - 1, math.floor((y_max + margin - self.y0) / self.res + _EPS))
+        margin2 = margin * margin
+        via_owner = self.via_owner
+        for j in range(j0, j1 + 1):
+            cy = self.y0 + j * self.res
+            dy = max(y_min - cy, 0.0, cy - y_max)
+            base = j * self.nx
+            for i in range(i0, i1 + 1):
+                cx = self.x0 + i * self.res
+                dx = max(x_min - cx, 0.0, cx - x_max)
+                if dx * dx + dy * dy >= margin2 - _EPS:
+                    continue
+                current = via_owner[base + i]
+                if current == _FREE:
+                    via_owner[base + i] = net_id
+                elif current != net_id:
+                    via_owner[base + i] = _BLOCKED
+
 
 def _search(
     grid: _Grid, sources: set[tuple[int, int]], targets: set[tuple[int, int]], net_id: int
@@ -131,7 +198,10 @@ def _search(
     """Dijkstra flood fill from ``sources`` to any cell in ``targets``.
 
     States are ``(layer, idx)``; orthogonal steps cost 1 and a layer change
-    costs ``_VIA_COST``. Passable cells are free or already owned by this net.
+    costs ``_VIA_COST``. Passable cells are free or already owned by this net;
+    a layer change is additionally allowed only where the via plane permits
+    this net, so a via's real copper diameter keeps clearance to other nets'
+    pads, tracks and vias instead of being treated as a dimensionless point.
     Returns the cell path source -> target, or None when the search exhausts
     the grid.
     """
@@ -171,6 +241,8 @@ def _search(
                 layer_dist[nb] = new_cost
                 layer_prev[nb] = layer * n + idx
                 heapq.heappush(heap, (new_cost, layer, nb))
+        if grid.via_owner[idx] not in (_FREE, net_id):
+            continue  # a via here would violate clearance to another net's copper
         for other in range(grid.layers):
             if other == layer or owner[other][idx] not in (_FREE, net_id):
                 continue
@@ -284,11 +356,17 @@ def route_document(
     rules = _design_rules(document)
     grid = _Grid(bbox, grid_resolution, layers)
 
-    # Collect positioned pads and stamp the copper obstacles. Pads with a known
-    # size block their copper rectangle plus clearance on F.Cu; pads with
-    # unknown geometry block only their centre cell. Centres are re-stamped
-    # last so a pad's own connection point always belongs to its own net, even
-    # where footprint rectangles overlap.
+    # Collect pads and stamp the copper obstacles — every pad blocks the copper
+    # rectangle the exporters will actually render: its explicit ``size`` or
+    # the shared pitch-aware default, plus clearance and half a track width so
+    # a routed centreline keeps full edge-to-edge clearance from the copper.
+    # Pads without an ``at`` cannot be routed to, but their fallback-grid
+    # copper is still a real obstacle. Pad copper also claims the via plane so
+    # no other net may via within via_diameter/2 + clearance of it. Routable
+    # centres are re-stamped last so a pad's own connection point always
+    # belongs to its own net, even where footprint rectangles overlap.
+    track_margin = rules["clearance"] + rules["track_width"] / 2
+    via_pad_margin = rules["via_diameter"] / 2 + rules["clearance"]
     net_ids: dict[str, int] = {}
     net_pads: dict[str, list[tuple[float, float]]] = {}
     centres: list[tuple[int, int]] = []  # (cell idx, net id) re-stamped after rects
@@ -298,32 +376,49 @@ def route_document(
         at = node.props.get("at") or [0.0, 0.0]
         cx, cy = float(at[0]), float(at[1])
         rotation = component_rotation(node.props)
-        for pad in node.props.get("pads") or []:
-            if not isinstance(pad, dict):
-                continue
+        theta = math.radians(rotation)
+        cos_r, sin_r = abs(math.cos(theta)), abs(math.sin(theta))
+        pads = [p for p in node.props.get("pads") or [] if isinstance(p, dict)]
+        default = pad_default_size([p.get("at") for p in pads])
+        for index, pad in enumerate(pads):
             offset = pad.get("at")
-            if not (isinstance(offset, list) and len(offset) == 2):
-                continue  # no physical position: nothing to route to
-            rx, ry = rotate_offset(float(offset[0]), float(offset[1]), rotation)
+            if isinstance(offset, list) and len(offset) == 2:
+                routable = True
+                ox, oy = float(offset[0]), float(offset[1])
+            else:
+                routable = False
+                ox, oy = pad_grid_offset(index, len(pads))
+            rx, ry = rotate_offset(ox, oy, rotation)
             px, py = cx + rx, cy + ry
             net = str(pad.get("net", ""))
             if net:
                 net_id = net_ids.setdefault(net, len(net_ids) + 1)
-                net_pads.setdefault(net, []).append((px, py))
+                if routable:
+                    net_pads.setdefault(net, []).append((px, py))
             else:
                 net_id = _BLOCKED
             size = pad.get("size")
             if isinstance(size, list) and len(size) == 2:
-                # Obstacle extents: the axis-aligned bbox of the (possibly
-                # rotated) pad rectangle, plus clearance.
-                theta = math.radians(rotation)
-                c, s = abs(math.cos(theta)), abs(math.sin(theta))
-                half_w = (float(size[0]) * c + float(size[1]) * s) / 2 + rules["clearance"]
-                half_h = (float(size[0]) * s + float(size[1]) * c) / 2 + rules["clearance"]
-                grid.mark_rect(0, px - half_w, py - half_h, px + half_w, py + half_h, net_id)
+                width, height = float(size[0]), float(size[1])
             else:
-                grid.owner[0][grid.cell(px, py)] = net_id
-            centres.append((grid.cell(px, py), net_id))
+                width, height = default, default
+            # Copper extents: the axis-aligned bbox of the (possibly rotated)
+            # pad rectangle.
+            half_w = (width * cos_r + height * sin_r) / 2
+            half_h = (width * sin_r + height * cos_r) / 2
+            grid.mark_rect(
+                0,
+                px - half_w - track_margin,
+                py - half_h - track_margin,
+                px + half_w + track_margin,
+                py + half_h + track_margin,
+                net_id,
+            )
+            grid.claim_via_zone(
+                px - half_w, py - half_h, px + half_w, py + half_h, via_pad_margin, net_id
+            )
+            if routable:
+                centres.append((grid.cell(px, py), net_id))
     for idx, net_id in centres:
         grid.owner[0][idx] = net_id
 
@@ -331,6 +426,27 @@ def route_document(
     # must stay at least track_width + clearance away, and the first cell past
     # the halo is (radius + 1) cells out.
     halo = max(1, math.ceil((rules["track_width"] + rules["clearance"]) / grid_resolution) - 1)
+    # A via's copper is wider than a track, so committed vias push foreign
+    # track centrelines further out than the ordinary halo does.
+    via_halo = max(
+        halo,
+        math.ceil(
+            (rules["via_diameter"] / 2 + rules["track_width"] / 2 + rules["clearance"])
+            / grid_resolution
+        )
+        - 1,
+    )
+    # Foreign via centres must clear routed track copper edge-to-edge; track
+    # centrelines are sampled at cell points, so widen by half a cell to cover
+    # the worst case between samples.
+    via_track_margin = math.hypot(
+        rules["via_diameter"] / 2 + rules["track_width"] / 2 + rules["clearance"],
+        grid_resolution / 2,
+    )
+    # Via barrels of different nets keep full clearance; via holes of ANY net
+    # keep a drill-to-drill wall (closer and the drill breaks through).
+    via_via_margin = rules["via_diameter"] + rules["clearance"]
+    hole_margin = rules["via_drill"] + _MIN_HOLE_TO_HOLE
 
     tracks: list[dict[str, Any]] = []
     vias: list[dict[str, Any]] = []
@@ -357,17 +473,36 @@ def route_document(
                 failed = True
                 break
             new_tracks, new_vias = _path_to_copper(grid, path, net, rules)
+            # Vias committed earlier are fenced off in the via plane, but two
+            # layer changes chosen within this single search are not; refuse
+            # the path rather than commit drill holes that break into each
+            # other.
+            if any(
+                math.dist(a["at"], b["at"]) < hole_margin - _EPS
+                for i, a in enumerate(new_vias)
+                for b in new_vias[i + 1 :]
+            ):
+                failed = True
+                break
             tracks.extend(new_tracks)
             vias.extend(new_vias)
             for layer, idx in path:
                 grid.owner[layer][idx] = net_id
                 grid.mark_buffer(layer, idx, halo, net_id)
-            # A via occupies every plane at its cell.
+                # Routed copper repels foreign via barrels edge-to-edge.
+                tx, ty = grid.point(idx)
+                grid.claim_via_zone(tx, ty, tx, ty, via_track_margin, net_id)
+            # A via occupies every plane at its cell, pushes foreign tracks
+            # out by its real radius, and keeps other via barrels (any-net
+            # drill holes) at clearance.
             for (layer_a, idx_a), (layer_b, _idx_b) in zip(path, path[1:], strict=False):
                 if layer_a != layer_b:
+                    vx, vy = grid.point(idx_a)
                     for other in range(layers):
                         grid.owner[other][idx_a] = net_id
-                        grid.mark_buffer(other, idx_a, halo, net_id)
+                        grid.mark_buffer(other, idx_a, via_halo, net_id)
+                    grid.claim_via_zone(vx, vy, vx, vy, via_via_margin, net_id)
+                    grid.claim_via_zone(vx, vy, vx, vy, hole_margin, _BLOCKED)
             connected.update(path)
         (nets_failed if failed else nets_routed).append(net)
 

@@ -1,6 +1,7 @@
 """The ForgeLab intermediate representation (IR)."""
 
 from forgelab.spec.hardware import (
+    DEFAULT_PAD_SIZE,
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_NET,
@@ -15,6 +16,8 @@ from forgelab.spec.hardware import (
     Pad,
     Track,
     Via,
+    pad_default_size,
+    pad_grid_offset,
 )
 from forgelab.spec.models import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.schema import json_schema
@@ -54,6 +57,9 @@ __all__ = [
     "Pad",
     "Track",
     "Via",
+    "DEFAULT_PAD_SIZE",
+    "pad_default_size",
+    "pad_grid_offset",
     "NODE_MATERIAL",
     "NODE_MESH",
     "NODE_OBJECT",

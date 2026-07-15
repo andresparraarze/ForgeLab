@@ -5,7 +5,9 @@ from forgelab.layout.placement import (
     DEFAULT_LARGE_INSET,
     PlacementError,
     component_bbox,
+    component_rotation,
     place_components,
+    rotate_offset,
 )
 from forgelab.layout.routing import (
     DEFAULT_GRID_RESOLUTION,
@@ -20,6 +22,8 @@ __all__ = [
     "PlacementError",
     "RoutingError",
     "component_bbox",
+    "component_rotation",
     "place_components",
+    "rotate_offset",
     "route_document",
 ]

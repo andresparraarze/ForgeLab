@@ -1056,9 +1056,12 @@ def check_fabrication(document_path: str, fab: str = _DEFAULT_FAB) -> dict[str, 
     ``FORGELAB_OUTPUT_DIR``) and validates its board ``design_rules``, outline
     and any routed copper against the named fab profile — minimum trace width,
     via diameter, via drill, the board-size envelope, and (when ``track``/``via``
-    nodes exist, e.g. after ``route_board``) the actually-routed track widths,
-    via geometry and copper-to-copper clearance. Call ``list_fab_profiles`` for
-    the available fab names (e.g. ``jlcpcb``, ``pcbway``, ``oshpark``).
+    nodes exist, e.g. after ``route_board``) the actually-routed track widths and
+    via geometry plus real geometric clearance between every kind of copper
+    pair: track-track, via-pad, via-via, pad-pad, track-pad and track-via
+    across nets — the checks that catch genuine short circuits, not just
+    declared design rules. Call ``list_fab_profiles`` for the available fab
+    names (e.g. ``jlcpcb``, ``pcbway``, ``oshpark``).
 
     Returns ``{"fab", "passed", "errors", "warnings"}``: ``errors`` are hard rule
     violations the fab would reject; ``warnings`` flag things that could not be
@@ -1206,19 +1209,22 @@ def route_board(
     Runs a 2-layer grid-based maze router (Lee's algorithm) over the board:
     each net's pads are connected with ``track`` nodes (plus ``via`` nodes
     where a route changes layer), which the KiCad exporter emits as real
-    ``(segment ...)``/``(via ...)`` copper. The document must already be
-    placed — run ``auto_place`` first if components still overlap. This is a
-    basic router for simple-to-moderate boards: nets the maze search cannot
-    connect are returned in ``nets_failed`` for manual routing rather than
-    failing the whole operation. Re-routing replaces any existing track/via
-    nodes.
+    ``(segment ...)``/``(via ...)`` copper. Copper is modelled physically:
+    pads block their real rendered size and vias are placed only where their
+    ``via_diameter`` barrel keeps ``clearance`` to every other net's copper —
+    nets with no legal path land in ``nets_failed`` instead of getting shorted
+    copper. The document must already be placed — run ``auto_place`` first if
+    components still overlap. This is a basic router for simple-to-moderate
+    boards: nets the maze search cannot connect are returned in
+    ``nets_failed`` for manual routing rather than failing the whole
+    operation. Re-routing replaces any existing track/via nodes.
 
     Args:
         document_path: path to the placed hardware ``.forge.json`` (a bare
             filename resolves against ``FORGELAB_OUTPUT_DIR``).
         output_path: where to write the routed document.
-        grid_resolution: routing grid cell size in millimetres (default 0.2,
-            matching typical minimum trace/clearance).
+        grid_resolution: routing grid cell size in millimetres (default 0.15;
+            it divides the default track_width + clearance of 0.45 exactly).
         layers: 1 routes on F.Cu only; 2 (default) adds B.Cu joined by vias.
 
     Returns:

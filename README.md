@@ -125,18 +125,26 @@ geometry and warns if the board has no tracks yet. The full workflow:
 After placement, **`route_board`** turns the netlist into real copper: a
 2-layer grid-based maze router (Lee's algorithm) connects every net with
 `track` and `via` nodes that the KiCad exporter emits as actual
-`(segment ...)`/`(via ...)` S-expressions, and `check_fabrication` validates
-the routed geometry — not just the declared design rules — against the fab's
-minimum trace width and clearance. The full hardware workflow is: build (or
-generate) the document → `auto_place` → `route_board` → `validate_document` →
-`export_document(tool='kicad')`. Set expectations correctly: this is a basic
-router for simple-to-moderate boards (the Arduino Uno / ESP32 dev-board
-range), not a replacement for a commercial autorouter on dense designs. Nets
-the maze search cannot connect come back in `nets_failed` for manual routing
-instead of failing the run — on the packed Arduino Uno example, 25 of 32
-multi-pad nets route at the default 0.2mm grid (placement's escape-channel
-inset for large parts bought the last three), with the remaining failures
-concentrated on residual congestion and the highest-fanout power nets.
+`(segment ...)`/`(via ...)` S-expressions. Copper is modelled **physically**:
+pads obstruct the copper the exporters actually render (their explicit size,
+or a shared pitch-aware default for size-less pads), and vias are placed only
+where their real `via_diameter` barrel keeps clearance to every other net's
+pads, tracks and vias — a net with no legal path fails cleanly instead of
+getting shorted copper. `check_fabrication` then validates the routed
+geometry — not just the declared design rules — with real geometric clearance
+checks between every copper pair (track-track, via-pad, via-via, pad-pad,
+track-pad, track-via), the same collisions KiCad's DRC reports. The full
+hardware workflow is: build (or generate) the document → `auto_place` →
+`route_board` → `validate_document` → `export_document(tool='kicad')`. Set
+expectations correctly: this is a basic router for simple-to-moderate boards
+(the Arduino Uno / ESP32 dev-board range), not a replacement for a commercial
+autorouter on dense designs. Nets the maze search cannot connect come back in
+`nets_failed` for manual routing instead of failing the run — on the packed
+Arduino Uno example, 25 of 32 multi-pad nets route at the default 0.15mm
+grid, and `kicad-cli pcb drc` on the export reports **zero copper
+violations** (verified in CI-skippable integration tests when kicad-cli is
+installed), with the remaining failures concentrated on residual congestion
+and the highest-fanout power nets.
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
@@ -218,7 +226,7 @@ Thirty-five tools, same for every client. Over stdio all are local; over HTTP ea
 | `diff_documents` | RFC 6902 patch transforming document A into B |
 | `verify_sync` | Check a native file is still in sync with its source document |
 | `generate_bom` | Bill of materials from a hardware document (JSON or CSV) |
-| `check_fabrication` | Validate a board against a PCB fab's rules (JLCPCB/PCBWay/OSH Park) |
+| `check_fabrication` | Validate a board against a PCB fab's rules incl. geometric copper-collision checks (JLCPCB/PCBWay/OSH Park) |
 | `check_gerber_completeness` | Pre-flight a board before Gerber export (fab rules + routed copper) |
 | `list_fab_profiles` | Available fab profiles and their key constraints |
 
@@ -258,7 +266,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 | --- | --- |
 | `generate_document` | Natural language → validated ForgeDocument |
 | `auto_place` | Pack a hardware document's components inside the board outline (no overlaps, locked components respected) |
-| `route_board` | Autoroute a placed board: 2-layer maze routing into real KiCad track/via copper (unroutable nets reported, not fatal) |
+| `route_board` | Autoroute a placed board: 2-layer maze routing with physical pad/via clearance into real KiCad track/via copper (unroutable nets reported, not fatal) |
 | `analyze_image` | Photo → ForgeLab document skeleton (vision) |
 | `critique_render` | Vision critique of a rendered preview vs the design intent — structured issues + suggested changes |
 
@@ -272,7 +280,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **672 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **686 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
 
 ## Roadmap
 

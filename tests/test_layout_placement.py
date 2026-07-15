@@ -143,12 +143,13 @@ def test_locked_component_keeps_position_and_is_avoided():
     assert "J1" not in result["placements"]
     rects = _rects(doc, result["placements"])
     _assert_no_overlap_and_in_bounds(rects, 40.0, 30.0)
-    # J1's rect is computed from its original (unchanged) position.
+    # J1's rect is computed from its original (unchanged) position: pad
+    # centres at +-(3, 8), half the 1.6mm default copper (0.8), keepout 0.5.
     assert rects["J1"] == (
-        locked_at[0] - 3.5,
-        locked_at[1] - 8.5,
-        locked_at[0] + 3.5,
-        locked_at[1] + 8.5,
+        locked_at[0] - 4.3,
+        locked_at[1] - 9.3,
+        locked_at[0] + 4.3,
+        locked_at[1] + 9.3,
     )
 
 
@@ -166,30 +167,37 @@ def test_board_without_outline_raises_clearly():
 
 
 def test_board_utilization_is_footprint_area_over_board_area():
-    # One component, pads spanning 4x2mm, keepout 0.5 -> footprint 5x3 = 15mm2
-    # on a 30x20 = 600mm2 board -> 2.5%.
+    # One component, pad centres spanning 4x2mm plus the 1.6mm default pad
+    # copper (0.8 per side) and 0.5 keepout -> footprint 6.6x4.6 = 30.36mm2
+    # on a 30x20 = 600mm2 board -> 5.1%.
     doc = _doc([_component("U1", 2.0, 1.0)])
     result = place_components(doc)
-    assert result["board_utilization"] == 2.5
+    assert result["board_utilization"] == 5.1
 
 
 def test_small_two_pad_component_packs_alongside_large_component():
     doc = _doc(
         [
-            _component("U1", 6.0, 4.0),  # large part (13x9mm, gets the edge inset)
+            # Large part: copper-inclusive footprint 14.6x10.6mm, gets the
+            # 5mm edge inset, so the board must leave 10.6mm of usable height.
+            _component("U1", 6.0, 4.0),
             _component("R1", 0.8, 0.4),  # tiny 2-pad passive
-        ]
+        ],
+        width=32.0,
+        height=24.0,
     )
     result = place_components(doc)
     assert result["components_placed"] == 2
-    _assert_no_overlap_and_in_bounds(_rects(doc, result["placements"]), 30.0, 20.0)
+    _assert_no_overlap_and_in_bounds(_rects(doc, result["placements"]), 32.0, 24.0)
 
 
 def test_component_with_no_positioned_pads_gets_fallback_footprint():
     node = _component("X1", 1.0, 1.0)
     node["props"]["pads"] = [{"number": "1", "net": "N"}]  # no physical 'at'
     x0, y0, x1, y1 = component_bbox(node["props"], 0.5)
-    assert (x1 - x0, y1 - y0) == (3.0, 3.0)  # 2x2mm fallback + keepout
+    # The exporters render a 1.6mm default pad at the fallback-grid origin;
+    # the bbox covers exactly that copper plus keepout on each side.
+    assert (x1 - x0, y1 - y0) == (2.6, 2.6)
 
 
 # ------------------------------------------------------------- MCP auto_place
@@ -273,8 +281,10 @@ def test_zero_overlap_holds_with_inset_active():
             _component("U1", 6.0, 4.0),
             *[_component(f"R{i}", 0.8, 0.4) for i in range(1, 9)],
             _component("J1", 2.5, 1.0),
-        ]
+        ],
+        width=34.0,
+        height=24.0,
     )
     result = place_components(doc)
     assert result["components_placed"] == 10
-    _assert_no_overlap_and_in_bounds(_rects(doc, result["placements"]), 30.0, 20.0)
+    _assert_no_overlap_and_in_bounds(_rects(doc, result["placements"]), 34.0, 24.0)

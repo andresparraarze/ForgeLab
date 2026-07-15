@@ -35,6 +35,8 @@ from forgelab.spec import (
     NODE_TRACK,
     NODE_VIA,
     ForgeDocument,
+    pad_default_size,
+    pad_grid_offset,
 )
 
 # Soldermask opening expansion per side (mm), a common fab default.
@@ -44,8 +46,6 @@ _OUTLINE_WIDTH = 0.1  # Edge.Cuts stroke (mm)
 _SILK_STROKE = 0.15  # silkscreen pen width (mm)
 _SILK_HEIGHT = 1.0  # reference-designator character height (mm)
 
-_DEFAULT_PAD_SIZE = (1.6, 1.6)
-_PAD_GRID_PITCH = 2.0  # fallback grid for pads without 'at' (matches KiCad export)
 
 # Minimal stroke font on a 2x3 unit grid: char -> line segments
 # (x1, y1, x2, y2), y up. Enough for reference designators (A-Z, 0-9, _-+.).
@@ -159,16 +159,6 @@ class _GerberFile:
         return "\n".join(lines) + "\n"
 
 
-def _pad_grid_offset(index: int, total: int) -> tuple[float, float]:
-    """Fallback (x, y) for a pad without ``at`` — same grid as the KiCad export."""
-    cols = max(1, math.ceil(math.sqrt(total)))
-    row, col = divmod(index, cols)
-    return (
-        (col - (cols - 1) / 2) * _PAD_GRID_PITCH,
-        (row - (math.ceil(total / cols) - 1) / 2) * _PAD_GRID_PITCH,
-    )
-
-
 def _rotate_offset(px: float, py: float, rotation_deg: float) -> tuple[float, float]:
     """Rotate a pad offset by the component rotation.
 
@@ -227,18 +217,25 @@ class GerberExporter(Exporter):
             rotation = float(at[2]) if len(at) >= 3 else 0.0
             side = "B.Cu" if str(props.get("layer", "F.Cu")) == "B.Cu" else "F.Cu"
             pads = [p for p in (props.get("pads") or []) if isinstance(p, dict)]
+            # Size-less pads render the shared pitch-aware default — the same
+            # copper the KiCad export and the layout/validation tools assume.
+            default = pad_default_size([p.get("at") for p in pads])
             max_pad_y = 0.0
             for index, pad in enumerate(pads):
                 offset = pad.get("at")
                 if isinstance(offset, list) and len(offset) == 2:
                     px, py = _rotate_offset(float(offset[0]), float(offset[1]), rotation)
                 else:
-                    px, py = _pad_grid_offset(index, len(pads))
+                    # The fallback grid is footprint-local, so it rotates with
+                    # the component exactly like an explicit offset (KiCad
+                    # rotates footprint-local coordinates natively).
+                    gx, gy = pad_grid_offset(index, len(pads))
+                    px, py = _rotate_offset(gx, gy, rotation)
                 size = pad.get("size")
                 if isinstance(size, list) and len(size) == 2:
                     width, height = float(size[0]), float(size[1])
                 else:
-                    width, height = _DEFAULT_PAD_SIZE
+                    width, height = default, default
                 shape = str(pad.get("shape") or "roundrect")
                 # The aperture rotates with the pad: swap the rectangle/oval
                 # dimensions at 90/270. An arbitrary angle cannot be expressed

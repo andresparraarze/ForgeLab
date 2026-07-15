@@ -16,8 +16,6 @@ round-trips stay identity.
 
 from __future__ import annotations
 
-import math
-
 from forgelab.exporters.base import Exporter
 from forgelab.formats import Symbol, dumps
 from forgelab.spec import (
@@ -33,6 +31,8 @@ from forgelab.spec import (
     Net,
     Track,
     Via,
+    pad_default_size,
+    pad_grid_offset,
 )
 from forgelab.sync.hashing import HASH_KEY, document_hash
 
@@ -90,24 +90,6 @@ def _mirror_axis(outline) -> float:
 def _flip_y(y: float, axis: float) -> float:
     """IR Y-up -> KiCad Y-down (involutive; rounded so round-trips are exact)."""
     return round(axis - y, 6) + 0.0  # + 0.0 normalizes -0.0
-
-
-_PAD_GRID_PITCH = 2.0
-
-
-def _grid_offset(index: int, total: int) -> tuple[float, float]:
-    """Deterministic (x, y) for a pad that carries no explicit ``at``.
-
-    Lays pads out on a centred square-ish grid so a multi-pin part never
-    collapses onto the footprint origin. Purely a visual fallback — agents
-    should supply real offsets via ``Pad.at`` when the package geometry is known.
-    """
-    cols = max(1, math.ceil(math.sqrt(total)))
-    row, col = divmod(index, cols)
-    rows = math.ceil(total / cols)
-    x = (col - (cols - 1) / 2) * _PAD_GRID_PITCH
-    y = (row - (rows - 1) / 2) * _PAD_GRID_PITCH
-    return x, y
 
 
 class KiCadExporter(Exporter):
@@ -247,6 +229,9 @@ class KiCadExporter(Exporter):
         fp.append(_s("property", "Reference", comp.reference))
         fp.append(_s("property", "Value", comp.value))
         total = len(comp.pads)
+        # Size-less pads render the shared pitch-aware default, so the copper
+        # here matches what the layout and validation tools assumed.
+        default = pad_default_size([p.at for p in comp.pads if p.at is not None])
         for index, pad in enumerate(comp.pads):
             code = name_to_code.get(pad.net, 0)
             # Honor an explicit pad offset; otherwise spread pads on a grid so
@@ -258,9 +243,9 @@ class KiCadExporter(Exporter):
             else:
                 # The fallback grid is computed in IR (Y-up) space — the same
                 # grid the Gerber exporter uses — so its Y is negated too.
-                x, y = _grid_offset(index, total)
+                x, y = pad_grid_offset(index, total)
                 y = -y + 0.0
-            width, height = (pad.size[0], pad.size[1]) if pad.size else (1.6, 1.6)
+            width, height = (pad.size[0], pad.size[1]) if pad.size else (default, default)
             shape = pad.shape if pad.shape else "roundrect"
             fp.append(
                 _s(

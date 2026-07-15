@@ -376,7 +376,11 @@ def _routed_doc(track_width: float, gap: float, via_size: float = 0.8) -> ForgeD
             {
                 "id": "via_a",
                 "type": "via",
-                "props": {"at": [25.0, 10.0], "net": "A", "size": via_size, "drill": 0.4},
+                # Clear of both tracks: the old fixture put this via at
+                # (25, 10), where its 0.8mm barrel overlapped track B 0.45mm
+                # away — a real short the old, geometry-blind checker never
+                # saw. The new copper-collision checks catch it.
+                "props": {"at": [25.0, 5.0], "net": "A", "size": via_size, "drill": 0.4},
             },
         ],
     )
@@ -445,14 +449,14 @@ def test_route_board_reports_missing_outline_as_error(tmp_path, monkeypatch):
 def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypatch):
     """The real-board benchmark: auto_place + route_board on the Arduino Uno.
 
-    Empirical result at the default 0.2mm grid: 25 of 32 multi-pad nets route
-    (~2s) now that auto_place insets large parts (the two big ICs) 5mm from
-    the board edges, preserving their routing escape channels — up from 22
-    when the QFP packed flush into the corner with its pad ring 0.5mm from
-    two board edges. The remaining failures are residual congestion plus
-    GND/+5V, the two highest-fanout nets routed last. The assertion carries a
-    small margin so incidental placement changes don't flap the test, but a
-    regression to flush packing (22) or worse still trips it.
+    Empirical result at the default 0.15mm grid with honest copper obstacles
+    (pads at their real rendered size, vias with their real diameter): 25 of
+    32 multi-pad nets route in ~4s, and KiCad's own DRC reports zero copper
+    violations on the export (see test_drc_kicad_cli.py). The remaining
+    failures are residual congestion plus GND/+5V, the two highest-fanout
+    nets routed last. The assertion carries a small margin so incidental
+    placement changes don't flap the test, but a real regression (the old
+    0.2mm grid manages only 17 against honest obstacles) still trips it.
     """
     monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
     src = _EXAMPLES / "hardware/arduino_uno.forge.json"
@@ -471,6 +475,10 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
     # The routed board still exports to KiCad with real copper in it.
     text = KiCadExporter().from_ir(doc).decode("utf-8")
     assert text.count("(segment") == len([n for n in routed["nodes"] if n["type"] == "track"])
+    # And the routed copper passes the full geometric fab check — no via on a
+    # foreign pad, no via pair inside clearance, no track over foreign copper.
+    fab = check_fab_rules(doc)
+    assert fab["passed"] is True, fab["errors"]
 
 
 def test_routing_connects_pads_of_a_rotated_component():
