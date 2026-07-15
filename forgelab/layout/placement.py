@@ -8,8 +8,9 @@ area (largest first), fill rows left-to-right, wrap when a row is full. It is
 deliberately not optimal; what it guarantees is **zero overlap and zero
 components outside the board outline**.
 
-Each component's footprint is its pad bounding box grown by a keepout margin,
-so placement respects real package size, not just the origin point. Components
+Each component's footprint is the bounding box of its pad copper (explicit
+``size`` or the shared exporter default) grown by a keepout margin, so
+placement respects real package size, not just the pad centre points. Components
 marked ``locked: true`` keep their position and act as obstacles the others
 pack around. Pure standard library; depends only on ``forgelab.spec``.
 """
@@ -20,7 +21,7 @@ import math
 from typing import Any
 
 from forgelab.spec import Domain, ForgeDocument, Node
-from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT
+from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, pad_default_size, pad_grid_offset
 
 DEFAULT_KEEPOUT = 0.5
 
@@ -88,22 +89,42 @@ def component_bbox(
 ) -> Rect:
     """Footprint bounding box relative to the component origin, keepout included.
 
-    Computed over the pads' physical ``at`` offsets (min/max x and y), grown by
-    ``keepout`` on every side. A component with no positioned pads falls back
-    to a small default footprint rather than a zero-size point. Pad offsets are
-    rotated by the component's ``at`` rotation (pass ``rotation`` to override —
-    e.g. ``0.0`` when the component is about to be re-placed at rotation 0).
+    Covers the pads' **copper**, not just their centre points: each pad
+    contributes its ``at`` offset grown by half its ``size`` (size-less pads
+    use the shared pitch-aware default the exporters render — see
+    ``forgelab.spec.hardware.pad_default_size``), then the whole box grows by
+    ``keepout`` on every side. Pads without an ``at`` still occupy copper at
+    the exporters' deterministic fallback grid, so they count too. A component
+    with no pads at all falls back to a small default footprint rather than a
+    zero-size point. Pad offsets are rotated by the component's ``at`` rotation
+    (pass ``rotation`` to override — e.g. ``0.0`` when the component is about
+    to be re-placed at rotation 0).
     """
     if rotation is None:
         rotation = component_rotation(props)
+    pads = [p for p in props.get("pads") or [] if isinstance(p, dict)]
+    default = pad_default_size([p.get("at") for p in pads])
+    theta = math.radians(rotation)
+    cos_r, sin_r = abs(math.cos(theta)), abs(math.sin(theta))
     xs: list[float] = []
     ys: list[float] = []
-    for pad in props.get("pads") or []:
-        at = pad.get("at") if isinstance(pad, dict) else None
+    for index, pad in enumerate(pads):
+        at = pad.get("at")
         if isinstance(at, list) and len(at) == 2:
-            rx, ry = rotate_offset(float(at[0]), float(at[1]), rotation)
-            xs.append(rx)
-            ys.append(ry)
+            ox, oy = float(at[0]), float(at[1])
+        else:
+            ox, oy = pad_grid_offset(index, len(pads))
+        rx, ry = rotate_offset(ox, oy, rotation)
+        size = pad.get("size")
+        if isinstance(size, list) and len(size) == 2:
+            w, h = float(size[0]), float(size[1])
+        else:
+            w = h = default
+        # Axis-aligned extents of the rotated pad rectangle.
+        half_w = (w * cos_r + h * sin_r) / 2
+        half_h = (w * sin_r + h * cos_r) / 2
+        xs.extend((rx - half_w, rx + half_w))
+        ys.extend((ry - half_h, ry + half_h))
     if not xs:
         xs = [-_FALLBACK_HALF, _FALLBACK_HALF]
         ys = [-_FALLBACK_HALF, _FALLBACK_HALF]

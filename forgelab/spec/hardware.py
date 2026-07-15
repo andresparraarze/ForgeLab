@@ -19,6 +19,9 @@ centre (and negate pad-local Y offsets) on the way in and out.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 NODE_COMPONENT = "component"
@@ -26,6 +29,71 @@ NODE_NET = "net"
 NODE_BOARD = "board"
 NODE_TRACK = "track"
 NODE_VIA = "via"
+
+# Copper size (mm, square) assumed for a pad that carries no explicit ``size``.
+# This is the single source of truth for "invented" pad copper: the KiCad and
+# Gerber exporters render it, and the layout/validation tools treat it as a
+# real obstacle, so every view of the board agrees on where copper is.
+DEFAULT_PAD_SIZE = 1.6
+
+# A size-less pad can never be assumed smaller than this (mm): below ~0.3mm
+# the copper stops being a manufacturable SMD pad at all.
+_MIN_DEFAULT_PAD_SIZE = 0.3
+
+# Edge-to-edge copper gap (mm) the pitch-derived default preserves between
+# neighbouring pads, so invented copper never overlaps or touches.
+_DEFAULT_PAD_GAP = 0.3
+
+# Pitch (mm) of the deterministic fallback grid used for pads that carry no
+# physical ``at`` offset. Shared by both exporters and the layout tools so a
+# fallback pad occupies the same spot in every rendering.
+PAD_GRID_PITCH = 2.0
+
+
+def pad_default_size(pad_offsets: Iterable[object]) -> float:
+    """Square copper size (mm) assumed for this component's size-less pads.
+
+    A fixed default of ``DEFAULT_PAD_SIZE`` overlaps neighbouring pads on
+    fine-pitch parts (1.6mm copper at a QFP's 0.8mm pitch shorts every
+    adjacent pin), so the default adapts to the component's tightest pad
+    pitch: ``min(DEFAULT_PAD_SIZE, min_pitch - 0.3)``, floored at 0.3mm.
+    ``pad_offsets`` are the component's known pad ``at`` offsets; with fewer
+    than two positioned pads there is no pitch to measure and the full
+    default applies. Deterministic, and used identically by the exporters
+    (which render this copper) and the layout/validation tools (which route
+    around and check it).
+    """
+    points = [
+        (float(at[0]), float(at[1]))
+        for at in pad_offsets
+        if isinstance(at, (list, tuple)) and len(at) == 2
+    ]
+    pitch: float | None = None
+    for i, p in enumerate(points):
+        for q in points[i + 1 :]:
+            d = math.dist(p, q)
+            if d > 1e-9 and (pitch is None or d < pitch):
+                pitch = d
+    if pitch is None:
+        return DEFAULT_PAD_SIZE
+    return round(min(DEFAULT_PAD_SIZE, max(_MIN_DEFAULT_PAD_SIZE, pitch - _DEFAULT_PAD_GAP)), 3)
+
+
+def pad_grid_offset(index: int, total: int) -> tuple[float, float]:
+    """Deterministic (x, y) offset for a pad that carries no explicit ``at``.
+
+    Lays pads out on a centred square-ish grid so a multi-pin part never
+    collapses onto the footprint origin. Purely a placement fallback — agents
+    should supply real offsets via ``Pad.at`` when the package geometry is
+    known. Shared by the KiCad and Gerber exporters and the layout tools so
+    fallback copper lands at the same IR position in every view.
+    """
+    cols = max(1, math.ceil(math.sqrt(total)))
+    row, col = divmod(index, cols)
+    rows = math.ceil(total / cols)
+    x = (col - (cols - 1) / 2) * PAD_GRID_PITCH
+    y = (row - (rows - 1) / 2) * PAD_GRID_PITCH
+    return x, y
 
 
 class Pad(BaseModel):

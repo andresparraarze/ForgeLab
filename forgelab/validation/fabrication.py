@@ -13,10 +13,18 @@ measure). Pure standard library; node payloads are read as plain dicts.
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, NamedTuple
 
+from forgelab.layout import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
-from forgelab.spec.hardware import NODE_BOARD, NODE_TRACK, NODE_VIA
+from forgelab.spec.hardware import (
+    NODE_BOARD,
+    NODE_COMPONENT,
+    NODE_TRACK,
+    NODE_VIA,
+    pad_default_size,
+    pad_grid_offset,
+)
 
 # Floating-point slack so an exactly-at-minimum value (0.1 vs 0.1) passes.
 _EPS = 1e-9
@@ -196,6 +204,272 @@ def _check_routed_copper(
                 )
 
 
+class _PadCopper(NamedTuple):
+    """A pad's absolute copper geometry, resolved from its component."""
+
+    ref: str
+    number: str
+    net: str
+    layer: str
+    cx: float
+    cy: float
+    width: float
+    height: float
+    rotation: float
+    circle: bool
+
+
+def _collect_pad_copper(document: ForgeDocument) -> list[_PadCopper]:
+    """Every pad's absolute copper rectangle/circle, exactly as exported.
+
+    Size-less pads use the shared pitch-aware default and ``at``-less pads
+    the deterministic fallback grid (both from ``forgelab.spec.hardware``),
+    so these checks measure the same copper the KiCad and Gerber exporters
+    render.
+    """
+    out: list[_PadCopper] = []
+    for node in document.walk():
+        if node.type != NODE_COMPONENT:
+            continue
+        props = node.props
+        at = props.get("at") or [0.0, 0.0]
+        if not (isinstance(at, list) and len(at) >= 2):
+            continue
+        cx, cy = float(at[0]), float(at[1])
+        rotation = component_rotation(props)
+        layer = str(props.get("layer") or "F.Cu")
+        ref = str(props.get("reference") or node.id)
+        pads = [p for p in props.get("pads") or [] if isinstance(p, dict)]
+        default = pad_default_size([p.get("at") for p in pads])
+        for index, pad in enumerate(pads):
+            offset = pad.get("at")
+            if isinstance(offset, list) and len(offset) == 2:
+                ox, oy = float(offset[0]), float(offset[1])
+            else:
+                ox, oy = pad_grid_offset(index, len(pads))
+            rx, ry = rotate_offset(ox, oy, rotation)
+            size = pad.get("size")
+            if isinstance(size, list) and len(size) == 2:
+                width, height = float(size[0]), float(size[1])
+            else:
+                width = height = default
+            out.append(
+                _PadCopper(
+                    ref=ref,
+                    number=str(pad.get("number", "?")),
+                    net=str(pad.get("net", "")),
+                    layer=layer,
+                    cx=cx + rx,
+                    cy=cy + ry,
+                    width=width,
+                    height=height,
+                    rotation=rotation,
+                    circle=str(pad.get("shape") or "") == "circle",
+                )
+            )
+    return out
+
+
+def _point_pad_gap(px: float, py: float, pad: _PadCopper) -> float:
+    """Distance from a point to the pad's copper edge (0 inside the copper)."""
+    if pad.circle:
+        return max(0.0, math.dist((px, py), (pad.cx, pad.cy)) - pad.width / 2)
+    # Rotate the point into the pad's frame, then clamp against the rectangle.
+    dx, dy = px - pad.cx, py - pad.cy
+    theta = math.radians(pad.rotation)
+    cos_r, sin_r = math.cos(theta), math.sin(theta)
+    local_x = dx * cos_r + dy * sin_r
+    local_y = -dx * sin_r + dy * cos_r
+    return math.hypot(
+        max(abs(local_x) - pad.width / 2, 0.0), max(abs(local_y) - pad.height / 2, 0.0)
+    )
+
+
+def _pad_corners(pad: _PadCopper) -> list[tuple[float, float]]:
+    theta = math.radians(pad.rotation)
+    cos_r, sin_r = math.cos(theta), math.sin(theta)
+    hw, hh = pad.width / 2, pad.height / 2
+    return [
+        (pad.cx + x * cos_r - y * sin_r, pad.cy + x * sin_r + y * cos_r)
+        for x, y in ((-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh))
+    ]
+
+
+def _pad_pad_gap(a: _PadCopper, b: _PadCopper) -> float:
+    """Edge-to-edge copper gap between two pads (0 when they overlap)."""
+    if a.circle:
+        return max(0.0, _point_pad_gap(a.cx, a.cy, b) - a.width / 2)
+    if b.circle:
+        return max(0.0, _point_pad_gap(b.cx, b.cy, a) - b.width / 2)
+    # Overlap: crossing edges hit the segment-distance intersection test; one
+    # rect swallowing the other is caught by the centre-containment probes.
+    if _point_pad_gap(a.cx, a.cy, b) == 0.0 or _point_pad_gap(b.cx, b.cy, a) == 0.0:
+        return 0.0
+    edges_a, edges_b = _pad_corners(a), _pad_corners(b)
+    return min(
+        _segment_distance(edges_a[i], edges_a[(i + 1) % 4], edges_b[j], edges_b[(j + 1) % 4])
+        for i in range(4)
+        for j in range(4)
+    )
+
+
+def _segment_pad_gap(s1: tuple[float, float], s2: tuple[float, float], pad: _PadCopper) -> float:
+    """Gap between a track centreline segment and the pad's copper edge."""
+    if pad.circle:
+        centre = (pad.cx, pad.cy)
+        return max(0.0, _segment_distance(s1, s2, centre, centre) - pad.width / 2)
+    if _point_pad_gap(*s1, pad) == 0.0 or _point_pad_gap(*s2, pad) == 0.0:
+        return 0.0
+    corners = _pad_corners(pad)
+    return min(_segment_distance(s1, s2, corners[i], corners[(i + 1) % 4]) for i in range(4))
+
+
+def _check_copper_collisions(
+    document: ForgeDocument, fab: str, profile: dict[str, float], errors: list[str]
+) -> None:
+    """Clearance between distinct copper items, the checks DRC actually runs.
+
+    Covers via-to-pad, via-to-via, pad-to-pad, track-to-pad and track-to-via
+    gaps across nets — the geometry whose absence let ``passed: true`` boards
+    carry real short circuits (KiCad DRC on a routed board found vias landing
+    on foreign pads and via pairs 0.1mm apart). Same-net contact is legal
+    copper and never reported; a pad with no net counts as foreign to every
+    net. Each check reports one message per offending net pair.
+    """
+    min_spacing = profile.get("min_trace_spacing")
+    if min_spacing is None:
+        return
+
+    pads = _collect_pad_copper(document)
+    vias: list[tuple[str, float, float, float]] = []
+    tracks: list[tuple[str, str, tuple[float, float], tuple[float, float], float]] = []
+    for node in document.walk():
+        if node.type == NODE_VIA:
+            at = node.props.get("at")
+            if isinstance(at, list) and len(at) == 2:
+                vias.append(
+                    (
+                        str(node.props.get("net", "")),
+                        float(at[0]),
+                        float(at[1]),
+                        float(node.props.get("size", 0.0)),
+                    )
+                )
+        elif node.type == NODE_TRACK:
+            start, end = node.props.get("start"), node.props.get("end")
+            if isinstance(start, list) and isinstance(end, list):
+                tracks.append(
+                    (
+                        str(node.props.get("net", "")),
+                        str(node.props.get("layer", "F.Cu")),
+                        (float(start[0]), float(start[1])),
+                        (float(end[0]), float(end[1])),
+                        float(node.props.get("width", 0.0)),
+                    )
+                )
+
+    reported: set[tuple[str, str, str]] = set()
+
+    def report(kind: str, net_a: str, net_b: str, gap: float, what: str, remedy: str) -> None:
+        pair = tuple(sorted((net_a or "?", net_b or "unconnected")))
+        key = (kind, pair[0], pair[1])
+        if key in reported:
+            return
+        reported.add(key)
+        state = (
+            "overlap — a short circuit"
+            if gap <= 0
+            else f"are {gap:.3f}mm apart, below {fab} minimum clearance {min_spacing}mm"
+        )
+        errors.append(f"{what} {state}; {remedy}")
+
+    reroute = "re-run route_board to regenerate legal copper"
+    for via_net, vx, vy, via_size in vias:
+        for pad in pads:
+            if pad.net and pad.net == via_net:
+                continue
+            gap = _point_pad_gap(vx, vy, pad) - via_size / 2
+            if _below(gap, min_spacing):
+                report(
+                    "via-pad",
+                    via_net,
+                    pad.net,
+                    gap,
+                    f"routed via on net {via_net or '?'} at ({vx:g}, {vy:g}) and pad "
+                    f"{pad.number} of {pad.ref} (net {pad.net or 'unconnected'})",
+                    reroute,
+                )
+    for i, (net_a, ax, ay, size_a) in enumerate(vias):
+        for net_b, bx, by, size_b in vias[i + 1 :]:
+            if net_a == net_b:
+                continue
+            gap = math.dist((ax, ay), (bx, by)) - (size_a + size_b) / 2
+            if _below(gap, min_spacing):
+                report(
+                    "via-via",
+                    net_a,
+                    net_b,
+                    gap,
+                    f"routed vias on nets {net_a or '?'} and {net_b or '?'} at "
+                    f"({ax:g}, {ay:g}) and ({bx:g}, {by:g})",
+                    reroute,
+                )
+    for i, pad_a in enumerate(pads):
+        for pad_b in pads[i + 1 :]:
+            if (
+                pad_a.layer != pad_b.layer
+                or not pad_a.net
+                or not pad_b.net
+                or pad_a.net == pad_b.net
+            ):
+                continue
+            gap = _pad_pad_gap(pad_a, pad_b)
+            if _below(gap, min_spacing):
+                remedy = (
+                    "the footprint's own pads violate spacing — check the pad geometry"
+                    if pad_a.ref == pad_b.ref
+                    else "move the components apart (run auto_place to fix automatically)"
+                )
+                report(
+                    "pad-pad",
+                    pad_a.net,
+                    pad_b.net,
+                    gap,
+                    f"pad {pad_a.number} of {pad_a.ref} (net {pad_a.net}) and pad "
+                    f"{pad_b.number} of {pad_b.ref} (net {pad_b.net})",
+                    remedy,
+                )
+    for track_net, track_layer, start, end, width in tracks:
+        for pad in pads:
+            if pad.layer != track_layer or (pad.net and pad.net == track_net):
+                continue
+            gap = _segment_pad_gap(start, end, pad) - width / 2
+            if _below(gap, min_spacing):
+                report(
+                    "track-pad",
+                    track_net,
+                    pad.net,
+                    gap,
+                    f"routed track on net {track_net or '?'} and pad {pad.number} of "
+                    f"{pad.ref} (net {pad.net or 'unconnected'})",
+                    reroute,
+                )
+        for via_net, vx, vy, via_size in vias:
+            if via_net == track_net:
+                continue
+            gap = _segment_distance(start, end, (vx, vy), (vx, vy)) - width / 2 - via_size / 2
+            if _below(gap, min_spacing):
+                report(
+                    "track-via",
+                    track_net,
+                    via_net,
+                    gap,
+                    f"routed track on net {track_net or '?'} and via on net "
+                    f"{via_net or '?'} at ({vx:g}, {vy:g})",
+                    reroute,
+                )
+
+
 def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str, Any]:
     """Validate a hardware document's design rules against a fab profile.
 
@@ -251,6 +525,7 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
                 )
 
     _check_routed_copper(document, fab, profile, errors)
+    _check_copper_collisions(document, fab, profile, errors)
 
     # Board-size envelope — only when the profile defines limits and there is an
     # outline to measure.

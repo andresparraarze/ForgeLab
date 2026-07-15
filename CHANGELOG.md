@@ -6,6 +6,67 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **A real correctness/trust bug that could produce shorted boards, found by
+  running KiCad's own DRC on a routed export: `route_board` placed vias as
+  dimensionless grid points (on top of foreign pads and other vias), and
+  `check_fabrication` reported `passed: true` anyway because it only checked
+  track-vs-track clearance.** Reproduced before the fix: `kicad-cli pcb drc`
+  on the auto-placed, auto-routed Arduino Uno example reported **199 shorting
+  items** (tracks over foreign pads, vias on pads — including a via landing
+  on a +5V pad — via pairs overlapping) plus 221 clearance and 53 drill-hole
+  violations, while `check_fabrication` said `passed: true`. After the fix
+  the same pipeline yields **zero copper violations of any kind** under
+  `kicad-cli pcb drc` (KiCad 10.0.3; the only remaining reports are
+  footprint-library bookkeeping with no copper meaning), and
+  `check_fabrication` correctly fails the old broken output with 216
+  distinct errors. The fix, in layers:
+  - **Router — vias are real copper now:** a layer-agnostic via-legality
+    plane forbids a layer change wherever the via's `via_diameter` barrel
+    would come within `clearance` of another net's pad copper, routed tracks
+    or committed vias (edge-to-edge, exact point-to-rectangle distance), and
+    keeps a 0.25mm drill-to-drill wall between via holes of *any* net. A net
+    with no legal via location fails cleanly into `nets_failed` — never an
+    unsafe via.
+  - **Router/placement — pads are real copper now:** the same DRC run
+    exposed a sibling of the via bug: size-less pads (all 119 pads of the
+    Uno example) were routed/packed as dimensionless points while both
+    exporters render 1.6×1.6mm copper for them, and that fixed default even
+    overlaps its own neighbours on fine-pitch parts. There is now a single
+    shared source of truth in `forgelab.spec.hardware`: a pitch-aware
+    `pad_default_size` (`min(1.6, min_pitch − 0.3)`, floored at 0.3mm) and a
+    shared `pad_grid_offset` fallback grid, used identically by the KiCad
+    exporter, the Gerber exporter, `auto_place` (bounding boxes now cover pad
+    copper, not centre points), `route_board` (pads obstruct their real
+    rendered rectangle plus clearance plus half a track width) and
+    `check_fabrication`. Contested grid cells where two nets' clearance
+    zones overlap are now blocked for everyone instead of handed to the
+    later pad.
+  - **`check_fabrication` — real geometric collision checks:** via-to-pad,
+    via-to-via, pad-to-pad, and (beyond the original report, because the DRC
+    run showed they were the *largest* short category) track-to-pad and
+    track-to-via clearance across nets, with exact rotated-rectangle/circle
+    distances measured against the same copper the exporters render.
+    Same-net contact (e.g. via-in-pad) stays legal. Messages state the gap,
+    name both nets, and say "short circuit" when copper overlaps.
+  - **Default routing grid changed 0.2mm → 0.15mm**, re-tuned against honest
+    obstacles: 0.15 routes 25/32 Uno nets in ~4s (0.2 manages only 17 —
+    0.8mm-pitch QFP escape corridors don't survive 0.2mm quantization; 0.1
+    drops to 20 at twice the runtime) and divides the default
+    track_width + clearance (0.45mm) exactly.
+  - **Tests (686 total, 14 new):** property-style checks across 8 seeded
+    crossing-net boards that every routed via keeps clearance to foreign
+    pads and vias (plus a vacuity guard proving the boards actually via);
+    the two confirmed-real regression fixtures (a via on a +5V pad, two vias
+    0.1mm apart on different nets) plus track-over-pad and the same-net
+    via-in-pad legality case; the Uno integration test now asserts the
+    routed board passes `check_fab_rules`; and a kicad-cli-gated integration
+    test asserts the routed Uno export stays free of copper DRC violations.
+    One pre-existing fixture in `test_check_fab_rules_validates_routed_geometry`
+    turned out to contain exactly this class of short (a 0.8mm via
+    overlapping a parallel track 0.45mm away) — the fixture was corrected,
+    not the check.
+
 ### Changed
 - **The hardware IR's Y-axis convention is now pinned and enforced: Y-up,
   origin at the board outline's lower-left corner, rotation counterclockwise**

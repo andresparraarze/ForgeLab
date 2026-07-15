@@ -258,13 +258,14 @@ def test_component_fully_within_bounds_passes():
 
 
 def test_component_partially_outside_bounds_fails_with_auto_place_hint():
-    # Footprint spans x 8.5..10.5 on a 10mm board: 0.5mm hangs off the edge.
+    # Pad centres span +-1mm plus half the 1.6mm default copper and keepout:
+    # footprint 3.6x3.6 at x=9.5 spans 7.7..11.3 on a 10mm board.
     errors, _ = _errors_warnings(
         [_board(_rect_outline()), _net("GND", 1), _placed_component("U1", [9.5, 5.0, 0.0])]
     )
     assert any(
         "Component U1 extends outside the board outline" in e
-        and "footprint 2x2mm" in e
+        and "footprint 3.6x3.6mm" in e
         and "board bounds (10x10mm)" in e
         and "Run auto_place to fix automatically" in e
         for e in errors
