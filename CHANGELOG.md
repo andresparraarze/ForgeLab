@@ -21,6 +21,13 @@ All notable changes to this project are documented here. The format is based on
   `list_domains` returns all three domains over `streamable-http` on port
   8001 and over stdio.
 
+- **README "Updating" section** documenting `forgelab update`, live-verified
+  before writing: a venv deliberately pinned to a pre-fix commit (MCP server
+  binding port 8000 despite `--port 8001`) picked up the fix with a single
+  `forgelab update` (rebinding 8001), and both client registrations survived
+  untouched — Claude Code reported the server Connected afterwards, since
+  every client points at the same `~/.forgelab/venv` path.
+
 ### Fixed
 - **`forgelab-mcp --port` (and `--host`) were accepted and silently
   ignored** whenever auth was disabled — which is the default. Found by
