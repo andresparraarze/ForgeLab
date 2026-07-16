@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# One-line ForgeLab installer for Claude Code.
+# One-line ForgeLab installer for Codex CLI.
 #
-#   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-codex.sh | bash
 #
 # Thin wrapper: runs the generic installer (scripts/install.sh — venv at
 # ~/.forgelab, forgelab[mcp,agent], ~/forgelab-output, PATH), then registers
-# the MCP server with Claude Code (stdio).
+# the MCP server with Codex CLI (stdio). Standalone: no prior ForgeLab or
+# Claude Code install required.
 
 set -euo pipefail
 
@@ -27,18 +28,18 @@ else
   curl -fsSL "$REPO_RAW/scripts/install.sh" | bash
 fi
 
-# 2. Register with Claude Code
-step "Registering MCP server with Claude Code"
-command -v claude >/dev/null 2>&1 \
-  || fail "The 'claude' CLI was not found. Install Claude Code first, then re-run."
-claude mcp remove forgelab >/dev/null 2>&1 || true
-claude mcp add forgelab --env "FORGELAB_OUTPUT_DIR=$FORGELAB_OUTPUT_DIR" -- \
+# 2. Register with Codex CLI
+step "Registering MCP server with Codex CLI"
+command -v codex >/dev/null 2>&1 \
+  || fail "The 'codex' CLI was not found. Install Codex CLI first, then re-run."
+codex mcp remove forgelab >/dev/null 2>&1 || true
+codex mcp add forgelab --env "FORGELAB_OUTPUT_DIR=$FORGELAB_OUTPUT_DIR" -- \
   "$VENV/bin/forgelab-mcp" --transport stdio \
-  || fail "claude mcp add failed."
+  || fail "codex mcp add failed."
 ok "registered as MCP server 'forgelab'"
 
 echo
-ok "Done! Restart Claude Code (or run /mcp) and try:"
+ok "Done! Run /mcp inside a Codex session to confirm ForgeLab's tools are listed, then try:"
 echo "    \"Generate a blinky LED board and export it to KiCad as blinky.kicad_pcb\""
 echo "  Exports land in: $FORGELAB_OUTPUT_DIR"
 echo "  Note: generate_document needs ANTHROPIC_API_KEY available to the server."
