@@ -43,6 +43,17 @@ curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scrip
 That's it. Ask Codex to design anything. Run `/mcp` inside a Codex session to
 confirm ForgeLab's tools are listed.
 
+## Updating
+
+```bash
+forgelab update
+```
+
+Updates the installed ForgeLab package in `~/.forgelab/venv` to the latest
+version from GitHub. No client-specific re-registration is needed: Claude
+Code, Codex, Hermes, and OpenClaw all point at the same venv, so a single
+`forgelab update` refreshes ForgeLab for all of them at once.
+
 ## What you can do
 
 Just tell your agent what you want:
