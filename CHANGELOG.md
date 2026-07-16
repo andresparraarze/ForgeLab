@@ -15,9 +15,21 @@ All notable changes to this project are documented here. The format is based on
   same install), then registers the server via `codex mcp add`.
   `scripts/install-claude-code.sh` is now a thin wrapper over the same
   `install.sh` plus `claude mcp add`; the README's Codex section is a single
-  one-liner and no longer assumes a prior ForgeLab install.
+  one-liner and no longer assumes a prior ForgeLab install. The Hermes and
+  OpenClaw README prompts now start from the same `install.sh` one-liner
+  instead of describing a manual clone, and both were verified live:
+  `list_domains` returns all three domains over `streamable-http` on port
+  8001 and over stdio.
 
 ### Fixed
+- **`forgelab-mcp --port` (and `--host`) were accepted and silently
+  ignored** whenever auth was disabled — which is the default. Found by
+  live-verifying the README's Hermes prompt: `forgelab-mcp --transport
+  streamable-http --port 8001` actually bound FastMCP's default port 8000.
+  The unauthenticated `create_server` branch now passes `host`/`port`
+  through, the CLI test asserts the server *receives* the port (not just
+  that argparse parses it), and the served port was re-verified live on
+  8001.
 - **A real bug that silently broke every translucent material in glTF export,
   found by importing an export into Blender:** the exporter wrote a
   material's base-color alpha into `baseColorFactor` but never set
