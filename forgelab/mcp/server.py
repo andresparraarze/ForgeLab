@@ -85,6 +85,9 @@ def create_server(
             ),
         )
     else:
-        mcp = FastMCP("forgelab")
+        # host/port must be applied here too: auth is off by default, and
+        # FastMCP's own default port is 8000 — without this, the CLI's
+        # --port flag was accepted and silently ignored.
+        mcp = FastMCP("forgelab", host=host, port=port)
     _register(mcp)
     return mcp
