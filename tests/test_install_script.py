@@ -1,8 +1,10 @@
-"""Tests for the PATH-setup logic in scripts/install-claude-code.sh.
+"""Tests for the PATH-setup logic in scripts/install.sh.
 
-The installer is curl|bash, so its PATH logic must live in that one file; to
-test it we source the script with FORGELAB_INSTALLER_TEST=1 (which stops it
-after the helper definitions) and call the helper directly. The key regression:
+The installer is curl|bash, so its PATH logic must live in that one file
+(install.sh is the generic core; install-claude-code.sh and install-codex.sh
+are thin registration wrappers around it); to test it we source the script
+with FORGELAB_INSTALLER_TEST=1 (which stops it after the helper definitions)
+and call the helper directly. The key regression:
 zsh on Arch/EndeavourOS relocates its dotfiles via $ZDOTDIR (commonly
 ~/.config/zsh), so writing to a bare ~/.zshrc leaves the PATH export in a file
 zsh never reads.
@@ -16,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path("scripts/install-claude-code.sh").resolve()
+SCRIPT = Path("scripts/install.sh").resolve()
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 

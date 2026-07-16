@@ -36,12 +36,8 @@ Paste this prompt:
 
 ### Codex CLI
 
-Assumes ForgeLab is already installed (the Claude Code curl script above, or
-a manual install, has been run) — Codex just needs to be pointed at the same
-venv:
-
 ```bash
-codex mcp add forgelab --env FORGELAB_OUTPUT_DIR=$HOME/forgelab-output -- $HOME/.forgelab/venv/bin/forgelab-mcp --transport stdio
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-codex.sh | bash
 ```
 
 That's it. Ask Codex to design anything. Run `/mcp` inside a Codex session to

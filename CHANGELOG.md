@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Standalone Codex CLI installer** — `scripts/install-codex.sh`, a one-line
+  `curl | bash` that fully sets ForgeLab up for Codex with no prior install:
+  it runs the new generic `scripts/install.sh` (venv at `~/.forgelab/venv`,
+  `forgelab[mcp,agent]`, `~/forgelab-output`, PATH setup — all idempotent, so
+  running the Claude Code and Codex one-liners on the same machine reuses the
+  same install), then registers the server via `codex mcp add`.
+  `scripts/install-claude-code.sh` is now a thin wrapper over the same
+  `install.sh` plus `claude mcp add`; the README's Codex section is a single
+  one-liner and no longer assumes a prior ForgeLab install.
+
 ### Fixed
 - **A real bug that silently broke every translucent material in glTF export,
   found by importing an export into Blender:** the exporter wrote a
