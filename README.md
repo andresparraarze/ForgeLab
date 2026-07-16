@@ -71,18 +71,18 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | Domain         | Tool          | Import | Export | Notes                                        |
 | -------------- | ------------- | :----: | :----: | -------------------------------------------- |
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export |
-| Hardware       | Altium        |   🚧   |   🚧   | stub — contributions welcome                 |
+| Hardware       | Altium        |   ❌   |   ❌   | **not planned** — Altium's native format is closed/proprietary with no public spec; supporting it would mean depending on a paid SDK, which ForgeLab won't do |
 | Hardware       | Gerber        |   🚧   |   ✅   | export RS-274X layer set + Excellon drill, zipped (F/B copper, mask, silk, outline) |
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
-| Mechanical CAD | Fusion 360    |   🚧   |   🚧   | stub                                         |
+| Mechanical CAD | Fusion 360    |   ❌   |   ❌   | **not planned** — Fusion 360 is cloud-only and requires an Autodesk account, which conflicts with ForgeLab's no-login, self-contained design |
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene); translucent materials (base-color alpha < 1) export `alphaMode: "BLEND"` |
 | 3D / Game      | OBJ           |   ✅   |        | import `.obj` (+ companion `.mtl`); fan-triangulated, per-object meshes |
 | 3D / Game      | STL           |   ✅   |        | import ASCII or binary `.stl` (single mesh, default material) |
 | 3D / Game      | Blender script|        |   ✅   | export `tool='blender_script'` → runnable `.py` product render (native objects + modifier stack, daylight-sky world, CYCLES/EEVEE `PREVIEW` toggle, 85mm 3/4 camera, ground plane, auto-render to PNG) |
 | 3D / Game      | Blender       |   ✅   |   ✅   | via glTF interchange; native `.blend` 🚧     |
-| 3D / Game      | Unreal Engine |   🚧   |   🚧   | stub                                         |
+| 3D / Game      | Unreal Engine |        |   ✅   | via glTF interchange — Unreal natively imports glTF, so `export_document(tool='gltf')` then drag the `.gltf` into the Content Browser; no dedicated exporter needed |
 
-✅ implemented · 🚧 stub (base classes in place, awaiting implementation)
+✅ implemented · 🚧 stub (base classes in place, awaiting implementation) · ❌ not planned
 
 In the hardware domain, agents don't have to hand-guess XY coordinates: build
 the document with components and nets but rough (or no) positions, then call
@@ -146,6 +146,19 @@ violations** (verified in CI-skippable integration tests when kicad-cli is
 installed), with the remaining failures concentrated on residual congestion
 and the highest-fanout power nets.
 
+**Known limitations (hardware domain):**
+
+- **PCB layout only — no schematic.** ForgeLab never produces a `.kicad_sch`
+  schematic file. Nets and the ratsnest are embedded correctly in the
+  exported board, but there is no schematic to view in KiCad's schematic
+  editor.
+- **Every pad exports as SMD.** The `Pad` model has no through-hole/drill
+  field yet, so through-hole parts (pin headers, crystals, buttons) export
+  with SMD pads. After opening the export in KiCad, run **Tools → Update
+  Footprints from Library** to swap in the real drilled footprints — this
+  works because footprint names should always be real KiCad library IDs, and
+  KiCad rematches the true footprint to the design by pad number.
+
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
 brackets, mounts, plates, enclosures — built by extruding and cutting closed 2D
@@ -200,7 +213,7 @@ Blender, so they show the base meshes). Check `generation_status` first:
 
 ## MCP tools
 
-Thirty-five tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
+Thirty-six tools, same for every client. Over stdio all are local; over HTTP each needs its scope on the bearer token.
 
 ### Read
 
@@ -280,7 +293,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **691 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. Remaining tool integrations (Altium, Fusion 360, Unreal, and Gerber *import*) are scaffolded stubs. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **691 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. The one remaining tool integration is Gerber *import* (a scaffolded stub). Altium and Fusion 360 are **not planned** (closed proprietary format / cloud-only with mandatory account — see Tool support), and Unreal Engine needs no integration: it natively imports the glTF that ForgeLab already exports. APIs may change before 1.0.
 
 ## Roadmap
 
@@ -289,7 +302,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 - [x] OAuth 2.0 auth + MCP server (stdio + Streamable HTTP)
 - [x] Multi-tool workflows + zero-friction agent setup (installer, `forgelab init`, bootstrap prompts)
 - [ ] Publish to PyPI so `pip install forgelab` works without cloning
-- [ ] Hardware: Gerber import, Altium · Mechanical: Fusion 360 · 3D: Unreal, glTF textures/animations, `.glb`
+- [ ] Hardware: Gerber import · 3D: glTF textures/animations, `.glb` (Unreal Engine already works today via glTF export — no dedicated exporter needed; Altium and Fusion 360 are not planned, see Tool support)
 - [ ] Transform passes (design-rule checks, layer remaps) over the IR; HTTP `/import` endpoint
 
 **Planned domains** — new vocabularies and compile targets beyond the current hardware/mechanical/3D trio:
