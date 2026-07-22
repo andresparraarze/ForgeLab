@@ -7,6 +7,35 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Through-hole / drill support in the hardware domain.** `Pad` gains an
+  optional `drill` (`{diameter}` round, `{oval: [w, h]}` slot, `plated` true by
+  default); omitting it is SMD — the unchanged default, proven byte-identical by
+  a pinned SHA of the all-SMD blinky export, the same guard the glTF alphaMode
+  fix used. A drilled pad exports as a real through-hole pad in both formats: in
+  KiCad as `thru_hole`/`np_thru_hole` with `(drill ...)` / `(drill oval ...)`
+  and `(layers "*.Cu" "*.Mask")`, and in the Gerber/Excellon drill file as a
+  hole per through-hole pad (round holes flashed, oval drills as `G85` slots)
+  grouped by diameter alongside vias. **All grammar verified against real KiCad
+  10.0.3 footprint files** (a top-of-pad `(drill ...)` on `*.Cu`+`*.Mask`, not a
+  guess) and round-tripped through `kicad-cli`. The bundled library's genuinely
+  through-hole parts (all `PinHeader-*`, the ICSP header, the JST connector)
+  carry real drill diameters from their `.kicad_mod` files; `check_fabrication`
+  validates each drill against the fab's `min_drill_size`.
+  - **This resolves the +5V-plane connectivity gap the zone work exposed.**
+    Real before/after on the Arduino Uno (headers made through-hole): the +5V
+    `B.Cu` pour now connects straight to its through-hole pads, so
+    `kicad-cli pcb drc --refill-zones` goes from **10 `isolated_copper`
+    warnings to 0** with still zero errors — no "Update Footprints from Library"
+    step needed. The router now treats a through-hole pad as copper on both
+    layers (else a `B.Cu` track shorts against the pad's back-side copper — 18
+    real shorts caught by kicad-cli) and keeps tracks a board-edge clearance
+    inside the outline (else edge-clearance errors). Those two correctness fixes
+    drop the Uno auto-route from 25 to ~21 signal nets — an honest trade for a
+    DRC-error-clean, edge-clean board. Remaining warnings are cosmetic
+    (silk-over-copper where a reference designator crosses a larger pad, a
+    same-net hole-to-hole where a redundant via lands on a through-hole pad);
+    the SMD crystal and reset button in the example keep their real SMD
+    footprints and are untouched.
 - **Copper zones / pours in the hardware domain.** A new `zone` node type
   (net, layer, boundary polygon, clearance, min_thickness) expresses filled
   copper planes — the way every real 2-layer board carries power and ground,

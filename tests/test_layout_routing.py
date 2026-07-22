@@ -450,13 +450,16 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
     """The real-board benchmark: auto_place + route_board on the Arduino Uno.
 
     Empirical result at the default 0.15mm grid with honest copper obstacles
-    (pads at their real rendered size, vias with their real diameter): 25 of
-    32 multi-pad nets route in ~4s, and KiCad's own DRC reports zero copper
-    violations on the export (see test_drc_kicad_cli.py). The remaining
-    failures are residual congestion plus GND/+5V, the two highest-fanout
-    nets routed last. The assertion carries a small margin so incidental
-    placement changes don't flap the test, but a real regression (the old
-    0.2mm grid manages only 17 against honest obstacles) still trips it.
+    (pads at their real rendered size, vias with their real diameter): ~21 of
+    32 multi-pad signal nets route in a few seconds, with GND and +5V poured as
+    planes (see test_route_board_auto_pours_ground_and_power_planes), and
+    KiCad's own DRC reports zero error-level copper violations on the export
+    (see test_copper_zones / test_via_clearance). The count dropped from an
+    earlier 25 once the router began (a) treating the pin headers' through-hole
+    pads as copper on both layers and (b) keeping tracks off the board edge —
+    both correctness fixes that legitimately cost a few edge-header nets. The
+    assertion carries margin so incidental placement changes don't flap it, but
+    a real regression (the old 0.2mm grid manages only 17) still trips it.
     """
     monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
     src = _EXAMPLES / "hardware/arduino_uno.forge.json"
@@ -464,9 +467,9 @@ def test_route_board_arduino_uno_places_then_routes_most_nets(tmp_path, monkeypa
     assert placed["placed"] is True
     result = tools.route_board("placed.forge.json", "routed.forge.json")
     assert result["routed"] is True
-    total = result["nets_routed"] + len(result["nets_failed"])
+    total = result["nets_routed"] + len(result["nets_failed"]) + len(result["nets_poured"])
     assert total >= 30  # the Uno has 32 nets with 2+ positioned pads
-    assert result["nets_routed"] >= 23, result["nets_failed"]
+    assert result["nets_routed"] >= 18, result["nets_failed"]
     assert result["total_track_length_mm"] > 100.0
     assert result["vias_used"] > 0
 

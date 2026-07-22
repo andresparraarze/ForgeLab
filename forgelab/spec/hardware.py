@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 NODE_COMPONENT = "component"
 NODE_NET = "net"
@@ -101,6 +101,46 @@ def pad_grid_offset(index: int, total: int) -> tuple[float, float]:
     return x, y
 
 
+class Drill(BaseModel):
+    """A drilled hole under a pad — its presence makes the pad through-hole.
+
+    A pad *without* a ``drill`` is SMD (copper on the component's own layer
+    only) — the default and historical behaviour, unchanged. A pad *with* a
+    ``drill`` is a through-hole pad: plated by default (``plated=False`` for a
+    bare mechanical hole), spanning every copper layer so a copper pour or a
+    track on either side connects to it. Exactly one of ``diameter`` (a round
+    hole) or ``oval`` (a ``[width, height]`` slot) must be given.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    diameter: float | None = Field(default=None, description="Round hole diameter in millimetres.")
+    plated: bool = Field(
+        default=True,
+        description="A plated barrel (default) or, when false, a bare non-plated hole.",
+    )
+    oval: list[float] | None = Field(
+        default=None,
+        description=(
+            "[width, height] of a slotted (oval) hole in millimetres; mutually "
+            "exclusive with a round diameter."
+        ),
+    )
+
+    @field_validator("oval")
+    @classmethod
+    def _oval_is_xy(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and len(value) != 2:
+            raise ValueError("drill oval must be [width, height]")
+        return value
+
+    @model_validator(mode="after")
+    def _exactly_one_shape(self) -> Drill:
+        if (self.diameter is None) == (self.oval is None):
+            raise ValueError("drill needs exactly one of diameter (round) or oval (slot)")
+        return self
+
+
 class Pad(BaseModel):
     """A single pad on a component: its net, and its physical placement.
 
@@ -134,6 +174,14 @@ class Pad(BaseModel):
     shape: str | None = Field(
         default=None,
         description="Optional pad shape, e.g. 'roundrect', 'rect', 'circle', 'oval'.",
+    )
+    drill: Drill | None = Field(
+        default=None,
+        description=(
+            "Optional drilled hole. Omit it (the default) for an SMD pad — the "
+            "unchanged historical behaviour; set it to make the pad a through-hole "
+            "pad spanning every copper layer."
+        ),
     )
 
     @field_validator("at", "size")

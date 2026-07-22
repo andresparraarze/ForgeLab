@@ -30,6 +30,7 @@ from forgelab.spec import (
     DesignRules,
     ForgeDocument,
     Net,
+    Pad,
     Track,
     Via,
     Zone,
@@ -260,19 +261,56 @@ class KiCadExporter(Exporter):
                 y = -y + 0.0
             width, height = (pad.size[0], pad.size[1]) if pad.size else (default, default)
             shape = pad.shape if pad.shape else "roundrect"
-            fp.append(
-                _s(
-                    "pad",
-                    pad.number,
-                    Symbol("smd"),
-                    Symbol(shape),
-                    _s("at", _num(x), _num(y)),
-                    _s("size", _num(width), _num(height)),
-                    _s("layers", "F.Cu"),
-                    _s("net", code, pad.net),
+            if pad.drill is None:
+                # SMD: copper on the component's layer only. Output unchanged.
+                fp.append(
+                    _s(
+                        "pad",
+                        pad.number,
+                        Symbol("smd"),
+                        Symbol(shape),
+                        _s("at", _num(x), _num(y)),
+                        _s("size", _num(width), _num(height)),
+                        _s("layers", "F.Cu"),
+                        _s("net", code, pad.net),
+                    )
                 )
-            )
+            else:
+                fp.append(self._through_hole_pad(pad, code, x, y, width, height, shape))
         return fp
+
+    def _through_hole_pad(
+        self, pad: Pad, code: int, x: float, y: float, width: float, height: float, shape: str
+    ) -> list:
+        """A drilled pad: ``thru_hole``/``np_thru_hole`` spanning ``*.Cu`` + ``*.Mask``.
+
+        Grammar verified against real KiCad 10 footprints: a plated hole is
+        ``thru_hole``, a bare mechanical one ``np_thru_hole``; a round hole is
+        ``(drill d)`` and a slot ``(drill oval w h)``; and the copper spans every
+        layer via ``(layers "*.Cu" "*.Mask")`` — which is exactly what lets a
+        copper pour or a back-side track connect to the pad.
+        """
+        assert pad.drill is not None
+        drill = pad.drill
+        pad_type = "thru_hole" if drill.plated else "np_thru_hole"
+        if drill.oval is not None:
+            drill_token = _s("drill", Symbol("oval"), _num(drill.oval[0]), _num(drill.oval[1]))
+        else:
+            # The model validator guarantees exactly one of oval/diameter is set.
+            assert drill.diameter is not None
+            drill_token = _s("drill", _num(drill.diameter))
+        return _s(
+            "pad",
+            pad.number,
+            Symbol(pad_type),
+            Symbol(shape),
+            _s("at", _num(x), _num(y)),
+            _s("size", _num(width), _num(height)),
+            drill_token,
+            _s("layers", "*.Cu", "*.Mask"),
+            _s("remove_unused_layers", Symbol("no")),
+            _s("net", code, pad.net),
+        )
 
     def _zone(
         self, zone: Zone, name_to_code: dict[str, int], rules: DesignRules, axis: float

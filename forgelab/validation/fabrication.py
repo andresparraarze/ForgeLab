@@ -682,6 +682,42 @@ def _check_zone_clearance(
                     )
 
 
+def _check_through_hole_drills(
+    document: ForgeDocument, fab: str, profile: dict[str, float], errors: list[str]
+) -> None:
+    """Validate every through-hole pad's drill against the fab's minimum hole size.
+
+    A pad with a ``drill`` is a real drilled hole the fab must be able to make;
+    a round hole is measured by its diameter and a slot by its narrow dimension.
+    Pads without a ``drill`` are SMD and carry no hole to check.
+    """
+    min_drill = profile.get("min_drill_size")
+    if min_drill is None:
+        return
+    for node in document.walk():
+        if node.type != NODE_COMPONENT:
+            continue
+        ref = str(node.props.get("reference") or node.id)
+        for pad in node.props.get("pads") or []:
+            if not isinstance(pad, dict):
+                continue
+            drill = pad.get("drill")
+            if not isinstance(drill, dict):
+                continue
+            oval = drill.get("oval")
+            if isinstance(oval, list) and len(oval) == 2:
+                size = min(float(oval[0]), float(oval[1]))
+            elif drill.get("diameter") is not None:
+                size = float(drill["diameter"])
+            else:
+                continue
+            if _below(size, min_drill):
+                errors.append(
+                    f"through-hole pad {pad.get('number', '?')} of {ref} has drill {size}mm, "
+                    f"below {fab} minimum drill size {min_drill}mm"
+                )
+
+
 def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str, Any]:
     """Validate a hardware document's design rules against a fab profile.
 
@@ -740,6 +776,7 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
     _check_copper_collisions(document, fab, profile, errors)
     default_clearance = float(rules.get("clearance", 0.2)) if isinstance(rules, dict) else 0.2
     _check_zone_clearance(document, fab, profile, errors, default_clearance)
+    _check_through_hole_drills(document, fab, profile, errors)
 
     # Board-size envelope — only when the profile defines limits and there is an
     # outline to measure.

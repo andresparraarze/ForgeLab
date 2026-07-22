@@ -122,8 +122,9 @@ The pipeline ends fab-ready: `export_document(tool='gerber',
 output_path='board_gerbers.zip')` writes a zip a fab house can accept —
 front/back copper (routed tracks, via annulars, flashed pad apertures),
 soldermask openings, silkscreen reference designators, board outline, and an
-Excellon drill file with one hole per via — validated against a real Gerber
-parser (gerbonara reads back every layer and recognizes the full stack). Run
+Excellon drill file with a hole per via and per through-hole pad (round holes
+flashed, oval drills as routed slots) — validated against a real Gerber parser
+(gerbonara reads back every layer and recognizes the full stack). Run
 `check_gerber_completeness` first: it re-checks the fab rules on the routed
 geometry and warns if the board has no tracks yet. The full workflow:
 **build → `auto_place` → `route_board` → `check_fabrication` →
@@ -153,14 +154,17 @@ deliberate exception: a genuinely **pour-shaped** power or ground net (many
 pads fanned across the board, the signature of a plane, not a signal that
 merely lost to congestion) is turned into a **filled copper plane** instead,
 the way every real 2-layer board carries power and ground. On the packed
-Arduino Uno example, 25 of 32 multi-pad nets route at the default 0.15mm grid,
-and the two highest-fanout nets that don't — **GND and +5V** — are now
-auto-poured as planes (GND on `F.Cu`, +5V on `B.Cu`) and reported in
-`nets_poured` rather than landing in `nets_failed`; the handful of remaining
-failures are residual signal congestion. `kicad-cli pcb drc` with the zones
-refilled reports **zero error-level copper violations** on the export (no
-shorts, clearance, or starved-thermal errors — verified in CI-skippable
-integration tests when kicad-cli is installed).
+Arduino Uno example, ~21 of 32 multi-pad signal nets route at the default
+0.15mm grid, and the two highest-fanout nets — **GND and +5V** — are
+auto-poured as planes (GND on `F.Cu`, +5V on `B.Cu`, connecting straight to the
+headers' through-hole pads) and reported in `nets_poured` rather than landing
+in `nets_failed`. The router keeps tracks a board-edge clearance inside the
+outline and treats a through-hole pad as copper on **both** layers, so the
+export is DRC-error-clean — at the honest cost of a few edge-header nets that
+need manual routing. `kicad-cli pcb drc` with the zones refilled reports **zero
+error-level copper violations** (no shorts, clearance, board-edge, or
+starved-thermal errors — verified in CI-skippable integration tests when
+kicad-cli is installed).
 
 **Known limitations (hardware domain):**
 
@@ -168,19 +172,18 @@ integration tests when kicad-cli is installed).
   schematic file. Nets and the ratsnest are embedded correctly in the
   exported board, but there is no schematic to view in KiCad's schematic
   editor.
-- **Every pad exports as SMD.** The `Pad` model has no through-hole/drill
-  field yet, so through-hole parts (pin headers, crystals, buttons) export
-  with SMD pads. After opening the export in KiCad, run **Tools → Update
-  Footprints from Library** to swap in the real drilled footprints — this
-  works because footprint names should always be real KiCad library IDs, and
-  KiCad rematches the true footprint to the design by pad number.
-- **A second power/ground plane pours on `B.Cu`.** SMD pads live on `F.Cu`, so
-  the largest auto-poured plane (usually GND) goes on `F.Cu` and connects its
-  pads immediately, but a second plane (e.g. +5V) is placed on `B.Cu` and
-  connects to its pads only after the through-hole step above — until the pads
-  span both layers, KiCad shows the `B.Cu` pour as *isolated copper* (a
-  warning, not a copper error). This is the same SMD-pad limitation, seen from
-  the plane side.
+- **A pad is SMD unless you give it a `drill`.** The `Pad` model has an
+  optional `drill` (`{diameter}` for a round hole or `{oval: [w, h]}` for a
+  slot, `plated` true by default) — set it and the pad exports as a real
+  through-hole pad (`thru_hole`, copper on every layer, drilled in both the
+  KiCad and Gerber/Excellon output); omit it and the pad is SMD exactly as
+  before. The bundled library's genuinely through-hole parts (pin headers, the
+  ICSP header, the JST connector) carry real drill diameters taken from their
+  KiCad footprints, so a board built from the library needs no manual fix-up.
+  Parts you author yourself default to SMD until you add a `drill` — and a
+  through-hole pad only helps if its footprint is genuinely through-hole (the
+  bundled Arduino Uno keeps its SMD crystal and reset button on their real SMD
+  footprints).
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
