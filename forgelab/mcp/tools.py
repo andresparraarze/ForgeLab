@@ -1217,7 +1217,15 @@ def route_board(
     components still overlap. This is a basic router for simple-to-moderate
     boards: nets the maze search cannot connect are returned in
     ``nets_failed`` for manual routing rather than failing the whole
-    operation. Re-routing replaces any existing track/via nodes.
+    operation. Re-routing replaces any existing track/via/zone nodes.
+
+    High-fanout power and ground nets that the maze router cannot trace are
+    turned into filled copper planes (``zone`` nodes) instead of being reported
+    as failures — exactly how real 2-layer boards carry power/ground. Only
+    genuinely pour-shaped nets qualify (many pads spread across most of the
+    board); such nets move from ``nets_failed`` into ``nets_poured``. The
+    largest plane goes on ``F.Cu`` and connects immediately; a second goes on
+    ``B.Cu`` and connects once the pads are made through-hole in KiCad.
 
     Args:
         document_path: path to the placed hardware ``.forge.json`` (a bare
@@ -1229,9 +1237,10 @@ def route_board(
 
     Returns:
         ``{"routed": true, "document_path", "nets_routed", "nets_failed":
-        [net names], "total_track_length_mm", "vias_used"}``. When the board
-        cannot be routed at all (e.g. no outline) nothing is written and the
-        result is ``{"routed": false, "error": ...}``.
+        [net names], "nets_poured": [net names given a copper plane],
+        "total_track_length_mm", "vias_used"}``. When the board cannot be
+        routed at all (e.g. no outline) nothing is written and the result is
+        ``{"routed": false, "error": ...}``.
     """
     require_scope("forge:generate")
     data = _read_document_file(document_path)
@@ -1244,7 +1253,7 @@ def route_board(
     except RoutingError as exc:
         return {"routed": False, "error": str(exc)}
 
-    nodes = [n for n in (data.get("nodes") or []) if n.get("type") not in ("track", "via")]
+    nodes = [n for n in (data.get("nodes") or []) if n.get("type") not in ("track", "via", "zone")]
     nodes.extend(
         {"id": f"track_{i + 1}", "type": "track", "props": props}
         for i, props in enumerate(result["tracks"])
@@ -1252,6 +1261,10 @@ def route_board(
     nodes.extend(
         {"id": f"via_{i + 1}", "type": "via", "props": props}
         for i, props in enumerate(result["vias"])
+    )
+    nodes.extend(
+        {"id": f"zone_{i + 1}", "type": "zone", "props": props}
+        for i, props in enumerate(result["zones"])
     )
     data["nodes"] = nodes
 
@@ -1268,6 +1281,7 @@ def route_board(
             "document_path": str(target),
             "nets_routed": len(result["nets_routed"]),
             "nets_failed": result["nets_failed"],
+            "nets_poured": result["nets_poured"],
             "total_track_length_mm": result["total_track_length_mm"],
         },
     )
@@ -1276,6 +1290,7 @@ def route_board(
         "document_path": str(target),
         "nets_routed": len(result["nets_routed"]),
         "nets_failed": result["nets_failed"],
+        "nets_poured": result["nets_poured"],
         "total_track_length_mm": result["total_track_length_mm"],
         "vias_used": result["vias_used"],
     }

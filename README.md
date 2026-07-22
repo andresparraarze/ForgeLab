@@ -77,7 +77,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 
 | Domain         | Tool          | Import | Export | Notes                                        |
 | -------------- | ------------- | :----: | :----: | -------------------------------------------- |
-| Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export |
+| Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export, copper-pour zones (KiCad fills them) |
 | Hardware       | Altium        |   ❌   |   ❌   | **not planned** — Altium's native format is closed/proprietary with no public spec; supporting it would mean depending on a paid SDK, which ForgeLab won't do |
 | Hardware       | Gerber        |   🚧   |   ✅   | export RS-274X layer set + Excellon drill, zipped (F/B copper, mask, silk, outline) |
 | Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
@@ -132,7 +132,9 @@ geometry and warns if the board has no tracks yet. The full workflow:
 After placement, **`route_board`** turns the netlist into real copper: a
 2-layer grid-based maze router (Lee's algorithm) connects every net with
 `track` and `via` nodes that the KiCad exporter emits as actual
-`(segment ...)`/`(via ...)` S-expressions. Copper is modelled **physically**:
+`(segment ...)`/`(via ...)` S-expressions, and turns high-fanout power/ground
+nets it can't trace into filled copper planes (`zone` nodes → real
+`(zone ...)` pours that KiCad fills). Copper is modelled **physically**:
 pads obstruct the copper the exporters actually render (their explicit size,
 or a shared pitch-aware default for size-less pads), and vias are placed only
 where their real `via_diameter` barrel keeps clearance to every other net's
@@ -146,12 +148,19 @@ hardware workflow is: build (or generate) the document → `auto_place` →
 expectations correctly: this is a basic router for simple-to-moderate boards
 (the Arduino Uno / ESP32 dev-board range), not a replacement for a commercial
 autorouter on dense designs. Nets the maze search cannot connect come back in
-`nets_failed` for manual routing instead of failing the run — on the packed
-Arduino Uno example, 25 of 32 multi-pad nets route at the default 0.15mm
-grid, and `kicad-cli pcb drc` on the export reports **zero copper
-violations** (verified in CI-skippable integration tests when kicad-cli is
-installed), with the remaining failures concentrated on residual congestion
-and the highest-fanout power nets.
+`nets_failed` for manual routing instead of failing the run — with one
+deliberate exception: a genuinely **pour-shaped** power or ground net (many
+pads fanned across the board, the signature of a plane, not a signal that
+merely lost to congestion) is turned into a **filled copper plane** instead,
+the way every real 2-layer board carries power and ground. On the packed
+Arduino Uno example, 25 of 32 multi-pad nets route at the default 0.15mm grid,
+and the two highest-fanout nets that don't — **GND and +5V** — are now
+auto-poured as planes (GND on `F.Cu`, +5V on `B.Cu`) and reported in
+`nets_poured` rather than landing in `nets_failed`; the handful of remaining
+failures are residual signal congestion. `kicad-cli pcb drc` with the zones
+refilled reports **zero error-level copper violations** on the export (no
+shorts, clearance, or starved-thermal errors — verified in CI-skippable
+integration tests when kicad-cli is installed).
 
 **Known limitations (hardware domain):**
 
@@ -165,6 +174,13 @@ and the highest-fanout power nets.
   Footprints from Library** to swap in the real drilled footprints — this
   works because footprint names should always be real KiCad library IDs, and
   KiCad rematches the true footprint to the design by pad number.
+- **A second power/ground plane pours on `B.Cu`.** SMD pads live on `F.Cu`, so
+  the largest auto-poured plane (usually GND) goes on `F.Cu` and connects its
+  pads immediately, but a second plane (e.g. +5V) is placed on `B.Cu` and
+  connects to its pads only after the through-hole step above — until the pads
+  span both layers, KiCad shows the `B.Cu` pour as *isolated copper* (a
+  warning, not a copper error). This is the same SMD-pad limitation, seen from
+  the plane side.
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
@@ -286,7 +302,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 | --- | --- |
 | `generate_document` | Natural language → validated ForgeDocument |
 | `auto_place` | Pack a hardware document's components inside the board outline (no overlaps, locked components respected) |
-| `route_board` | Autoroute a placed board: 2-layer maze routing with physical pad/via clearance into real KiCad track/via copper (unroutable nets reported, not fatal) |
+| `route_board` | Autoroute a placed board: 2-layer maze routing with physical pad/via clearance into real KiCad track/via copper; high-fanout power/ground nets that can't be traced become filled copper planes (`zone` pours). Unroutable signal nets reported, not fatal |
 | `analyze_image` | Photo → ForgeLab document skeleton (vision) |
 | `critique_render` | Vision critique of a rendered preview vs the design intent — structured issues + suggested changes |
 

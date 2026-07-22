@@ -499,3 +499,74 @@ def test_routing_connects_pads_of_a_rotated_component():
     endpoints |= {tuple(t["end"]) for t in result["tracks"]}
     assert any(math.dist(p, (10.0, 12.0)) < 0.3 for p in endpoints), sorted(endpoints)
     assert not any(math.dist(p, (12.0, 10.0)) < 0.3 for p in endpoints)
+
+
+# --------------------------------------------------------- auto-pour of planes
+
+
+def test_congestion_failed_signal_net_is_not_auto_poured():
+    # The blocked SIG net (2 pads, boxed in) fails to route — but it is a signal
+    # net, not a plane, so it must stay in nets_failed and never be poured.
+    ring = []
+    n = 0
+    for i in range(-2, 3):
+        for j in range(-2, 3):
+            if max(abs(i), abs(j)) == 2:
+                n += 1
+                ring.append(_pin(str(n), "", [i * 1.0, j * 1.0], size=[1.0, 1.0]))
+    doc = _doc(
+        [
+            _component("R1", [5.0, 10.0], [_pin("1", "SIG", [0.0, 0.0])]),
+            _component("R2", [20.0, 10.0], [_pin("1", "SIG", [0.0, 0.0])]),
+            _component("RING", [20.0, 10.0], ring),
+        ],
+        nets=["SIG"],
+    )
+    result = route_document(doc, layers=1)
+    assert result["nets_failed"] == ["SIG"]
+    assert result["nets_poured"] == []
+    assert result["zones"] == []
+
+
+def test_route_board_auto_pours_ground_and_power_planes(tmp_path, monkeypatch):
+    """The Arduino Uno regression: GND and +5V could not be traced and used to
+    land in nets_failed. They are genuinely pour-shaped (21 and 12 pads fanned
+    across the board), so they must now become filled copper planes instead —
+    GND on F.Cu (where the SMD pads live, so it connects immediately) and +5V on
+    B.Cu — and leave nets_failed.
+    """
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    src = _EXAMPLES / "hardware/arduino_uno.forge.json"
+    tools.auto_place(str(src), "placed.forge.json")
+    result = tools.route_board("placed.forge.json", "routed.forge.json")
+    assert result["routed"] is True
+
+    assert set(result["nets_poured"]) == {"GND", "+5V"}
+    assert "GND" not in result["nets_failed"]
+    assert "+5V" not in result["nets_failed"]
+
+    routed = json.loads((tmp_path / "routed.forge.json").read_text())
+    zones = [n for n in routed["nodes"] if n["type"] == "zone"]
+    assert len(zones) == 2
+    by_net = {z["props"]["net"]: z["props"] for z in zones}
+    # Largest fanout (GND) takes F.Cu; the next (+5V) takes B.Cu.
+    assert by_net["GND"]["layer"] == "F.Cu"
+    assert by_net["+5V"]["layer"] == "B.Cu"
+    for props in by_net.values():
+        assert len(props["polygon"]) >= 3  # a real boundary
+        assert props["clearance"] == 0.2  # design_rules.clearance
+        # The poured document still validates and exports.
+    doc = ForgeDocument.model_validate(routed)
+    text = KiCadExporter().from_ir(doc).decode("utf-8")
+    assert text.count("(zone ") == 2
+
+
+def test_reroute_replaces_prior_zone_nodes(tmp_path, monkeypatch):
+    # Re-routing must not accumulate stale zone nodes from a previous run.
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    src = _EXAMPLES / "hardware/arduino_uno.forge.json"
+    tools.auto_place(str(src), "placed.forge.json")
+    tools.route_board("placed.forge.json", "routed.forge.json")
+    tools.route_board("routed.forge.json", "routed.forge.json")
+    routed = json.loads((tmp_path / "routed.forge.json").read_text())
+    assert len([n for n in routed["nodes"] if n["type"] == "zone"]) == 2
