@@ -24,6 +24,7 @@ from forgelab.spec import (
     NODE_NET,
     NODE_TRACK,
     NODE_VIA,
+    NODE_ZONE,
     BoardConstraints,
     Component,
     DesignRules,
@@ -31,6 +32,7 @@ from forgelab.spec import (
     Net,
     Track,
     Via,
+    Zone,
     pad_default_size,
     pad_grid_offset,
 )
@@ -41,6 +43,14 @@ _DEFAULT_LAYERS = [
     [31, Symbol("B.Cu"), Symbol("signal")],
     [44, Symbol("Edge.Cuts"), Symbol("user")],
 ]
+
+# KiCad zone display/fill defaults (verified against KiCad 10 template zones):
+# the hatch pitch and thermal-relief geometry a fresh copper pour is created
+# with. They affect only how the pour connects thermally and is drawn, not
+# where copper may go — that is min_thickness plus the clearance below.
+_ZONE_HATCH_PITCH = 0.5
+_ZONE_THERMAL_GAP = 0.5
+_ZONE_THERMAL_BRIDGE = 0.5
 
 
 def _num(value: float) -> int | float:
@@ -144,6 +154,9 @@ class KiCadExporter(Exporter):
                         _s("net", name_to_code.get(via.net, 0)),
                     )
                 )
+            elif node.type == NODE_ZONE:
+                zone = Zone.model_validate(node.props)
+                tree.append(self._zone(zone, name_to_code, board.design_rules, axis))
         for seg in board.outline:
             tree.append(
                 _s(
@@ -260,3 +273,42 @@ class KiCadExporter(Exporter):
                 )
             )
         return fp
+
+    def _zone(
+        self, zone: Zone, name_to_code: dict[str, int], rules: DesignRules, axis: float
+    ) -> list:
+        """A copper pour: the boundary polygon only — KiCad computes the fill.
+
+        The grammar (net/net_name/layer/hatch/connect_pads/min_thickness/fill/
+        polygon) is verified against real KiCad 10 output; ``(fill yes ...)``
+        makes it a fillable solid pour rather than a keepout. Every polygon Y is
+        mirrored into KiCad's Y-down frame like every other absolute coordinate.
+        ``clearance`` maps to the zone's connect_pads clearance (KiCad's own
+        per-zone clearance field); when unset it inherits design_rules.clearance,
+        which the net class already enforces for foreign-net isolation.
+        """
+        clearance = zone.clearance if zone.clearance is not None else rules.clearance
+        pts = _s(
+            "pts",
+            *(_s("xy", _num(p[0]), _num(_flip_y(p[1], axis))) for p in zone.polygon),
+        )
+        # ``connect_pads yes`` = a solid connection to same-net pads. A power or
+        # ground plane wants solid copper, not thermal-relief spokes: thermal
+        # spokes on a plane produce KiCad "starved thermal" DRC errors where a
+        # pad is boxed in, and solid connection is electrically better anyway.
+        return _s(
+            "zone",
+            _s("net", name_to_code.get(zone.net, 0)),
+            _s("net_name", zone.net),
+            _s("layer", zone.layer),
+            _s("hatch", Symbol("edge"), _num(_ZONE_HATCH_PITCH)),
+            _s("connect_pads", Symbol("yes"), _s("clearance", _num(clearance))),
+            _s("min_thickness", _num(zone.min_thickness)),
+            _s(
+                "fill",
+                Symbol("yes"),
+                _s("thermal_gap", _num(_ZONE_THERMAL_GAP)),
+                _s("thermal_bridge_width", _num(_ZONE_THERMAL_BRIDGE)),
+            ),
+            _s("polygon", pts),
+        )

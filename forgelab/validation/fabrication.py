@@ -18,10 +18,12 @@ from typing import Any, NamedTuple
 from forgelab.layout import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.hardware import (
+    DEFAULT_ZONE_MIN_THICKNESS,
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_TRACK,
     NODE_VIA,
+    NODE_ZONE,
     pad_default_size,
     pad_grid_offset,
 )
@@ -470,6 +472,216 @@ def _check_copper_collisions(
                 )
 
 
+Point = tuple[float, float]
+
+
+def _point_in_polygon(px: float, py: float, poly: list[Point]) -> bool:
+    """Ray-casting point-in-polygon test (points on the edge count as inside)."""
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+        if (y1 > py) != (y2 > py):
+            x_cross = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
+            if px < x_cross:
+                inside = not inside
+    return inside
+
+
+def _point_polygon_boundary_gap(px: float, py: float, poly: list[Point]) -> float:
+    """Distance from a point to the nearest polygon boundary edge."""
+    n = len(poly)
+    return min(_segment_distance((px, py), (px, py), poly[i], poly[(i + 1) % n]) for i in range(n))
+
+
+def _polygons_overlap(a: list[Point], b: list[Point]) -> bool:
+    """True if two polygons share interior area (edges cross or one contains the other)."""
+    na, nb = len(a), len(b)
+    for i in range(na):
+        for j in range(nb):
+            if (
+                _segment_distance(a[i], a[(i + 1) % na], b[j], b[(j + 1) % nb]) == 0.0
+            ):  # edges touch or cross
+                return True
+    # No edge intersection: one polygon is wholly inside the other (or disjoint).
+    return _point_in_polygon(a[0][0], a[0][1], b) or _point_in_polygon(b[0][0], b[0][1], a)
+
+
+class _ZoneCopper(NamedTuple):
+    net: str
+    layer: str
+    clearance: float
+    min_thickness: float
+    poly: list[Point]
+
+
+def _collect_zones(document: ForgeDocument, default_clearance: float) -> list[_ZoneCopper]:
+    """Every zone's boundary and resolved parameters, skipping malformed ones."""
+    out: list[_ZoneCopper] = []
+    for node in document.walk():
+        if node.type != NODE_ZONE:
+            continue
+        raw = node.props.get("polygon")
+        if not isinstance(raw, list) or len(raw) < 3:
+            continue
+        poly = [(float(p[0]), float(p[1])) for p in raw if isinstance(p, list) and len(p) == 2]
+        if len(poly) < 3:
+            continue
+        clr = node.props.get("clearance")
+        out.append(
+            _ZoneCopper(
+                net=str(node.props.get("net", "")),
+                layer=str(node.props.get("layer", "F.Cu")),
+                clearance=float(clr) if clr is not None else default_clearance,
+                min_thickness=float(node.props.get("min_thickness", DEFAULT_ZONE_MIN_THICKNESS)),
+                poly=poly,
+            )
+        )
+    return out
+
+
+def _check_zone_clearance(
+    document: ForgeDocument,
+    fab: str,
+    profile: dict[str, float],
+    errors: list[str],
+    default_clearance: float,
+) -> None:
+    """Validate copper pours conservatively against the fab's spacing rules.
+
+    ForgeLab emits *unfilled* zone boundaries and lets KiCad compute the actual
+    poured copper, so these checks work on the boundary polygon and the pour's
+    declared parameters, not on the KiCad-computed fill (which the kicad-cli DRC
+    test verifies). The model is deliberately conservative — it may warn about a
+    boundary segment the fill never reaches, but it never silently misses a real
+    short:
+
+    * ``clearance`` below the fab's minimum spacing — the pour would be
+      fabricated too close to the copper it surrounds;
+    * ``min_thickness`` below the fab's minimum trace width — unmanufacturable
+      copper slivers;
+    * two same-layer, different-net pours whose boundaries overlap;
+    * a foreign-net track/pad/via that lies **outside** a pour but within the
+      fab's minimum spacing of its boundary (copper *inside* the boundary is not
+      flagged — KiCad pours around it using the zone clearance checked above).
+    """
+    min_spacing = profile.get("min_trace_spacing")
+    min_width = profile.get("min_trace_width")
+    zones = _collect_zones(document, default_clearance)
+    if not zones:
+        return
+
+    for zone in zones:
+        if min_spacing is not None and _below(zone.clearance, min_spacing):
+            errors.append(
+                f"zone on net {zone.net or '?'} ({zone.layer}) has clearance "
+                f"{zone.clearance}mm, below {fab} minimum clearance {min_spacing}mm"
+            )
+        if min_width is not None and _below(zone.min_thickness, min_width):
+            errors.append(
+                f"zone on net {zone.net or '?'} ({zone.layer}) has min_thickness "
+                f"{zone.min_thickness}mm, below {fab} minimum trace width {min_width}mm"
+            )
+
+    # Two full pours of different nets on the same layer will fight for copper.
+    for i, a in enumerate(zones):
+        for b in zones[i + 1 :]:
+            if a.layer == b.layer and a.net != b.net and _polygons_overlap(a.poly, b.poly):
+                errors.append(
+                    f"zones on nets {a.net or '?'} and {b.net or '?'} overlap on {a.layer} — "
+                    "two different-net copper pours cannot share the same area"
+                )
+
+    if min_spacing is None:
+        return
+
+    # Foreign copper just outside a pour boundary: the fill reaches the boundary
+    # and would be manufactured within clearance of it. Copper inside the
+    # boundary is intentionally poured around, so it is not flagged here.
+    pads = _collect_pad_copper(document)
+    reported: set[tuple[str, str, str]] = set()
+
+    def report_edge(net_a: str, net_b: str, what: str) -> None:
+        key = tuple(sorted((net_a or "?", net_b or "unconnected")))
+        full = ("edge", key[0], key[1])
+        if full in reported:
+            return
+        reported.add(full)
+        errors.append(
+            f"{what} runs within {fab} minimum clearance {min_spacing}mm of the pour boundary; "
+            "move it away from the pour or shrink the pour"
+        )
+
+    for zone in zones:
+        for pad in pads:
+            if pad.layer != zone.layer or (pad.net and pad.net == zone.net):
+                continue
+            if _point_in_polygon(pad.cx, pad.cy, zone.poly):
+                continue  # enclosed — the pour clears it during fill
+            gap = (
+                _point_polygon_boundary_gap(pad.cx, pad.cy, zone.poly)
+                - max(pad.width, pad.height) / 2
+            )
+            if _below(gap, min_spacing):
+                report_edge(
+                    zone.net,
+                    pad.net,
+                    f"pad {pad.number} of {pad.ref} (net {pad.net or 'unconnected'}) on "
+                    f"{zone.layer}, outside the {zone.net or '?'} pour,",
+                )
+        for node in document.walk():
+            if node.type == NODE_TRACK:
+                if str(node.props.get("layer", "F.Cu")) != zone.layer:
+                    continue
+                net = str(node.props.get("net", ""))
+                if net and net == zone.net:
+                    continue
+                start, end = node.props.get("start"), node.props.get("end")
+                if not (isinstance(start, list) and isinstance(end, list)):
+                    continue
+                s = (float(start[0]), float(start[1]))
+                e = (float(end[0]), float(end[1]))
+                if _point_in_polygon(*s, zone.poly) or _point_in_polygon(*e, zone.poly):
+                    continue  # enters the pour — handled by the pour's own clearance
+                n = len(zone.poly)
+                gap = (
+                    min(
+                        _segment_distance(s, e, zone.poly[i], zone.poly[(i + 1) % n])
+                        for i in range(n)
+                    )
+                    - float(node.props.get("width", 0.0)) / 2
+                )
+                if _below(gap, min_spacing):
+                    report_edge(
+                        zone.net,
+                        net,
+                        f"track on net {net or '?'} on {zone.layer}, outside the "
+                        f"{zone.net or '?'} pour,",
+                    )
+            elif node.type == NODE_VIA:
+                net = str(node.props.get("net", ""))
+                if net and net == zone.net:
+                    continue
+                at = node.props.get("at")
+                if not (isinstance(at, list) and len(at) == 2):
+                    continue
+                vx, vy = float(at[0]), float(at[1])
+                if _point_in_polygon(vx, vy, zone.poly):
+                    continue
+                gap = (
+                    _point_polygon_boundary_gap(vx, vy, zone.poly)
+                    - float(node.props.get("size", 0.0)) / 2
+                )
+                if _below(gap, min_spacing):
+                    report_edge(
+                        zone.net,
+                        net,
+                        f"via on net {net or '?'} at ({vx:g}, {vy:g}), outside the "
+                        f"{zone.net or '?'} pour,",
+                    )
+
+
 def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str, Any]:
     """Validate a hardware document's design rules against a fab profile.
 
@@ -526,6 +738,8 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
 
     _check_routed_copper(document, fab, profile, errors)
     _check_copper_collisions(document, fab, profile, errors)
+    default_clearance = float(rules.get("clearance", 0.2)) if isinstance(rules, dict) else 0.2
+    _check_zone_clearance(document, fab, profile, errors, default_clearance)
 
     # Board-size envelope — only when the profile defines limits and there is an
     # outline to measure.
@@ -568,5 +782,10 @@ def check_gerber_completeness(document: ForgeDocument, fab: str = DEFAULT_FAB) -
         warnings.append(
             "board has no routed tracks — the Gerber set would contain no copper "
             "connections; run route_board (or hand-place track nodes) before export"
+        )
+    if document.domain == Domain.HARDWARE and any(n.type == NODE_ZONE for n in document.walk()):
+        warnings.append(
+            "board has copper zones — the Gerber exporter does not render pours yet, so "
+            "the Gerber set would omit them; export to KiCad (which fills the zones) for now"
         )
     return {"ready": not errors, "fab": fab, "errors": errors, "warnings": warnings}

@@ -7,6 +7,35 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Copper zones / pours in the hardware domain.** A new `zone` node type
+  (net, layer, boundary polygon, clearance, min_thickness) expresses filled
+  copper planes — the way every real 2-layer board carries power and ground,
+  which previously had no representation at all (the Arduino Uno build left GND
+  and +5V unrouted for lack of one). The KiCad exporter emits real `(zone ...)`
+  pours whose grammar was verified against actual KiCad 10 output — an unfilled
+  boundary that KiCad fills itself (a solid `connect_pads` connection, so a
+  plane never produces starved-thermal errors); ForgeLab does not reimplement
+  KiCad's fill. Polygon points are Y-flipped through the same Y-up→Y-down
+  pinning as every other coordinate.
+  - **`route_board` now auto-pours** a genuinely pour-shaped power/ground net
+    (more than 5 pads, spanning at least half the board in one axis and 15% of
+    its area) that the maze router can't trace, instead of failing it: it moves
+    from `nets_failed` into a new `nets_poured` list and gains a `zone`. The
+    largest plane goes on `F.Cu` (connecting its SMD pads immediately), the next
+    on `B.Cu`. Signal nets that merely lost to congestion are left in
+    `nets_failed` untouched. On the Arduino Uno, GND and +5V are now poured
+    rather than failed — verified live end to end, with `kicad-cli pcb drc
+    --refill-zones` reporting **zero error-level copper violations** on the
+    export (the pours fill, connect their F.Cu pads, and short nothing).
+  - **`check_fabrication` validates zones** conservatively against the fab's
+    spacing rules — pour clearance/min_thickness below the fab minimums,
+    same-layer different-net boundary overlaps, and foreign copper lying outside
+    a pour but within clearance of its boundary (copper *inside* the boundary is
+    poured around, not flagged). The heuristic thresholds were adjusted after
+    live testing: `auto_place` packs parts into a band, collapsing one axis of
+    even a real ground net, so a strict both-axes span rule rejected the very
+    nets it was meant to catch. `check_gerber_completeness` now warns that the
+    Gerber exporter does not render pours yet.
 - **Standalone Codex CLI installer** — `scripts/install-codex.sh`, a one-line
   `curl | bash` that fully sets ForgeLab up for Codex with no prior install:
   it runs the new generic `scripts/install.sh` (venv at `~/.forgelab/venv`,

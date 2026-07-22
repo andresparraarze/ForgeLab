@@ -29,6 +29,11 @@ NODE_NET = "net"
 NODE_BOARD = "board"
 NODE_TRACK = "track"
 NODE_VIA = "via"
+NODE_ZONE = "zone"
+
+# Narrowest poured copper (mm) a zone may keep: slivers thinner than this are
+# unmanufacturable, so KiCad drops them. Matches KiCad's own default.
+DEFAULT_ZONE_MIN_THICKNESS = 0.25
 
 # Copper size (mm, square) assumed for a pad that carries no explicit ``size``.
 # This is the single source of truth for "invented" pad copper: the KiCad and
@@ -231,6 +236,86 @@ class Via(BaseModel):
     def _is_xy(cls, value: list[float]) -> list[float]:
         if len(value) != 2:
             raise ValueError("via at must be [x, y]")
+        return value
+
+
+def _orient(p: list[float], q: list[float], r: list[float]) -> float:
+    return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+
+def _on_segment(p: list[float], q: list[float], r: list[float]) -> bool:
+    """Is ``q`` inside the bounding box of segment ``pr`` (used when collinear)?"""
+    return min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and min(p[1], r[1]) <= q[1] <= max(p[1], r[1])
+
+
+def _segments_intersect(p1: list[float], p2: list[float], p3: list[float], p4: list[float]) -> bool:
+    """True if segments p1p2 and p3p4 cross or touch (collinear overlap included)."""
+    d1, d2 = _orient(p3, p4, p1), _orient(p3, p4, p2)
+    d3, d4 = _orient(p1, p2, p3), _orient(p1, p2, p4)
+    if ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and 0 not in (d1, d2, d3, d4):
+        return True
+    return (
+        (d1 == 0 and _on_segment(p3, p1, p4))
+        or (d2 == 0 and _on_segment(p3, p2, p4))
+        or (d3 == 0 and _on_segment(p1, p3, p2))
+        or (d4 == 0 and _on_segment(p1, p4, p2))
+    )
+
+
+class Zone(BaseModel):
+    """A filled copper pour bounded by a polygon on one layer.
+
+    Every real 2-layer board carries power and ground as filled zones, not
+    individual traces. ``polygon`` is the pour boundary in the IR's Y-up board
+    frame (millimetres, origin at the outline's lower-left corner); it needs at
+    least three points and must be a simple (non-self-intersecting) polygon.
+
+    The KiCad exporter emits the boundary only; **KiCad computes the actual
+    poured copper** (clearing foreign nets, thermally relieving same-net pads).
+    ForgeLab does not precompute the fill — that would mean reimplementing
+    KiCad's pour algorithm and drifting from what KiCad actually renders.
+
+    ``clearance`` is the pour's local clearance in millimetres — KiCad stores it
+    as the zone's ``connect_pads`` clearance. ``None`` means inherit the board's
+    ``design_rules.clearance`` (the usual case); the foreign-net isolation
+    clearance always comes from the net class, which the exporter writes from
+    the same design rule. ``min_thickness`` is the narrowest copper the pour may
+    keep.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    net: str
+    layer: str = "F.Cu"
+    polygon: list[list[float]]
+    clearance: float | None = Field(
+        default=None,
+        description=(
+            "Pour clearance in millimetres; if omitted, the board's design_rules.clearance is used."
+        ),
+    )
+    min_thickness: float = DEFAULT_ZONE_MIN_THICKNESS
+
+    @field_validator("polygon")
+    @classmethod
+    def _is_simple_polygon(cls, value: list[list[float]]) -> list[list[float]]:
+        if len(value) < 3:
+            raise ValueError("zone polygon needs at least 3 points")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("zone polygon points must be [x, y]")
+        n = len(value)
+        edges = [(value[i], value[(i + 1) % n]) for i in range(n)]
+        # A simple polygon has no two non-adjacent edges touching or crossing.
+        for i in range(n):
+            a1, a2 = edges[i]
+            for j in range(i + 1, n):
+                # Skip edges that share a vertex (adjacent, incl. last↔first).
+                if j == i or (j + 1) % n == i or (i + 1) % n == j:
+                    continue
+                b1, b2 = edges[j]
+                if _segments_intersect(a1, a2, b1, b2):
+                    raise ValueError("zone polygon must be simple (edges must not self-intersect)")
         return value
 
 

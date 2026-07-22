@@ -4,6 +4,7 @@ from forgelab.spec import (
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_NET,
+    NODE_ZONE,
     BoardConstraints,
     Component,
     DesignRules,
@@ -12,7 +13,9 @@ from forgelab.spec import (
     ForgeDocument,
     Net,
     Node,
+    OutlineSegment,
     Pad,
+    Zone,
 )
 from forgelab.spec.version import SPEC_VERSION
 
@@ -241,3 +244,88 @@ def test_outline_uses_stroke_syntax():
         stroke = {str(e[0]): e for e in sub["stroke"] if isinstance(e, list)}
         assert stroke["width"][1] == 0.1
         assert str(stroke["type"][1]) == "solid"
+
+
+# ----------------------------------------------------------------- copper zones
+
+
+def _zone_doc(outline: list[OutlineSegment], zone_props: dict) -> ForgeDocument:
+    board = BoardConstraints(
+        kicad_version="20240108",
+        generator="forgelab",
+        layers=[],
+        outline=outline,
+        design_rules=DesignRules(clearance=0.2, track_width=0.25, via_diameter=0.8, via_drill=0.4),
+    )
+    nets = [Net(code=0, name=""), Net(code=1, name="GND")]
+    nodes = [Node(id=NODE_BOARD, type=NODE_BOARD, props=board.model_dump())]
+    nodes += [Node(id=f"net:{n.code}", type=NODE_NET, props=n.model_dump()) for n in nets]
+    nodes.append(Node(id="zone1", type=NODE_ZONE, props=zone_props))
+    return ForgeDocument(
+        forgelab_version=SPEC_VERSION,
+        domain=Domain.HARDWARE,
+        meta=DocumentMeta(name="t", generator="test"),
+        nodes=nodes,
+    )
+
+
+_RECT_OUTLINE = [
+    OutlineSegment(start=[0, 0], end=[40, 0]),
+    OutlineSegment(start=[40, 0], end=[40, 20]),
+    OutlineSegment(start=[40, 20], end=[0, 20]),
+    OutlineSegment(start=[0, 20], end=[0, 0]),
+]
+
+
+def _zone_block(tree):
+    (zone,) = _blocks(tree, "zone")
+    return {str(e[0]): e for e in zone if isinstance(e, list) and e}
+
+
+def test_zone_exports_valid_kicad_pour_syntax():
+    # The grammar here is verified against real KiCad 10 output: a solid,
+    # fillable copper pour (not a keepout) is (fill yes ...) with a
+    # (connect_pads yes ...) solid connection and a (polygon (pts ...)).
+    zone = Zone(net="GND", layer="F.Cu", polygon=[[5, 3], [35, 3], [35, 17], [5, 17]])
+    tree = parse(KiCadExporter().from_ir(_zone_doc(_RECT_OUTLINE, zone.model_dump())).decode())
+    block = _zone_block(tree)
+    assert block["net"][1] == 1  # GND resolved to its net code
+    assert block["net_name"][1] == "GND"
+    assert str(block["layer"][1]) == "F.Cu"
+    assert str(block["min_thickness"][0]) == "min_thickness"
+    # solid pad connection, not thermal relief (thermal spokes starve on a plane)
+    assert str(block["connect_pads"][1]) == "yes"
+    # (fill yes ...) — the token that makes KiCad treat it as a fillable pour
+    assert str(block["fill"][1]) == "yes"
+    pts = next(e for e in block["polygon"] if isinstance(e, list) and str(e[0]) == "pts")
+    xy = [e for e in pts if isinstance(e, list) and str(e[0]) == "xy"]
+    assert len(xy) == 4
+
+
+def test_zone_polygon_y_is_flipped_into_kicad_frame():
+    # Same Y-up -> Y-down pinning as tracks/pads: the outline spans y 0..20, so
+    # the mirror axis is 0+20=20 and each polygon Y maps y -> 20 - y.
+    zone = Zone(net="GND", layer="F.Cu", polygon=[[5, 3], [35, 3], [35, 17], [5, 17]])
+    tree = parse(KiCadExporter().from_ir(_zone_doc(_RECT_OUTLINE, zone.model_dump())).decode())
+    pts = next(
+        e for e in _zone_block(tree)["polygon"] if isinstance(e, list) and str(e[0]) == "pts"
+    )
+    xy = [(e[1], e[2]) for e in pts if isinstance(e, list) and str(e[0]) == "xy"]
+    # 3 -> 17, 17 -> 3; X unchanged.
+    assert xy == [(5, 17), (35, 17), (35, 3), (5, 3)]
+
+
+def test_zone_clearance_inherits_design_rules_when_unset():
+    zone = Zone(net="GND", polygon=[[5, 3], [35, 3], [35, 17]])  # clearance None
+    tree = parse(KiCadExporter().from_ir(_zone_doc(_RECT_OUTLINE, zone.model_dump())).decode())
+    connect = _zone_block(tree)["connect_pads"]
+    clearance = next(e for e in connect if isinstance(e, list) and str(e[0]) == "clearance")
+    assert clearance[1] == 0.2  # design_rules.clearance
+
+
+def test_zone_honors_explicit_clearance():
+    zone = Zone(net="GND", polygon=[[5, 3], [35, 3], [35, 17]], clearance=0.35)
+    tree = parse(KiCadExporter().from_ir(_zone_doc(_RECT_OUTLINE, zone.model_dump())).decode())
+    connect = _zone_block(tree)["connect_pads"]
+    clearance = next(e for e in connect if isinstance(e, list) and str(e[0]) == "clearance")
+    assert clearance[1] == 0.35

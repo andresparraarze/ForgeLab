@@ -31,7 +31,13 @@ from typing import Any
 
 from forgelab.layout.placement import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
-from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, pad_default_size, pad_grid_offset
+from forgelab.spec.hardware import (
+    DEFAULT_ZONE_MIN_THICKNESS,
+    NODE_BOARD,
+    NODE_COMPONENT,
+    pad_default_size,
+    pad_grid_offset,
+)
 
 # Minimum drill-to-drill wall (mm) between via holes, any net: closer than
 # this the drill bit breaks into the neighbouring hole. KiCad's default
@@ -52,6 +58,27 @@ DEFAULT_GRID_RESOLUTION = 0.15
 _VIA_COST = 10
 
 _LAYER_NAMES = ("F.Cu", "B.Cu")
+
+# Auto-pour heuristic: a net the maze router could not connect becomes a filled
+# copper plane only when it is genuinely pour-shaped — many pads fanned out
+# across the board, the signature of a power/ground net. A signal net that
+# merely lost to congestion has few pads in a small area and stays in
+# nets_failed rather than being papered over with a plane it never asked for.
+#
+# The spread test deliberately measures reach in the *wider* axis plus overall
+# area, not both axes independently: auto_place packs parts into a band, which
+# compresses one axis of even a real ground net (the Arduino Uno's GND drops to
+# ~34% of the board height once placed), so a strict both-axes rule would reject
+# the very nets this is meant to catch. A plane must still reach across half the
+# board in some direction and cover a real 2D fraction of it — a thin bus or a
+# compact cluster does neither.
+_POUR_MIN_PADS = 5  # strictly more than this many positioned pads
+_POUR_MIN_BOARD_FRACTION = 0.5  # pad bbox must span >= this of the board in its wider axis
+_POUR_MIN_AREA_FRACTION = 0.15  # pad bbox must cover >= this fraction of the board area
+
+# Keep an auto-poured plane this far (mm) inside the board bounding box so it
+# does not spill over the edge; KiCad's own edge clearance clips it further.
+_POUR_EDGE_INSET = 0.5
 
 # Everything is on-grid, so coordinate comparisons tolerate float noise only.
 _EPS = 1e-9
@@ -335,13 +362,20 @@ def route_document(
 ) -> dict[str, Any]:
     """Route every multi-pad net of a placed hardware document.
 
-    Returns ``{"tracks", "vias", "nets_routed", "nets_failed",
-    "total_track_length_mm", "vias_used"}`` — ``tracks``/``vias`` are lists of
-    ``Track``/``Via`` prop dicts ready to become IR nodes. Nets are routed in
-    order of increasing pad bounding-box span so short, constrained connections
-    go in before long ones can block them. A net whose maze search finds no
-    path lands in ``nets_failed`` (already-routed edges of a partially routed
-    multi-pin net are kept) and routing continues with the remaining nets.
+    Returns ``{"tracks", "vias", "zones", "nets_routed", "nets_failed",
+    "nets_poured", "total_track_length_mm", "vias_used"}`` —
+    ``tracks``/``vias``/``zones`` are lists of ``Track``/``Via``/``Zone`` prop
+    dicts ready to become IR nodes. Nets are routed in order of increasing pad
+    bounding-box span so short, constrained connections go in before long ones
+    can block them. A net whose maze search finds no path lands in
+    ``nets_failed`` (already-routed edges of a partially routed multi-pin net
+    are kept) and routing continues with the remaining nets.
+
+    A failed net that is genuinely *pour-shaped* — a high-fanout, board-spanning
+    power or ground net — is then turned into a filled copper plane instead of
+    being reported as a failure (see ``_auto_pour``): it moves from
+    ``nets_failed`` into ``nets_poured`` and gains a ``zone``. Signal nets that
+    merely lost to congestion are left in ``nets_failed`` untouched.
 
     Raises ``RoutingError`` for a non-hardware document or a missing outline.
     """
@@ -506,12 +540,83 @@ def route_document(
             connected.update(path)
         (nets_failed if failed else nets_routed).append(net)
 
+    zones, nets_poured = _auto_pour(bbox, rules, net_pads, nets_failed, layers)
+    nets_failed = [n for n in nets_failed if n not in set(nets_poured)]
+
     total = sum(math.dist(t["start"], t["end"]) for t in tracks)
     return {
         "tracks": tracks,
         "vias": vias,
+        "zones": zones,
         "nets_routed": nets_routed,
         "nets_failed": nets_failed,
+        "nets_poured": nets_poured,
         "total_track_length_mm": round(total, 2),
         "vias_used": len(vias),
     }
+
+
+def _auto_pour(
+    bbox: tuple[float, float, float, float],
+    rules: dict[str, float],
+    net_pads: dict[str, list[tuple[float, float]]],
+    nets_failed: list[str],
+    layers: int,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Turn genuinely pour-shaped failed nets into filled copper planes.
+
+    A net qualifies only when it has more than ``_POUR_MIN_PADS`` positioned
+    pads *and* those pads span at least ``_POUR_MIN_BOARD_FRACTION`` of the
+    board in both width and height — the fanned-out, board-spanning shape of a
+    ground or power net, not a local signal that lost to congestion. Qualifying
+    nets are poured largest-fanout first: the biggest takes ``F.Cu`` (where
+    ForgeLab's SMD pads live, so the plane connects them immediately), the next
+    takes ``B.Cu`` (a classic 2-layer ground/power split, which connects once
+    the pads are made through-hole via KiCad's "Update Footprints from
+    Library"). One plane per copper layer — any further pour-shaped net can't
+    fit another full-board plane and stays in ``nets_failed``.
+
+    Returns ``(zones, nets_poured)``: zone prop dicts ready to become IR nodes,
+    and the names of the nets that were poured.
+    """
+    x0, y0, x1, y1 = bbox
+    board_w, board_h = x1 - x0, y1 - y0
+    if board_w <= 0 or board_h <= 0:
+        return [], []
+
+    def pour_shaped(net: str) -> bool:
+        pts = net_pads.get(net, [])
+        if len(pts) <= _POUR_MIN_PADS:
+            return False
+        span_x = max(p[0] for p in pts) - min(p[0] for p in pts)
+        span_y = max(p[1] for p in pts) - min(p[1] for p in pts)
+        reaches = (
+            span_x >= _POUR_MIN_BOARD_FRACTION * board_w
+            or span_y >= _POUR_MIN_BOARD_FRACTION * board_h
+        )
+        covers = (span_x * span_y) >= _POUR_MIN_AREA_FRACTION * board_w * board_h
+        return reaches and covers
+
+    candidates = sorted(
+        (n for n in nets_failed if pour_shaped(n)),
+        key=lambda n: len(net_pads[n]),
+        reverse=True,
+    )
+    inset = max(rules["clearance"], _POUR_EDGE_INSET)
+    xa, xb = round(x0 + inset, 6), round(x1 - inset, 6)
+    ya, yb = round(y0 + inset, 6), round(y1 - inset, 6)
+
+    zones: list[dict[str, Any]] = []
+    nets_poured: list[str] = []
+    for layer_name, net in zip(_LAYER_NAMES[:layers], candidates, strict=False):
+        zones.append(
+            {
+                "net": net,
+                "layer": layer_name,
+                "polygon": [[xa, ya], [xb, ya], [xb, yb], [xa, yb]],
+                "clearance": rules["clearance"],
+                "min_thickness": DEFAULT_ZONE_MIN_THICKNESS,
+            }
+        )
+        nets_poured.append(net)
+    return zones, nets_poured

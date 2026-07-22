@@ -2,9 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from forgelab.spec import (
+    DEFAULT_ZONE_MIN_THICKNESS,
     NODE_BOARD,
     NODE_COMPONENT,
     NODE_NET,
+    NODE_ZONE,
     BoardConstraints,
     BoardLayer,
     Component,
@@ -12,6 +14,7 @@ from forgelab.spec import (
     Net,
     OutlineSegment,
     Pad,
+    Zone,
 )
 
 
@@ -19,6 +22,40 @@ def test_node_type_constants():
     assert NODE_COMPONENT == "component"
     assert NODE_NET == "net"
     assert NODE_BOARD == "board"
+    assert NODE_ZONE == "zone"
+
+
+def test_zone_roundtrips_and_defaults():
+    zone = Zone(net="GND", layer="B.Cu", polygon=[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
+    # clearance defaults to None (inherit design_rules.clearance at export time).
+    assert zone.clearance is None
+    assert zone.min_thickness == DEFAULT_ZONE_MIN_THICKNESS
+    assert Zone.model_validate(zone.model_dump()) == zone
+
+
+def test_zone_rejects_fewer_than_three_points():
+    with pytest.raises(ValidationError):
+        Zone(net="GND", polygon=[[0.0, 0.0], [10.0, 0.0]])
+
+
+def test_zone_rejects_non_xy_points():
+    with pytest.raises(ValidationError):
+        Zone(net="GND", polygon=[[0.0, 0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
+
+
+def test_zone_rejects_self_intersecting_polygon():
+    # A bow-tie: edges (p0->p1) and (p2->p3) cross.
+    with pytest.raises(ValidationError):
+        Zone(net="GND", polygon=[[0.0, 0.0], [10.0, 10.0], [10.0, 0.0], [0.0, 10.0]])
+
+
+def test_zone_accepts_a_simple_concave_polygon():
+    # An L-shape is simple (non-self-intersecting) even though it is concave.
+    zone = Zone(
+        net="GND",
+        polygon=[[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]],
+    )
+    assert len(zone.polygon) == 6
 
 
 def test_component_roundtrips_through_dict():
