@@ -15,10 +15,12 @@ RS-274X/Excellon are natively Y-up too, so **coordinates pass through
 unchanged — deliberately no flip here** (the KiCad exporter is the one that
 mirrors Y into KiCad's Y-down file frame).
 
-Scope notes: the ForgeLab pad model has no through-hole concept (pads are
-SMD, as in the KiCad exporter), so the drill file contains via holes only.
-Pads without a physical ``at`` fall back to the same deterministic grid the
-KiCad exporter uses, keeping the two outputs geometrically consistent.
+Scope notes: the drill file carries one hole per via and per through-hole pad
+(a pad whose model has a ``drill``) — round holes as flashed points, oval
+drills as ``G85`` routed slots, grouped into tools by diameter. Pads without a
+``drill`` are SMD (no hole), exactly as before. Pads without a physical ``at``
+fall back to the same deterministic grid the KiCad exporter uses, keeping the
+two outputs geometrically consistent.
 
 Depends only on ``forgelab.spec`` and ``forgelab.formats`` (boundary rule).
 """
@@ -206,6 +208,12 @@ class GerberExporter(Exporter):
         silk = {"F.Cu": _GerberFile("Legend,Top"), "B.Cu": _GerberFile("Legend,Bot")}
         edge = _GerberFile("Profile,NP")
 
+        # Every drilled hole in the board: round holes as (x, y, diameter) and
+        # oval/slotted holes as (x1, y1, x2, y2, tool). Filled by the through-hole
+        # pads in the component loop below and by vias in the routed-copper loop.
+        drills: list[tuple[float, float, float]] = []
+        slots: list[tuple[float, float, float, float, float]] = []
+
         # Component pads: copper flash + mask opening on the component's side,
         # reference designator on that side's silkscreen.
         for node in document.walk():
@@ -262,6 +270,23 @@ class GerberExporter(Exporter):
                         )
                     ),
                 )
+                # A through-hole pad drills a hole through every layer: one
+                # round hole, or a slot for an oval drill. The drill dimensions
+                # are footprint-local, so the slot direction rotates with the
+                # component exactly like the pad offset does.
+                drill_spec = pad.get("drill")
+                if isinstance(drill_spec, dict):
+                    hx, hy = cx + px, cy + py
+                    oval = drill_spec.get("oval")
+                    if isinstance(oval, list) and len(oval) == 2:
+                        ow, oh = float(oval[0]), float(oval[1])
+                        tool = min(ow, oh)
+                        span = abs(ow - oh) / 2
+                        ddx, ddy = (span, 0.0) if ow >= oh else (0.0, span)
+                        rdx, rdy = _rotate_offset(ddx, ddy, rotation)
+                        slots.append((hx - rdx, hy - rdy, hx + rdx, hy + rdy, tool))
+                    elif drill_spec.get("diameter") is not None:
+                        drills.append((hx, hy, float(drill_spec["diameter"])))
                 max_pad_y = max(max_pad_y, py + height / 2)
             reference = str(props.get("reference", "") or node.id)
             if reference:
@@ -275,7 +300,6 @@ class GerberExporter(Exporter):
                 )
 
         # Routed copper: tracks on their layer, via annulars on both layers.
-        drills: list[tuple[float, float, float]] = []  # (x, y, drill)
         for node in document.walk():
             if node.type == NODE_TRACK:
                 props = node.props
@@ -321,17 +345,32 @@ class GerberExporter(Exporter):
                 "F_Silkscreen.gbr": silk["F.Cu"].render(),
                 "B_Silkscreen.gbr": silk["B.Cu"].render(),
                 "Edge_Cuts.gbr": edge.render(),
-                "drill.drl": _excellon(drills),
+                "drill.drl": _excellon(drills, slots),
             }
         )
 
 
-def _excellon(drills: list[tuple[float, float, float]]) -> str:
-    """An Excellon drill file: one plated hole per via, tools grouped by size."""
+def _excellon(
+    drills: list[tuple[float, float, float]],
+    slots: list[tuple[float, float, float, float, float]] | None = None,
+) -> str:
+    """An Excellon drill file: one hole per via and per through-hole pad.
+
+    Round holes (vias and round through-hole pads) are flashed points; oval
+    through-hole pads become routed slots (``G85`` from one end to the other).
+    Both are grouped under tools by diameter — a slot's tool is its narrow
+    dimension — so a via and a round pad hole of the same size share one tool.
+    Tool order follows first appearance (pads before vias), keeping output
+    deterministic.
+    """
+    slots = slots or []
     tools: dict[float, int] = {}
     for _x, _y, drill in drills:
         if drill not in tools:
             tools[drill] = len(tools) + 1
+    for *_ends, tool in slots:
+        if tool not in tools:
+            tools[tool] = len(tools) + 1
     lines = ["M48", ";GenerationSoftware,ForgeLab", "METRIC,TZ"]
     for drill, number in sorted(tools.items(), key=lambda item: item[1]):
         lines.append(f"T{number}C{drill:.3f}")
@@ -341,5 +380,8 @@ def _excellon(drills: list[tuple[float, float, float]]) -> str:
         for x, y, hole in drills:
             if hole == drill:
                 lines.append(f"X{x:.3f}Y{y:.3f}")
+        for x1, y1, x2, y2, tool in slots:
+            if tool == drill:
+                lines.append(f"X{x1:.3f}Y{y1:.3f}G85X{x2:.3f}Y{y2:.3f}")
     lines.append("M30")
     return "\n".join(lines) + "\n"

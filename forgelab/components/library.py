@@ -35,6 +35,15 @@ def _inline(count: int, pitch: float, *, vertical: bool = False) -> list[dict[st
     return pads
 
 
+def _drilled(pads: list[dict[str, Any]], diameter: float) -> list[dict[str, Any]]:
+    """Mark every pad as a round plated through-hole of ``diameter`` mm.
+
+    Drill diameters come from the part's real KiCad footprint (the ``(drill ...)``
+    token in its ``.kicad_mod``), the same source as the pad positions.
+    """
+    return [{**pad, "drill": {"diameter": diameter}} for pad in pads]
+
+
 def _two_pad(spacing: float) -> list[dict[str, Any]]:
     """Two pads on the X axis, ``spacing`` mm apart (SMD passives)."""
     half = spacing / 2.0
@@ -303,22 +312,22 @@ _LIBRARY: dict[str, dict[str, dict[str, Any]]] = {
             f"PinHeader-1x{n}": _component(
                 f"Conn_01x{n:02d}",
                 f"Connector_PinHeader_2.54mm:PinHeader_1x{n:02d}_P2.54mm_Vertical",
-                f"2.54mm pin header, 1x{n}",
-                _inline(n, 2.54, vertical=True),
+                f"2.54mm pin header, 1x{n} (through-hole, 1.0mm drill)",
+                _drilled(_inline(n, 2.54, vertical=True), 1.0),
             )
             for n in range(2, 11)
         },
         "PinHeader-2x3-ICSP": _component(
             "ICSP",
             "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical",
-            "2.54mm 2x3 ICSP/ISP programming header",
-            _dual_row(6, 2.54, 2.54),
+            "2.54mm 2x3 ICSP/ISP programming header (through-hole, 1.0mm drill)",
+            _drilled(_dual_row(6, 2.54, 2.54), 1.0),
         ),
         "JST-PH-2": _component(
             "Battery",
             "Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical",
-            "JST-PH 2-pin battery connector (2.0mm pitch)",
-            _inline(2, 2.0),
+            "JST-PH 2-pin battery connector (2.0mm pitch, through-hole, 0.75mm drill)",
+            _drilled(_inline(2, 2.0), 0.75),
         ),
     },
 }

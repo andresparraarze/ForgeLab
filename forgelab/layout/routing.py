@@ -44,6 +44,11 @@ from forgelab.spec.hardware import (
 # hole-to-hole constraint; our design_rules carry no equivalent field.
 _MIN_HOLE_TO_HOLE = 0.25
 
+# Copper-to-board-edge clearance (mm): a track's copper must stay this far
+# inside the outline, matching KiCad's default board-edge clearance so an
+# export is edge-clean. design_rules carry no equivalent field.
+_EDGE_CLEARANCE = 0.5
+
 # Default grid pitch (mm per cell). Chosen empirically on the Arduino Uno
 # example against *honest* copper obstacles (pads at their real rendered
 # size, vias with their real diameter): 0.15mm routes 25/32 nets in ~4s,
@@ -146,6 +151,27 @@ class _Grid:
     def point(self, idx: int) -> list[float]:
         j, i = divmod(idx, self.nx)
         return [round(self.x0 + i * self.res, 6), round(self.y0 + j * self.res, 6)]
+
+    def block_border(self, margin_cells: int) -> None:
+        """Forbid routing within ``margin_cells`` of any grid boundary, all layers.
+
+        Only free cells are blocked, so a pad sitting in the border band keeps
+        its own copper and stays connectable; this just stops a track from
+        hugging the board edge closer than the fab's edge clearance (the grid
+        spans the outline's bounding box, so its boundary is the board edge).
+        """
+        if margin_cells <= 0:
+            return
+        for layer in range(self.layers):
+            owner = self.owner[layer]
+            for j in range(self.ny):
+                edge_row = j < margin_cells or j >= self.ny - margin_cells
+                base = j * self.nx
+                for i in range(self.nx):
+                    if (edge_row or i < margin_cells or i >= self.nx - margin_cells) and owner[
+                        base + i
+                    ] == _FREE:
+                        owner[base + i] = _BLOCKED
 
     def mark_rect(
         self, layer: int, x_min: float, y_min: float, x_max: float, y_max: float, net_id: int
@@ -403,7 +429,9 @@ def route_document(
     via_pad_margin = rules["via_diameter"] / 2 + rules["clearance"]
     net_ids: dict[str, int] = {}
     net_pads: dict[str, list[tuple[float, float]]] = {}
-    centres: list[tuple[int, int]] = []  # (cell idx, net id) re-stamped after rects
+    # (cell idx, net id, through_hole) re-stamped after rects; a through-hole
+    # pad's centre belongs to its net on every layer, an SMD pad's only on F.Cu.
+    centres: list[tuple[int, int, bool]] = []
     for node in document.walk():
         if node.type != NODE_COMPONENT:
             continue
@@ -440,21 +468,35 @@ def route_document(
             # pad rectangle.
             half_w = (width * cos_r + height * sin_r) / 2
             half_h = (width * sin_r + height * cos_r) / 2
-            grid.mark_rect(
-                0,
-                px - half_w - track_margin,
-                py - half_h - track_margin,
-                px + half_w + track_margin,
-                py + half_h + track_margin,
-                net_id,
-            )
+            # A through-hole pad is copper on every layer, so it blocks routing
+            # on both planes; an SMD pad blocks only F.Cu. (Without this a B.Cu
+            # track routes straight through a header pad — KiCad DRC then reports
+            # a real short against the pad's back-side copper.)
+            through_hole = isinstance(pad.get("drill"), dict)
+            obstacle_layers = range(grid.layers) if through_hole else (0,)
+            for layer in obstacle_layers:
+                grid.mark_rect(
+                    layer,
+                    px - half_w - track_margin,
+                    py - half_h - track_margin,
+                    px + half_w + track_margin,
+                    py + half_h + track_margin,
+                    net_id,
+                )
             grid.claim_via_zone(
                 px - half_w, py - half_h, px + half_w, py + half_h, via_pad_margin, net_id
             )
             if routable:
-                centres.append((grid.cell(px, py), net_id))
-    for idx, net_id in centres:
-        grid.owner[0][idx] = net_id
+                centres.append((grid.cell(px, py), net_id, through_hole))
+    for idx, net_id, through_hole in centres:
+        for layer in range(grid.layers) if through_hole else (0,):
+            grid.owner[layer][idx] = net_id
+
+    # Keep routed copper off the board edge: block the free cells in a border
+    # band a track centreline (plus half its width) inside the outline, so no
+    # track hugs the edge closer than the fab's edge clearance. Pad-owned cells
+    # in the band survive, so an edge connector stays connectable.
+    grid.block_border(math.ceil((_EDGE_CLEARANCE + rules["track_width"] / 2) / grid_resolution))
 
     # Clearance halo around routed copper, in cells: another net's centreline
     # must stay at least track_width + clearance away, and the first cell past

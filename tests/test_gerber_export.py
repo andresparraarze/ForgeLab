@@ -271,11 +271,19 @@ def test_arduino_uno_place_route_export_gerbers(tmp_path, monkeypatch):
 
     stack = LayerStack.open(out)
     assert stack[("top", "copper")] is not None and stack[("bottom", "copper")] is not None
-    # Every via the router placed is really drilled.
-    drill = ExcellonFile.open(out / "drill.drl")
-    assert len(drill.objects) == routed["vias_used"]
-    # Copper flash count matches pads (all components) + via annulars.
+    # Every via the router placed AND every through-hole pad is really drilled.
     doc = validate(json.loads((tmp_path / "routed.forge.json").read_text()))
+    tht_pads = sum(
+        1
+        for n in doc.walk()
+        if n.type == "component"
+        for p in (n.props.get("pads") or [])
+        if isinstance(p, dict) and isinstance(p.get("drill"), dict)
+    )
+    assert tht_pads > 0, "the Uno's pin headers should carry through-hole drills"
+    drill = ExcellonFile.open(out / "drill.drl")
+    assert len(drill.objects) == routed["vias_used"] + tht_pads
+    # Copper flash count matches pads (all components) + via annulars.
     pad_count = sum(
         len(n.props.get("pads") or [])
         for n in doc.walk()
