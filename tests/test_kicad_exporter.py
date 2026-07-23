@@ -112,7 +112,7 @@ def test_export_contains_nets_and_footprint():
     out = KiCadExporter().from_ir(_doc()).decode("utf-8")
     assert '(net 1 "GND")' in out
     assert "Resistor_SMD:R_0603_1608Metric" in out
-    assert '(property "Reference" "R1")' in out
+    assert '(property "Reference" "R1" ' in out
 
 
 def test_export_resolves_pad_net_codes():

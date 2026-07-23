@@ -198,6 +198,14 @@ class _Grid:
                 elif current != net_id:
                     owner[base + i] = _BLOCKED
 
+    def cells_in_rect(self, x_min: float, y_min: float, x_max: float, y_max: float) -> list[int]:
+        """Every cell whose sample point falls inside the rectangle."""
+        i0 = max(0, math.ceil((x_min - self.x0) / self.res - _EPS))
+        i1 = min(self.nx - 1, math.floor((x_max - self.x0) / self.res + _EPS))
+        j0 = max(0, math.ceil((y_min - self.y0) / self.res - _EPS))
+        j1 = min(self.ny - 1, math.floor((y_max - self.y0) / self.res + _EPS))
+        return [j * self.nx + i for j in range(j0, j1 + 1) for i in range(i0, i1 + 1)]
+
     def mark_buffer(self, layer: int, idx: int, radius: int, net_id: int) -> None:
         """Claim free cells within Chebyshev ``radius`` of ``idx`` for ``net_id``.
 
@@ -320,11 +328,23 @@ def _search(
 
 
 def _path_to_copper(
-    grid: _Grid, path: list[tuple[int, int]], net: str, rules: dict[str, float]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Convert a cell path to merged track segments plus vias at layer changes."""
+    grid: _Grid,
+    path: list[tuple[int, int]],
+    net: str,
+    rules: dict[str, float],
+    plated_cells: frozenset[int] = frozenset(),
+) -> tuple[list[dict[str, Any]], list[tuple[dict[str, Any], int]]]:
+    """Convert a cell path to merged track segments plus vias at layer changes.
+
+    A layer change on one of ``plated_cells`` — copper belonging to a
+    through-hole pad of this same net — emits no via: the pad's plated barrel
+    already joins the layers, so a via there would be a redundant second drill
+    hole right next to the pad's (which is what KiCad reports as
+    ``hole_to_hole``). Vias are returned paired with their cell index so the
+    caller stamps clearance only for the holes actually drilled.
+    """
     tracks: list[dict[str, Any]] = []
-    vias: list[dict[str, Any]] = []
+    vias: list[tuple[dict[str, Any], int]] = []
 
     def close_segment(start_idx: int, end_idx: int, layer: int) -> None:
         if start_idx == end_idx:
@@ -344,14 +364,18 @@ def _path_to_copper(
     for (layer_a, idx_a), (layer_b, idx_b) in zip(path, path[1:], strict=False):
         if layer_a != layer_b:
             close_segment(seg_start, idx_a, layer_a)
-            vias.append(
-                {
-                    "at": grid.point(idx_a),
-                    "net": net,
-                    "size": rules["via_diameter"],
-                    "drill": rules["via_drill"],
-                }
-            )
+            if idx_a not in plated_cells:
+                vias.append(
+                    (
+                        {
+                            "at": grid.point(idx_a),
+                            "net": net,
+                            "size": rules["via_diameter"],
+                            "drill": rules["via_drill"],
+                        },
+                        idx_a,
+                    )
+                )
             seg_start, direction = idx_b, None
             continue
         step = (idx_b - idx_a) % grid.nx, (idx_b - idx_a) // grid.nx
@@ -432,6 +456,9 @@ def route_document(
     # (cell idx, net id, through_hole) re-stamped after rects; a through-hole
     # pad's centre belongs to its net on every layer, an SMD pad's only on F.Cu.
     centres: list[tuple[int, int, bool]] = []
+    # Cells sitting on a through-hole pad's copper, per net: a layer change here
+    # rides the pad's own plated barrel and needs no via of its own.
+    plated_cells: dict[int, set[int]] = {}
     for node in document.walk():
         if node.type != NODE_COMPONENT:
             continue
@@ -486,6 +513,12 @@ def route_document(
             grid.claim_via_zone(
                 px - half_w, py - half_h, px + half_w, py + half_h, via_pad_margin, net_id
             )
+            if through_hole and net_id != _BLOCKED:
+                # The pad copper itself (no clearance margin): only a cell truly
+                # over the pad is served by its barrel.
+                plated_cells.setdefault(net_id, set()).update(
+                    grid.cells_in_rect(px - half_w, py - half_h, px + half_w, py + half_h)
+                )
             if routable:
                 centres.append((grid.cell(px, py), net_id, through_hole))
     for idx, net_id, through_hole in centres:
@@ -536,6 +569,7 @@ def route_document(
 
     for net in sorted((n for n in net_pads if len(net_pads[n]) >= 2), key=span):
         net_id = net_ids[net]
+        served = frozenset(plated_cells.get(net_id, ()))
         points = net_pads[net]
         pad_cell = {i: (0, grid.cell(*points[i])) for i in range(len(points))}
         # Cells already wired into the net's tree — targets for the next MST
@@ -548,20 +582,20 @@ def route_document(
             if path is None:
                 failed = True
                 break
-            new_tracks, new_vias = _path_to_copper(grid, path, net, rules)
+            new_tracks, new_vias = _path_to_copper(grid, path, net, rules, served)
             # Vias committed earlier are fenced off in the via plane, but two
             # layer changes chosen within this single search are not; refuse
             # the path rather than commit drill holes that break into each
             # other.
             if any(
                 math.dist(a["at"], b["at"]) < hole_margin - _EPS
-                for i, a in enumerate(new_vias)
-                for b in new_vias[i + 1 :]
+                for i, (a, _ia) in enumerate(new_vias)
+                for b, _ib in new_vias[i + 1 :]
             ):
                 failed = True
                 break
             tracks.extend(new_tracks)
-            vias.extend(new_vias)
+            vias.extend(via for via, _idx in new_vias)
             for layer, idx in path:
                 grid.owner[layer][idx] = net_id
                 grid.mark_buffer(layer, idx, halo, net_id)
@@ -571,14 +605,13 @@ def route_document(
             # A via occupies every plane at its cell, pushes foreign tracks
             # out by its real radius, and keeps other via barrels (any-net
             # drill holes) at clearance.
-            for (layer_a, idx_a), (layer_b, _idx_b) in zip(path, path[1:], strict=False):
-                if layer_a != layer_b:
-                    vx, vy = grid.point(idx_a)
-                    for other in range(layers):
-                        grid.owner[other][idx_a] = net_id
-                        grid.mark_buffer(other, idx_a, via_halo, net_id)
-                    grid.claim_via_zone(vx, vy, vx, vy, via_via_margin, net_id)
-                    grid.claim_via_zone(vx, vy, vx, vy, hole_margin, _BLOCKED)
+            for via, idx_a in new_vias:
+                vx, vy = via["at"]
+                for other in range(layers):
+                    grid.owner[other][idx_a] = net_id
+                    grid.mark_buffer(other, idx_a, via_halo, net_id)
+                grid.claim_via_zone(vx, vy, vx, vy, via_via_margin, net_id)
+                grid.claim_via_zone(vx, vy, vx, vy, hole_margin, _BLOCKED)
             connected.update(path)
         (nets_failed if failed else nets_routed).append(net)
 
@@ -608,15 +641,17 @@ def _auto_pour(
     """Turn genuinely pour-shaped failed nets into filled copper planes.
 
     A net qualifies only when it has more than ``_POUR_MIN_PADS`` positioned
-    pads *and* those pads span at least ``_POUR_MIN_BOARD_FRACTION`` of the
-    board in both width and height — the fanned-out, board-spanning shape of a
-    ground or power net, not a local signal that lost to congestion. Qualifying
-    nets are poured largest-fanout first: the biggest takes ``F.Cu`` (where
-    ForgeLab's SMD pads live, so the plane connects them immediately), the next
-    takes ``B.Cu`` (a classic 2-layer ground/power split, which connects once
-    the pads are made through-hole via KiCad's "Update Footprints from
-    Library"). One plane per copper layer — any further pour-shaped net can't
-    fit another full-board plane and stays in ``nets_failed``.
+    pads, those pads reach across at least ``_POUR_MIN_BOARD_FRACTION`` of the
+    board in its wider axis, and their bounding box covers at least
+    ``_POUR_MIN_AREA_FRACTION`` of it — the fanned-out, board-spanning shape of
+    a ground or power net, not a local signal that lost to congestion. (The
+    span is tested on the wider axis rather than both, because auto-placement
+    packs parts into a band and collapses one axis' span.) Qualifying nets are
+    poured largest-fanout first: the biggest takes ``F.Cu``, the next ``B.Cu``
+    — a classic 2-layer ground/power split, which reaches the components
+    through their through-hole pads' plated barrels. One plane per copper layer
+    — any further pour-shaped net can't fit another full-board plane and stays
+    in ``nets_failed``.
 
     Returns ``(zones, nets_poured)``: zone prop dicts ready to become IR nodes,
     and the names of the nets that were poured.

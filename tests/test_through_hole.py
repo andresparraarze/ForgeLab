@@ -28,7 +28,12 @@ _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 # The SMD KiCad export must never change when the drill field is absent. This is
 # the SHA-256 of the all-SMD blinky export — the byte-identity guard, the same
 # proof the glTF alphaMode fix used for its opaque path.
-_BLINKY_SMD_SHA = "ede579923aed96af83ef573444585e71081bce2f18acc994181557c3d7d97857"
+#
+# Re-pinned once since: the silkscreen fix moved every footprint's reference
+# designator off the pads (and Value onto F.Fab), which changes SMD and
+# through-hole exports alike by design. Any *other* diff to this hash is a
+# regression.
+_BLINKY_SMD_SHA = "86e6e1a19c3833a425e204fb77dfef6a3bc97c183e4cef6bd600ec6928cbee53"
 
 
 def _doc(pads: list[dict], layer: str = "F.Cu") -> ForgeDocument:

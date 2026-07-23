@@ -161,10 +161,13 @@ headers' through-hole pads) and reported in `nets_poured` rather than landing
 in `nets_failed`. The router keeps tracks a board-edge clearance inside the
 outline and treats a through-hole pad as copper on **both** layers, so the
 export is DRC-error-clean — at the honest cost of a few edge-header nets that
-need manual routing. `kicad-cli pcb drc` with the zones refilled reports **zero
-error-level copper violations** (no shorts, clearance, board-edge, or
-starved-thermal errors — verified in CI-skippable integration tests when
-kicad-cli is installed).
+need manual routing. Reference designators are placed clear of every pad's
+solder-mask opening (and `Value` on `F.Fab`), and no via is drilled where a
+same-net through-hole pad's plated barrel already joins the layers. On that
+board `kicad-cli pcb drc` with the zones refilled reports **zero errors and
+zero copper, silkscreen or drill warnings** — verified in CI-skippable
+integration tests when kicad-cli is installed. The only violations left are 24
+`lib_footprint_*` warnings, noted under known limitations below.
 
 **Known limitations (hardware domain):**
 
@@ -184,6 +187,14 @@ kicad-cli is installed).
   through-hole pad only helps if its footprint is genuinely through-hole (the
   bundled Arduino Uno keeps its SMD crystal and reset button on their real SMD
   footprints).
+- **Footprints are synthesized, not copied from the KiCad libraries.** A
+  ForgeLab footprint carries the pads, drills and reference designator that
+  matter electrically, but not the courtyard, fabrication outline, silkscreen
+  body or 3D model of the library part it names. KiCad therefore reports a
+  `lib_footprint_mismatch` warning per part (24 on the Arduino Uno example)
+  when it compares the board against the installed libraries. The board
+  fabricates correctly; running "Update Footprints from Library" in KiCad
+  replaces the synthesized bodies with the full library ones.
 
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
