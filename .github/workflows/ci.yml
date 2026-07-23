@@ -9,8 +9,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
+      # Never cancel the other interpreters when one fails: the whole point of
+      # the matrix is telling version-specific breakage apart from a general
+      # one, and a cancelled sibling job reports nothing.
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # Every version pyproject's requires-python (>=3.11) promises. 3.13/3.14
+        # are here because float summation, dict/set behaviour and repr have all
+        # changed between minors before; testing only the oldest two let a
+        # 3.11-only failure reach main from a 3.14 dev machine.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

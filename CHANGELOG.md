@@ -168,6 +168,40 @@ All notable changes to this project are documented here. The format is based on
   arcs existed still read back unchanged — the codec defaults both to 0.
 
 ### Fixed
+- **The `blender_script` exporter produced different bytes on different Python
+  versions.** CI went red on Python 3.11 for three untextured examples
+  (`organic_handle`, `space_station`, `torii_gate`) that passed on the 3.14
+  development machine — the same documents, the same code, different output.
+
+  The cause was not ordering, timestamps or hash randomisation (all ruled out:
+  output is stable across repeated runs and across `PYTHONHASHSEED` values).
+  The primitive detectors averaged vertex coordinates with the builtin `sum()`,
+  and **CPython 3.12 changed `sum()` over floats to Neumaier compensated
+  summation** ([gh-100425](https://github.com/python/cpython/issues/100425)).
+  A cylinder's centre that came out as exactly `0.0` on 3.12+ came out as
+  `6.27e-17` on 3.11; the exporter writes `repr()` of those floats directly
+  into the generated script, so the export bytes were a function of the
+  interpreter version. Measured on the real examples: of 192 centroids, the
+  builtin `sum()` misses the correctly-rounded value 98 times on 3.11 and never
+  on 3.14 — which is exactly why the bug was invisible locally.
+
+  Averaging now goes through `math.fsum`, which is correctly rounded by
+  definition and so has no version- or platform-dependent freedom. Verified by
+  generating every example on CPython 3.11.15 (CI's exact patch version,
+  installed locally) and 3.14.5 and diffing: **byte-identical**. The pinned
+  byte-identity SHAs are unchanged — they were the correctly-rounded values all
+  along, so the fix corrects the arithmetic rather than re-pinning the hashes.
+
+  `tests/test_export_determinism.py` guards the property directly, checking the
+  mean against exact `Fraction` arithmetic and against reordering, plus asserting
+  generated scripts embed no memory addresses, home paths or timestamps.
+- **CI could hide which interpreters a failure affects.** The matrix ran with
+  GitHub's default `fail-fast`, so the 3.11 failure above cancelled the 3.12 job
+  and left it impossible to tell whether the bug was 3.11-only. Set
+  `fail-fast: false`, and extended the matrix to `3.13` and `3.14` so every
+  version `requires-python = ">=3.11"` promises is actually tested — the gap
+  between CI's oldest-two and the 3.14 development machine is what let this
+  reach `main`.
 - **The Arduino Uno board's last two DRC warning categories.**
   `kicad-cli pcb drc --refill-zones` on the routed, poured, through-hole Uno
   now reports **zero `silk_over_copper` (was 12) and zero `hole_to_hole`
