@@ -18,6 +18,7 @@ imported lazily so the core library works without the extra installed.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from forgelab.spec import Domain, ForgeDocument, Node
@@ -49,12 +50,22 @@ def _quat_matrix(q: list[float]) -> list[list[float]]:
 
 
 def _compose(parent: list[list[float]], local: list[list[float]]) -> list[list[float]]:
-    """Compose two 3x4 affine transforms (rotation*scale | translation)."""
+    """Compose two 3x4 affine transforms (rotation*scale | translation).
+
+    The dot products go through ``math.fsum`` rather than the builtin ``sum``:
+    CPython 3.12 switched ``sum()`` over floats to Neumaier compensated
+    summation (gh-100425), so a naive left-to-right ``sum`` of the same three
+    products can round one ULP apart on 3.11 versus 3.12+. These matrix cells
+    place preview vertices, which would make the rendered pixels depend on the
+    interpreter version -- the same defect that once made the Blender exporter's
+    bytes version-dependent. ``fsum`` is correctly rounded by definition, so it
+    has no such freedom.
+    """
     out = [[0.0] * 4 for _ in range(3)]
     for i in range(3):
         for j in range(3):
-            out[i][j] = sum(parent[i][k] * local[k][j] for k in range(3))
-        out[i][3] = parent[i][3] + sum(parent[i][k] * local[k][3] for k in range(3))
+            out[i][j] = math.fsum(parent[i][k] * local[k][j] for k in range(3))
+        out[i][3] = math.fsum([parent[i][3], *(parent[i][k] * local[k][3] for k in range(3))])
     return out
 
 

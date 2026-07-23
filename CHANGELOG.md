@@ -195,6 +195,19 @@ All notable changes to this project are documented here. The format is based on
   `tests/test_export_determinism.py` guards the property directly, checking the
   mean against exact `Fraction` arithmetic and against reordering, plus asserting
   generated scripts embed no memory addresses, home paths or timestamps.
+- **The preview renderer carried the same latent summation bug.**
+  `preview/render.py`'s `_compose` multiplied affine transforms with a naive
+  three-term dot product per matrix cell, and those cells place the vertices the
+  renderer rasterises — so a naive `sum()` would have made preview pixels depend
+  on the interpreter for the same gh-100425 reason. The example transforms did
+  not happen to trip it, but a realistic rotation×coordinate triple rounds one
+  ULP apart (`-0.7498234660057697` naive on 3.11 vs the correctly-rounded
+  `-0.7498234660057698`), so this was a real second instance, not a hypothetical.
+  `_compose` now sums through `math.fsum`; fixed before it could pin a
+  version-dependent raster. `test_export_determinism.py` gains matching coverage
+  (an exact `Fraction` oracle over every example composition, the divergent
+  triple as a direct property, and order-independence over random transforms);
+  confirmed byte-stable on CPython 3.11.15 and 3.14.5.
 - **CI could hide which interpreters a failure affects.** The matrix ran with
   GitHub's default `fail-fast`, so the 3.11 failure above cancelled the 3.12 job
   and left it impossible to tell whether the bug was 3.11-only. Set
