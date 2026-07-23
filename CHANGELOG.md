@@ -7,6 +7,62 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`boolean` nodes in the mechanical domain — union, cut and common between
+  two independently-built solids.** This closes a structural gap: every other
+  mechanical feature works inside one body's own sketch/pad/pocket/loft/revolve
+  chain, so two separately-modelled solids could not be combined at all. A
+  `boolean` node takes `operation` (`union`/`cut`/`common`), a `base` and a list
+  of `tools`, each naming a whole body or a single solid feature.
+
+  The FreeCAD grammar was probed live before anything was written, and it is
+  not what the name suggests:
+  - **`Part::Boolean` cannot be instantiated** — it is an abstract base class
+    (`addObject` answers "not a document object type"). The concrete types are
+    `Part::MultiFuse` (union), `Part::MultiCommon` (common) and `Part::Cut`.
+    The first two carry one `Shapes` link list (base first, then the tools);
+    `Part::Cut` carries a `Base`/`Tool` pair.
+  - **There is no `Part::MultiCut`**, so union and common take any number of
+    tools in one operation while `cut` takes exactly one. The model rejects a
+    multi-tool cut with a message pointing at chaining instead of silently
+    dropping tools.
+  - **Inputs are not consumed.** They stay real document objects — each
+    operand's `InList` points at the boolean, and FreeCAD's own ViewProvider
+    nests them under the result and switches them off. The exporter mirrors
+    that: operands (and, for a whole body, the features it renders through)
+    are hidden, the result is shown.
+  - **A boolean result is a `Compound`, never a `Solid`**, even holding exactly
+    one solid — pinned by a test, since any downstream `ShapeType == "Solid"`
+    check would be wrong.
+  - **Link scope, found the hard way.** Linking a pad that lives inside a
+    `PartDesign::Body` makes every recompute log `Link(s) to object(s) '...' go
+    out of the allowed scope`; so does putting the boolean outside the
+    `App::Part` holding its bodies. Operands naming a feature are therefore
+    lifted to the body that owns them (the body *is* the solid — what FreeCAD's
+    own Part ▸ Boolean does), and the boolean joins that part's `Group`. A test
+    asserts the phrase never appears in FreeCAD's output.
+
+  `check_mechanical` validates that `base` and every id in `tools` resolve to
+  real nodes, and warns when a `cut`'s tool cannot reach its base. That
+  heuristic earns its place: **FreeCAD reports no error for a degenerate
+  boolean** — an empty intersection, or a cut that removes everything or
+  nothing, recomputes to a valid, "Up-to-date" compound with zero solids and
+  volume 0. The check is deliberately coarse: it compares axis-aligned
+  bounding boxes estimated from the parametric description (a pad is its
+  sketch's extent extruded along the plane normal, a body is the union of its
+  pads, a boolean derives from its own inputs) and warns only when the boxes do
+  not touch at all. Operands whose extent cannot be derived that way — loft,
+  sweep, revolve, fillet, shell — yield no box and the check passes rather than
+  guessing, so it never raises a false alarm.
+
+  New worked example `examples/mechanical/bracket_with_boss.forge.json`: a
+  60 × 40 × 8 mm base plate and an r9 × 23 mm cylindrical boss, each built in
+  its own body, with the boss sunk 3 mm into the plate so the union has a real
+  overlap to subtract. Verified live in FreeCAD 1.1 — one valid solid,
+  bounding box 60 × 40 × 28, volume **24289.38 mm³**, checked both against
+  FreeCAD's own computed intersection (`plate.Shape.common(boss.Shape)`:
+  19200 + 5852.787 − 763.407) and independently against the closed form, so a
+  wrong answer cannot satisfy both.
+
 - **`arc` sketch geometry in the mechanical domain.** Sketches could draw only
   `line` and `circle`, so a rounded rectangle, a slot or any filleted 2D
   outline had no direct expression — a real build worked around it by cutting a

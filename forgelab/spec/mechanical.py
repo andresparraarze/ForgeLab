@@ -29,6 +29,7 @@ NODE_SWEEP = "sweep"
 NODE_FILLET = "fillet"
 NODE_SHELL = "shell"
 NODE_REVOLVE = "revolve"
+NODE_BOOLEAN = "boolean"
 
 
 class Placement(BaseModel):
@@ -281,6 +282,69 @@ class Fillet(BaseModel):
     target: str = ""
     radius: float
     edges: list[int] | None = None
+
+
+class Boolean(BaseModel):
+    """A boolean feature: combine two independently-built solids.
+
+    This is the only way to join geometry across bodies. Every other feature
+    works inside one body's own sketch/pad/pocket/loft/revolve chain, so two
+    separately-modelled solids — a base plate and a boss, a housing and a
+    mounting lug — could not be merged into one shape at all.
+
+    ``base`` and ``tools`` name other nodes: a solid feature (a pad, loft,
+    revolve, another boolean) or a whole ``body``, either of which FreeCAD
+    accepts as a boolean input.
+
+    Operation-to-FreeCAD-type mapping, verified against FreeCAD 1.1 (there is
+    no instantiable ``Part::Boolean`` — it is an abstract base class):
+
+    ==========  ====================  =========================
+    operation   FreeCAD type          inputs
+    ==========  ====================  =========================
+    union       ``Part::MultiFuse``   ``Shapes`` = base + tools
+    common      ``Part::MultiCommon`` ``Shapes`` = base + tools
+    cut         ``Part::Cut``         ``Base`` + a single ``Tool``
+    ==========  ====================  =========================
+
+    Union and common therefore take any number of tools in one operation.
+    **Cut takes exactly one**: FreeCAD ships no ``Part::MultiCut``, so a
+    multi-tool cut has no honest single-object representation — chain one
+    boolean per tool instead.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    body: str = ""
+    operation: str
+    base: str = ""
+    tools: list[str] = Field(
+        default_factory=list,
+        description="Node ids of the solids to combine with base; at least one.",
+    )
+
+    @field_validator("operation")
+    @classmethod
+    def _known_operation(cls, value: str) -> str:
+        if value not in ("union", "cut", "common"):
+            raise ValueError("operation must be 'union', 'cut' or 'common'")
+        return value
+
+    @model_validator(mode="after")
+    def _check_inputs(self) -> Boolean:
+        if not self.base:
+            raise ValueError("boolean needs a base (the node id of the first solid)")
+        if not self.tools:
+            raise ValueError("boolean needs at least one tool")
+        if self.operation == "cut" and len(self.tools) != 1:
+            raise ValueError(
+                "a cut takes exactly one tool (FreeCAD has no Part::MultiCut); "
+                "chain one boolean per tool to cut several"
+            )
+        if self.base in self.tools:
+            raise ValueError("boolean base must not also be one of its tools")
+        return self
 
 
 class Shell(BaseModel):

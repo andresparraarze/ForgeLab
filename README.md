@@ -217,6 +217,23 @@ axially-symmetric round shapes — knobs, caps, bottle-like grips — where one
 closed profile spun around an axis is easier to specify correctly than
 stacked loft sections (see `examples/mechanical/rounded_knob.forge.json`).
 
+Both of those toolkits build geometry *inside a single body's* feature chain,
+which is why neither can express an assembly: a pad cannot reach into another
+body, and a pocket only cuts material its own body already built. A **`boolean`**
+node is the one feature that spans bodies — `union`, `cut` or `common` between
+solids modelled entirely independently. Reach for it when the shapes have
+separate identities: a base plate and a mounting boss, a housing and a lug, a
+part and a cutting tool that is itself a modelled solid rather than a sketch
+profile. Model each piece in its own body, then combine (see
+`examples/mechanical/bracket_with_boss.forge.json`). Keep using `pocket` for an
+ordinary hole or recess in one body — a boolean is the wrong tool for that, and
+heavier. `union` and `common` accept several tools in one operation; `cut` takes
+exactly one, because FreeCAD provides `Part::MultiFuse` and `Part::MultiCommon`
+but no multi-tool cut. One caution the validator helps with: FreeCAD reports no
+error for a boolean that produces nothing — an empty intersection or a cut that
+misses recomputes to a valid, up-to-date result holding zero solids — so
+`check_mechanical` warns when a cut's tool cannot reach its base.
+
 In the threed domain, objects can carry a **Blender modifier stack** — an
 ordered `modifiers` list of `subsurf`, `bevel`, `boolean` and `solidify`
 entries that the Blender script exporter compiles to native

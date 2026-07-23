@@ -30,6 +30,7 @@ from typing import NamedTuple
 
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_BOOLEAN,
     NODE_FILLET,
     NODE_LOFT,
     NODE_PAD,
@@ -40,6 +41,7 @@ from forgelab.spec.mechanical import (
     NODE_SKETCH,
     NODE_SWEEP,
     Body,
+    Boolean,
     Fillet,
     Loft,
     Pad,
@@ -63,6 +65,20 @@ _FCTYPE = {
     NODE_FILLET: "Part::Fillet",
     NODE_SHELL: "Part::Thickness",
     NODE_REVOLVE: "Part::Revolution",
+    # Booleans have no single type: _boolean_fctype() picks the concrete one
+    # per operation. This entry is the fallback for the family.
+    NODE_BOOLEAN: "Part::MultiFuse",
+}
+
+# Verified against FreeCAD 1.1 (``Part::Boolean`` itself is abstract and cannot
+# be instantiated: "not a document object type"). Union and intersection use the
+# Multi* forms, whose ``Shapes`` link list takes base + any number of tools;
+# a cut uses ``Part::Cut``'s single ``Base``/``Tool`` pair, because FreeCAD
+# ships no ``Part::MultiCut``.
+_BOOLEAN_FCTYPE = {
+    "union": "Part::MultiFuse",
+    "common": "Part::MultiCommon",
+    "cut": "Part::Cut",
 }
 
 _FEATURES = (
@@ -79,8 +95,12 @@ _SOLID_FEATURES = (NODE_PAD, NODE_POCKET)
 # Part-workbench (OCC) features: not part of a PartDesign feature chain, so
 # they never carry BaseFeature links or become a body's Tip.
 _PART_FEATURES = (NODE_LOFT, NODE_SWEEP, NODE_FILLET, NODE_SHELL, NODE_REVOLVE)
+# A boolean is not a body feature at all: a Part::Cut inside a PartDesign::Body
+# group is not valid, and the result combines whole bodies. Booleans stay
+# top-level objects, joined to the App::Part group instead (see below).
+_BOOLEANS = (NODE_BOOLEAN,)
 
-AnyModel = Part | Body | Sketch | Pad | Pocket | Loft | Sweep | Fillet | Shell | Revolve
+AnyModel = Part | Body | Sketch | Pad | Pocket | Loft | Sweep | Fillet | Shell | Revolve | Boolean
 
 # Global unit vector for each revolve axis letter.
 _AXIS_VECTORS = {
@@ -220,6 +240,12 @@ def _link_list(name: str, targets: list[str]) -> str:
     return _prop(
         name, "App::PropertyLinkList", f'<LinkList count="{len(targets)}">{links}</LinkList>'
     )
+
+
+def _body_ref(model: AnyModel) -> str:
+    """The model's ``body`` link, or "" for models that have none (Part/Body)."""
+    body = getattr(model, "body", "")
+    return body if isinstance(body, str) else ""
 
 
 def _arc_parameters(start_deg: float, end_deg: float) -> tuple[float, float]:
@@ -534,10 +560,61 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             raise ValueError(f"target {ref!r} of {owner!r} does not exist in the document")
         return rid
 
+    def resolve_solid(owner: str, role: str, ref: str) -> str:
+        rid = resolve_ref(ref)
+        if rid is None:
+            raise ValueError(f"{role} {ref!r} of {owner!r} does not exist in the document")
+        return rid
+
+    # A boolean's inputs, by the node id actually linked. FreeCAD accepts both a
+    # whole PartDesign::Body and a bare solid feature as an operand, but a
+    # feature living inside a Body is out of scope for anything outside it:
+    # linking the pad directly makes every recompute log "Link(s) to object(s)
+    # 'PadA PadT0' go out of the allowed scope" (verified live). So an operand
+    # that names a feature is lifted to the body that owns it — the body IS the
+    # solid, which is what FreeCAD's own Part > Boolean does with two bodies.
+    boolean_inputs: dict[str, list[str]] = {}
+
+    def boolean_operand(owner: str, role: str, ref: str) -> str:
+        rid = resolve_solid(owner, role, ref)
+        if rid in body_id_set:
+            return rid
+        body_id = resolve_body(_body_ref(model_of[rid]))
+        return body_id if body_id is not None and rid in features_of.get(body_id, ()) else rid
+
+    for nid, ntype, model in items:
+        if ntype in _BOOLEANS:
+            assert isinstance(model, Boolean)
+            boolean_inputs[nid] = [boolean_operand(nid, "base", model.base)] + [
+                boolean_operand(nid, "tool", t) for t in model.tools
+            ]
+
     bodies_of_part: dict[str, list[str]] = {}
     for nid, _ntype, model in items:
         if isinstance(model, Body) and model.part:
             bodies_of_part.setdefault(model.part, []).append(nid)
+
+    # FreeCAD scopes links to their container: a boolean sitting outside the
+    # App::Part whose bodies it combines logs "Link(s) to object(s) '...' go out
+    # of the allowed scope" on every recompute (verified live — it still
+    # computes, but the document is flagged). Booleans therefore join the group
+    # of the part that owns any of their inputs.
+    part_of_body: dict[str, str] = {}
+    for part_id, body_ids_in_part in bodies_of_part.items():
+        for body_id in body_ids_in_part:
+            part_of_body[body_id] = part_id
+
+    def owning_part(source_id: str) -> str | None:
+        """The App::Part a boolean input belongs to, via its body."""
+        body_id = (
+            source_id if source_id in body_id_set else resolve_body(_body_ref(model_of[source_id]))
+        )
+        return part_of_body.get(body_id) if body_id is not None else None
+
+    booleans_of_part: dict[str, list[str]] = {}
+    for nid, inputs in boolean_inputs.items():
+        for part_id in sorted({p for src in inputs if (p := owning_part(src)) is not None}):
+            booleans_of_part.setdefault(part_id, []).append(nid)
 
     base_of: dict[str, str | None] = {}
     for solids in solids_of.values():
@@ -551,17 +628,30 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
     # pocket). This is FreeCAD's normal PartDesign display state: the body shows
     # the tip shape and the body node isn't greyed-out in the tree. Intermediate
     # features, sketches and origin datums stay hidden.
+    # A boolean does not delete its inputs — they stay real document objects
+    # (verified live: each input's InList points at the boolean, and FreeCAD's
+    # own ViewProvider nests them under the result and switches them off). So
+    # everything a boolean consumes is hidden, and the result is shown. Whole
+    # bodies drag their rendered solid with them: hiding a consumed body but
+    # leaving its tip feature visible would draw the operand on top of the
+    # result.
+    boolean_consumed: set[str] = set()
+    for inputs in boolean_inputs.values():
+        for src in inputs:
+            boolean_consumed.add(src)
+            boolean_consumed.update(features_of.get(src, ()))
+
     visible_names: set[str] = set()
     for nid, ntype, _ in items:
-        if ntype == NODE_BODY:
+        if ntype == NODE_BODY and nid not in boolean_consumed:
             visible_names.add(name_of[nid])
     for solids in solids_of.values():
-        if solids:
+        if solids and solids[-1] not in boolean_consumed:
             visible_names.add(name_of[solids[-1]])
     # Part-workbench features: show the terminal ones — a loft consumed by a
     # fillet stays hidden, the fillet (the finished shape) is what renders.
     part_feature_ids = [nid for nid, ntype, _ in items if ntype in _PART_FEATURES]
-    consumed: set[str] = set()
+    consumed: set[str] = set(boolean_consumed)
     for nid in part_feature_ids:
         model = model_of[nid]
         if isinstance(model, Fillet | Shell):
@@ -570,6 +660,9 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 consumed.add(target_id)
     for nid in part_feature_ids:
         if nid not in consumed:
+            visible_names.add(name_of[nid])
+    for nid in boolean_inputs:
+        if nid not in consumed:  # a boolean feeding another boolean stays hidden
             visible_names.add(name_of[nid])
     object_names: list[str] = []
 
@@ -582,13 +675,18 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         object_names.append(fcname)
         # Touched="1": with no stored .brp shapes, FreeCAD only rebuilds
         # geometry for dirty objects — this makes recompute-on-open work.
-        decls.append(f'<Object type="{_FCTYPE[ntype]}" name="{fcname}" Touched="1" />')
+        fctype = _BOOLEAN_FCTYPE[model.operation] if isinstance(model, Boolean) else _FCTYPE[ntype]
+        decls.append(f'<Object type="{fctype}" name="{fcname}" Touched="1" />')
         props: list[str]
         if isinstance(model, Part):
             origin_objs = _origin_objects(fcname)
             extra_objects.extend(origin_objs)
             origin_name = origin_objs[-1][0]
-            group = [origin_name] + [name_of[b] for b in bodies_of_part.get(nid, [])]
+            group = (
+                [origin_name]
+                + [name_of[b] for b in bodies_of_part.get(nid, [])]
+                + [name_of[b] for b in booleans_of_part.get(nid, [])]
+            )
             props = [
                 _label(model.name),
                 _placement(model.placement),
@@ -705,6 +803,20 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 _link("Base", name_of[target_id]),
                 _prop("Edges", "Part::PropertyFilletEdges", f'<FilletEdges file="{entry}"/>'),
             ]
+        elif isinstance(model, Boolean):
+            # Property sets read off files FreeCAD 1.1 wrote itself: the Multi*
+            # forms carry one ``Shapes`` LinkList (base first, then the tools);
+            # Part::Cut carries a ``Base``/``Tool`` pair. ``Refine`` true is
+            # FreeCAD's own default and drops the seam faces the operation
+            # leaves behind.
+            sources = [name_of[s] for s in boolean_inputs[nid]]
+            props = [_label(model.name), _identity_placement()]
+            if model.operation == "cut":
+                base_name, tool_name = sources
+                props += [_link("Base", base_name), _link("Tool", tool_name)]
+            else:
+                props.append(_link_list("Shapes", sources))
+            props.append(_bool("Refine", True))
         elif isinstance(model, Shell):
             target_id = resolve_target(nid, model.target)
             faces = [f"Face{int(i)}" for i in (model.faces_to_remove or [])]

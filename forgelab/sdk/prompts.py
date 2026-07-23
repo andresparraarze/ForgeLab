@@ -101,7 +101,17 @@ _REFERENCE_HINTS: dict[str, str] = {
         'leave open in "faces_to_remove" (at least one face must stay open '
         "for the kernel to hollow it). Reach for loft/sweep/fillet/shell/"
         "revolve only when the shape genuinely curves; prismatic parts stay "
-        "in sketch/pad/pocket."
+        "in sketch/pad/pocket. Every feature above works inside ONE body's "
+        "chain, so to combine two SEPARATELY-BUILT solids use a boolean node: "
+        '{"operation": "union"|"cut"|"common", "base": <node id>, "tools": '
+        "[<node ids>]}, naming whole bodies (or a single solid feature). Model "
+        "each part in its own body, then union them — that is how a plate and "
+        "a boss become one part (see "
+        "examples/mechanical/bracket_with_boss.forge.json). union and common "
+        "take several tools at once; cut takes exactly one (chain booleans to "
+        "cut more). Position the operands so they actually meet: FreeCAD "
+        "reports NO error for a cut that removes nothing or an intersection "
+        "that is empty — it returns an empty result instead."
     ),
 }
 

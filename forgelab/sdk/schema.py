@@ -32,6 +32,7 @@ from forgelab.spec import (
 )
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_BOOLEAN,
     NODE_FILLET,
     NODE_LOFT,
     NODE_PAD,
@@ -42,6 +43,7 @@ from forgelab.spec.mechanical import (
     NODE_SKETCH,
     NODE_SWEEP,
     Body,
+    Boolean,
     Fillet,
     Loft,
     Pad,
@@ -79,6 +81,7 @@ DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
         NODE_FILLET: Fillet,
         NODE_SHELL: Shell,
         NODE_REVOLVE: Revolve,
+        NODE_BOOLEAN: Boolean,
     },
 }
 
