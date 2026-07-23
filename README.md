@@ -234,6 +234,30 @@ error for a boolean that produces nothing — an empty intersection or a cut tha
 misses recomputes to a valid, up-to-date result holding zero solids — so
 `check_mechanical` warns when a cut's tool cannot reach its base.
 
+Threed materials can carry **image textures** — the surface detail (wood grain,
+brushed metal, woven fabric) that a flat PBR colour cannot express. A material
+takes an optional `base_color_texture`, a path to an image resolved relative to
+the document's directory, and the image is **embedded** in the exported `.gltf`
+as a base64 data URI, so the file stays as self-contained as it already was for
+geometry. Colour and texture **multiply** rather than replace — that is glTF's
+own rule (`baseColorFactor` is defined as a "linear multiplier for the sampled
+texels") — so a white `base_color` shows the image unchanged and a coloured one
+tints it.
+
+A texture needs somewhere to land, so every primitive that uses a textured
+material must carry **`uvs`**: a flat `[u, v]` array with one pair per position,
+packed the same way positions are. UV origin is glTF's — top-left, V increasing
+downwards; the `blender_script` exporter flips V on the way out, exactly as
+Blender's own glTF importer does, so both exports place the image identically.
+A textured material on a mesh with no UVs is a **validation error**, named at
+`validate_document` time rather than left to render wrongly. Omitting `uvs`
+changes nothing for untextured documents, whose exports are byte-for-byte
+unchanged. For a box, use cube projection — each of the 6 faces gets its own 4
+corners (24 vertices, not 8) so each can span the full image; see
+`examples/threed/textured_crate.forge.json`. One limitation: the glTF *importer*
+reads UVs back but not texture references, since the original file path is not
+recoverable from an embedded image.
+
 In the threed domain, objects can carry a **Blender modifier stack** — an
 ordered `modifiers` list of `subsurf`, `bevel`, `boolean` and `solidify`
 entries that the Blender script exporter compiles to native

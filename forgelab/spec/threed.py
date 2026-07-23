@@ -33,12 +33,25 @@ class Scene(BaseModel):
 
 
 class Material(BaseModel):
-    """A PBR metallic-roughness material (scalars only).
+    """A PBR metallic-roughness material.
 
     ``base_color`` is RGBA; an alpha below 1.0 marks the material as
     translucent, and the glTF exporter emits ``alphaMode: "BLEND"`` for it so
     viewers actually blend it (glTF defaults to OPAQUE and ignores the alpha
     channel otherwise).
+
+    ``base_color_texture`` is an optional path to an image file — the surface
+    detail (wood grain, brushed metal, woven fabric) that a flat RGBA cannot
+    express. It is resolved relative to the document's directory, the same way
+    an OBJ's companion ``.mtl`` is. The mesh primitives that use a textured
+    material MUST carry ``uvs``; without them there is nothing to map the image
+    onto, and ``check_threed`` reports it as an error.
+
+    Texture and colour **multiply**, they do not replace each other. That is
+    glTF's rule verbatim — ``baseColorFactor`` is defined as a "linear
+    multiplier for the sampled texels of the base color texture" — so a white
+    ``base_color`` (the usual choice with a texture) shows the image unchanged,
+    and a coloured one tints it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -47,6 +60,14 @@ class Material(BaseModel):
     base_color: list[float]
     metallic: float = 1.0
     roughness: float = 1.0
+    base_color_texture: str = Field(
+        default="",
+        description=(
+            "Optional path to a base-colour image, relative to the document's "
+            "directory (e.g. 'textures/wood.png'). Requires uvs on every "
+            "primitive that uses this material."
+        ),
+    )
 
     @field_validator("base_color")
     @classmethod
@@ -61,12 +82,29 @@ class Material(BaseModel):
 
 
 class Primitive(BaseModel):
-    """One triangle-mesh primitive: flat xyz positions + triangle indices."""
+    """One triangle-mesh primitive: flat xyz positions + triangle indices.
+
+    ``uvs`` are optional texture coordinates — flat ``[u, v]`` pairs, one pair
+    per position, packed the same way positions are. They are what maps a 2D
+    image onto the surface; without them a textured material has nowhere to
+    put its image. Omitting ``uvs`` is the default and changes nothing.
+
+    UV convention is glTF's: origin at the **top-left**, V increasing
+    downwards. (Blender's is bottom-left, so the ``blender_script`` exporter
+    flips V — exactly what Blender's own glTF importer does.)
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     positions: list[float] = Field(default_factory=list)
     indices: list[int] = Field(default_factory=list)
+    uvs: list[float] = Field(
+        default_factory=list,
+        description=(
+            "Optional flat [u, v] texture coordinates, one pair per position "
+            "(so len(uvs) // 2 == len(positions) // 3)."
+        ),
+    )
     material: str = Field(
         default="",
         description=(
@@ -82,6 +120,22 @@ class Primitive(BaseModel):
         if len(value) % 3 != 0:
             raise ValueError("positions must be flat xyz triples")
         return value
+
+    @field_validator("uvs")
+    @classmethod
+    def _uvs_are_uv_pairs(cls, value: list[float]) -> list[float]:
+        if len(value) % 2 != 0:
+            raise ValueError("uvs must be flat [u, v] pairs")
+        return value
+
+    @model_validator(mode="after")
+    def _uvs_match_positions(self) -> Primitive:
+        if self.uvs and len(self.uvs) // 2 != len(self.positions) // 3:
+            raise ValueError(
+                f"uvs must have one [u, v] pair per position: "
+                f"{len(self.uvs) // 2} pairs for {len(self.positions) // 3} positions"
+            )
+        return self
 
 
 class Mesh(BaseModel):

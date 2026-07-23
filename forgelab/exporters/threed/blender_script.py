@@ -19,6 +19,7 @@ Y-up lands upright.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Any
 
 from forgelab.exporters.base import Exporter
@@ -252,9 +253,18 @@ def _sort_for_boolean_targets(roots: list[Node]) -> list[Node]:
 
 
 class BlenderScriptExporter(Exporter):
-    """Compile a ForgeLab threed document into a runnable Blender bpy script."""
+    """Compile a ForgeLab threed document into a runnable Blender bpy script.
+
+    ``base_dir`` is the document's directory, used to turn a material's
+    relative ``base_color_texture`` into the absolute path the generated script
+    hands to ``bpy.data.images.load`` (mirroring the importers' ``base_dir``).
+    A document with no textures does not need it.
+    """
 
     tool_name = "blender_script"
+
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        self.base_dir = Path(base_dir) if base_dir else None
 
     def from_ir(self, document: ForgeDocument) -> bytes:
         material_nodes = [n for n in document.nodes if n.type == NODE_MATERIAL]
@@ -352,9 +362,60 @@ class BlenderScriptExporter(Exporter):
                 f'bsdf.inputs["Base Color"].default_value = {_vec(rgba)}',
                 f'bsdf.inputs["Metallic"].default_value = {_f(mat.metallic)}',
                 f'bsdf.inputs["Roughness"].default_value = {_f(mat.roughness)}',
-                f"materials[{mid!r}] = m",
+            ]
+            if mat.base_color_texture:
+                lines += self._image_texture_nodes(mat, rgba)
+            lines.append(f"materials[{mid!r}] = m")
+        return lines
+
+    def _image_texture_nodes(self, mat: Material, rgba: list[float]) -> list[str]:
+        """Wire an Image Texture node into the Principled BSDF's Base Color.
+
+        The node graph mirrors what Blender's own glTF importer builds for a
+        ``baseColorTexture`` (``glTF-Blender-IO``'s ``pbrMetallicRoughness.py``),
+        so a ForgeLab script and an imported ``.gltf`` of the same document
+        produce the same material:
+
+        - A white ``base_color`` links the texture's Color straight to Base
+          Color — no extra node, which is also the graph anyone hand-building
+          this would expect.
+        - Any other colour goes through a ``ShaderNodeMix`` in ``RGBA`` /
+          ``MULTIPLY`` mode, because glTF defines ``baseColorFactor`` as a
+          multiplier over the sampled texels, not a replacement. Its colour
+          sockets are addressed **by index** (6 and 7, result 2): the RGBA Mix
+          node has several sockets sharing the names "A"/"B"/"Result", so
+          lookup by name picks the wrong (float) ones. That indexing is copied
+          from Blender's importer, not guessed.
+        """
+        path = self._texture_path(mat.base_color_texture)
+        lines = [
+            f"_img = bpy.data.images.load({path!r}, check_existing=True)",
+            '_tex = m.node_tree.nodes.new("ShaderNodeTexImage")',
+            "_tex.image = _img",
+            f"_tex.label = {mat.base_color_texture!r}",
+        ]
+        if rgba[:3] == [1.0, 1.0, 1.0]:
+            lines.append(
+                '_ = m.node_tree.links.new(bsdf.inputs["Base Color"], _tex.outputs["Color"])'
+            )
+        else:
+            lines += [
+                '_mix = m.node_tree.nodes.new("ShaderNodeMix")',
+                '_mix.data_type = "RGBA"',
+                '_mix.blend_type = "MULTIPLY"',
+                '_mix.inputs["Factor"].default_value = 1.0',
+                f"_mix.inputs[7].default_value = {_vec([*rgba[:3], 1.0])}",
+                "_ = m.node_tree.links.new(_mix.inputs[6], _tex.outputs['Color'])",
+                '_ = m.node_tree.links.new(bsdf.inputs["Base Color"], _mix.outputs[2])',
             ]
         return lines
+
+    def _texture_path(self, texture: str) -> str:
+        """Absolute path to a texture, so the script runs from any directory."""
+        path = Path(texture)
+        if not path.is_absolute() and self.base_dir is not None:
+            path = self.base_dir / path
+        return str(path)
 
     def _object_block(
         self,
@@ -373,7 +434,10 @@ class BlenderScriptExporter(Exporter):
         lines.append("")
         lines.append(f"# object {node.id}")
         if mesh is not None:
-            desc = _detect_primitive(mesh)
+            # Explicit uvs are an authored unwrap, so the geometry must be built
+            # verbatim: swapping in bpy.ops.mesh.primitive_cube_add would
+            # silently substitute Blender's own default UV layout for it.
+            desc = None if any(p.uvs for p in mesh.primitives) else _detect_primitive(mesh)
             if desc is not None:
                 lines += self._primitive_add(desc)
                 geo_expr = _geo_matrix_expr(desc)
@@ -461,9 +525,16 @@ class BlenderScriptExporter(Exporter):
         face_mat: list[int] = []
         slots: list[str] = []
         slot_index: dict[str, int] = {}
+        uvs: list[tuple[float, float]] = []
+        has_uvs = any(prim.uvs for prim in mesh.primitives)
         for prim in mesh.primitives:
             base = len(verts)
             verts += _points(prim.positions)
+            if has_uvs:
+                # A primitive without uvs in a mesh that has them still needs a
+                # pair per vertex to keep the layer parallel to the vertices.
+                pairs = list(zip(prim.uvs[0::2], prim.uvs[1::2], strict=True))
+                uvs += pairs or [(0.0, 0.0)] * (len(prim.positions) // 3)
             if prim.material and prim.material not in slot_index:
                 slot_index[prim.material] = len(slots)
                 slots.append(prim.material)
@@ -478,6 +549,24 @@ class BlenderScriptExporter(Exporter):
             f"mesh = bpy.data.meshes.new({name!r})",
             f"mesh.from_pydata({vert_str}, [], {face_str})",
             "mesh.update()",
+        ]
+        if has_uvs:
+            # from_pydata creates no UV layer, so one is added and filled per
+            # face corner (loop), which is where Blender stores UVs.
+            #
+            # V IS FLIPPED. glTF puts the UV origin at the top-left, Blender at
+            # the bottom-left; Blender's own glTF importer converts with
+            # "u,v -> u,1-v" (uvs_gltf_to_blender in glTF-Blender-IO). The IR
+            # follows glTF, so the same flip belongs here — without it every
+            # texture lands mirrored vertically against the .gltf export.
+            uv_str = "[" + ", ".join(f"({_f(u)}, {_f(1.0 - v)})" for u, v in uvs) + "]"
+            lines += [
+                f"_uvs = {uv_str}",
+                '_uv_layer = mesh.uv_layers.new(name="UVMap")',
+                "for _loop in mesh.loops:",
+                "    _uv_layer.data[_loop.index].uv = _uvs[_loop.vertex_index]",
+            ]
+        lines += [
             f"{var} = bpy.data.objects.new({name!r}, mesh)",
             f"scene.collection.objects.link({var})",
         ]

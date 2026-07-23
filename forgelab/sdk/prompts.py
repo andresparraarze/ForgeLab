@@ -65,6 +65,19 @@ _REFERENCE_HINTS: dict[str, str] = {
         "position/translation component, not Z. Do NOT use Z as up: glTF is "
         "Y-up and Blender's importer converts Y-up back to its own Z-up world, "
         "so a Z-up document gets double-converted and lands tipped on its side."
+        "\n\nSurface detail: a material may carry a "
+        '"base_color_texture" — a path to an image file, relative to the '
+        "document's directory — for wood grain, brushed metal, fabric and "
+        "anything else a flat colour cannot express. It MULTIPLIES with "
+        '"base_color", so use white [1, 1, 1, 1] to show the image unchanged '
+        "and a colour to tint it. Every primitive using a textured material "
+        'MUST carry "uvs": a flat [u, v] array with one pair per position '
+        "(len(uvs) // 2 == len(positions) // 3), or validation fails — there "
+        "would be nothing to map the image onto. UV origin is top-left with V "
+        "increasing DOWNWARDS (glTF's convention). For a box, use cube "
+        "projection: give each of the 6 faces its own 4 corners (24 vertices, "
+        "not 8) so each face can span the full 0..1 image (see "
+        "examples/threed/textured_crate.forge.json)."
     ),
     "mechanical": (
         "Two modelling toolkits are available. PartDesign (sketch/pad/pocket) "

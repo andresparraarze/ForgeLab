@@ -7,6 +7,73 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Image textures on threed materials, and the UV coordinates they need.**
+  Every material was a flat PBR colour, so no surface could carry real detail —
+  wood grain, brushed metal, woven fabric. Two additions close that:
+  `Primitive.uvs` (a flat `[u, v]` array, one pair per position, packed like
+  `positions`) and `Material.base_color_texture` (a path to an image, resolved
+  relative to the document's directory the way an OBJ's companion `.mtl` is).
+  Both are optional and both default to absent.
+
+  Neither grammar was assumed. **glTF** was taken from the Khronos 2.0 schemas:
+  `baseColorFactor` is specified as a "linear multiplier for the sampled texels
+  of the base color texture", so colour and texture **multiply** and a textured
+  material keeps its factor; `images` accepts `uri` XOR `bufferView`, with
+  `mimeType` required only alongside the latter, so the image goes in as a
+  self-describing base64 data URI — one self-contained `.gltf`, matching how
+  geometry already travels. Exports now carry `images`/`samplers`/`textures`,
+  a `baseColorTexture: {index}` (texCoord omitted, since 0 is the default), and
+  a `TEXCOORD_0` VEC2/FLOAT accessor beside `POSITION`.
+
+  **Blender** was taken from `glTF-Blender-IO`, Blender's own glTF add-on, and
+  it turned up two things worth stating:
+  - **V is flipped.** glTF puts the UV origin at the top-left, Blender at the
+    bottom-left, and the importer converts with `u,v -> u,1-v`
+    (`uvs_gltf_to_blender`). The `blender_script` exporter applies the same
+    flip; without it every texture would land mirrored vertically against the
+    `.gltf` export of the same document.
+  - **The node graph depends on the colour.** A white `base_color` links the
+    Image Texture's Color straight into Base Color; anything else goes through
+    a `ShaderNodeMix` in `RGBA`/`MULTIPLY` mode, whose colour sockets must be
+    addressed **by index** (6, 7, result 2) because its `A`/`B`/`Result` names
+    are shared with float sockets. Both branches are copied from what Blender's
+    importer builds, so a ForgeLab script and an imported `.gltf` of the same
+    document produce the same material.
+
+  Also: a mesh carrying an authored unwrap no longer takes the
+  `primitive_cube_add` shortcut in the Blender exporter — rebuilding a
+  cube-shaped mesh as a Blender primitive would have silently substituted
+  Blender's default UV layout for the authored one.
+
+  New `check_threed` validation (wired into `validate_document` alongside the
+  hardware and mechanical checks): a textured material on a primitive with no
+  `uvs` is an **error** naming both — glTF would have no `TEXCOORD_0` to point
+  at and Blender would fall back to generated coordinates, i.e. a wrong render
+  rather than a failure. It also catches a primitive naming a material that is
+  not a material node id. UVs without a texture are not flagged; an unused
+  unwrap is harmless.
+
+  New worked example `examples/threed/textured_crate.forge.json` with a small
+  committed placeholder texture (`examples/threed/textures/wood_planks.png`,
+  741 bytes, plus the deterministic script that generates it). It is a unit
+  crate with cube-projection UVs — 6 faces × 4 unshared corners = 24 vertices,
+  each face spanning the full image — and the generator asserts every face
+  winds outward. Verified live in both exports: the glTF carries the sampler,
+  texture, `baseColorTexture` and a 24-count TEXCOORD_0 accessor whose embedded
+  bytes compare equal to the PNG on disk, and the Blender script parses and
+  emits the `ShaderNodeTexImage` + UV-layer wiring.
+
+  **Untextured documents export byte-for-byte unchanged** in both formats. The
+  pinned SHA-256s were captured by checking out the pre-change commit and
+  hashing there, not read off the new code.
+
+  Exporters gained `base_dir` (mirroring `Importer.base_dir`), which
+  `export_document` sets from `document_path`; it is only needed to resolve a
+  texture. One scoping limit, stated rather than papered over: the glTF
+  **importer** reads UVs back but not texture references — an embedded image
+  does not carry the original file path, and inventing one would break the
+  round-trip in a different way.
+
 - **`boolean` nodes in the mechanical domain — union, cut and common between
   two independently-built solids.** This closes a structural gap: every other
   mechanical feature works inside one body's own sketch/pad/pocket/loft/revolve

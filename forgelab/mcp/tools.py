@@ -70,6 +70,7 @@ from forgelab.validation import (
     check_fab_rules,
     check_hardware,
     check_mechanical,
+    check_threed,
     fab_profiles,
 )
 from forgelab.validation import (
@@ -176,9 +177,10 @@ def validate_document(
     # fatal (valid=False); warnings are surfaced but non-fatal. Each check gates
     # on its own domain and returns ([], []) otherwise, so both run safely.
     errors, warnings = check_mechanical(document_model)
-    h_errors, h_warnings = check_hardware(document_model)
-    errors += h_errors
-    warnings += h_warnings
+    for check in (check_hardware, check_threed):
+        d_errors, d_warnings = check(document_model)
+        errors += d_errors
+        warnings += d_warnings
     # Fabrication rules are advisory here: a hardware board with design_rules is
     # checked against the default fab (jlcpcb) and any violations are surfaced as
     # warnings, since the user may be targeting a different fab. Use the
@@ -1498,8 +1500,14 @@ def export_document(
         exporter = _registry.get_exporter(tool)
     except UnknownToolError as exc:
         raise ValueError(str(exc)) from exc
+    # Exporters that resolve companion assets (a threed material's
+    # base_color_texture) need the document's directory, the same way importers
+    # take base_dir for an OBJ's .mtl. It is only knowable from document_path.
+    instance = exporter()
+    if document_path:
+        instance.base_dir = _resolve_path(document_path).parent
     try:
-        data = exporter().from_ir(doc)
+        data = instance.from_ir(doc)
     except NotImplementedError as exc:
         raise ValueError(f"export not implemented for {tool!r}: {exc}") from exc
     except ValidationError as exc:

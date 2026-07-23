@@ -120,6 +120,28 @@ class BufferBuilder:
         )
         return len(self.accessors) - 1
 
+    def add_vec2(self, values: list[float]) -> int:
+        """Add flat uv floats as a VEC2/FLOAT accessor; return its index.
+
+        Texture coordinates carry no ``min``/``max``: glTF only requires those
+        on the POSITION accessor.
+        """
+        if len(values) % 2 != 0:
+            raise GltfError("VEC2 data length must be a multiple of 2")
+        if not values:
+            raise GltfError("VEC2 data must not be empty")
+        data = b"".join(struct.pack("<f", v) for v in values)
+        view = self._append(data, ARRAY_BUFFER)
+        self.accessors.append(
+            {
+                "bufferView": view,
+                "componentType": FLOAT,
+                "count": len(values) // 2,
+                "type": "VEC2",
+            }
+        )
+        return len(self.accessors) - 1
+
     def add_scalar_uint(self, values: list[int]) -> int:
         """Add ints as a SCALAR/UNSIGNED_INT accessor; return its index."""
         data = b"".join(struct.pack("<I", v) for v in values)
