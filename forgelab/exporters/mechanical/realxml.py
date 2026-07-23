@@ -222,6 +222,26 @@ def _link_list(name: str, targets: list[str]) -> str:
     )
 
 
+def _arc_parameters(start_deg: float, end_deg: float) -> tuple[float, float]:
+    """IR arc angles (degrees) -> FreeCAD ``StartAngle``/``EndAngle`` (radians).
+
+    FreeCAD stores an arc as a counter-clockwise sweep from StartAngle to
+    EndAngle, and normalizes what ``Part.ArcOfCircle`` is handed: the start is
+    wrapped into ``[0, 2*pi)`` and the end is pushed past it so the sweep stays
+    positive. Verified against FreeCAD 1.1 by building arcs and reading back
+    the saved ``Document.xml``: ``(-90, 0)`` and ``(270, 360)`` both serialize
+    as ``(4.712389, 6.283185)``, and ``(350, 10)`` as ``(6.108652, 6.457718)``.
+    Reproducing that here keeps a ForgeLab-written file byte-comparable with
+    one FreeCAD saves itself.
+    """
+    two_pi = 2 * math.pi
+    start = math.radians(start_deg) % two_pi
+    end = math.radians(end_deg) % two_pi
+    while end <= start:
+        end += two_pi
+    return start, end
+
+
 def _geometry(sketch: Sketch) -> str:
     entries = []
     for i, geo in enumerate(sketch.geometry, start=1):
@@ -239,6 +259,16 @@ def _geometry(sketch: Sketch) -> str:
                 f'EndX="{_f(x2)}" EndY="{_f(y2)}" EndZ="{_f(0)}"/>'
             )
             gtype = "Part::GeomLineSegment"
+        elif geo.geo_type == "arc":
+            cx, cy = geo.center
+            start, end = _arc_parameters(geo.start_angle, geo.end_angle)
+            shape = (
+                f'<ArcOfCircle CenterX="{_f(cx)}" CenterY="{_f(cy)}" CenterZ="{_f(0)}" '
+                f'NormalX="{_f(0)}" NormalY="{_f(0)}" NormalZ="{_f(1)}" '
+                f'AngleXU="{_f(0)}" Radius="{_f(geo.radius)}" '
+                f'StartAngle="{_f(start)}" EndAngle="{_f(end)}"/>'
+            )
+            gtype = "Part::GeomArcOfCircle"
         else:  # circle
             cx, cy = geo.center
             shape = (
@@ -765,6 +795,18 @@ def _estimate_bounds(
             if geo.geo_type == "line":
                 x1, y1, x2, y2 = geo.points
                 flat += [(x1, y1), (x2, y2)]
+            elif geo.geo_type == "arc":
+                # Only the swept part of the circle is drawn; its endpoints plus
+                # any axis extreme the sweep crosses bound it (conservatively —
+                # this box only has to contain the solid, not hug it).
+                start, end = geo.endpoints()
+                flat += [start, end]
+                cx, cy = geo.center
+                a0, a1 = _arc_parameters(geo.start_angle, geo.end_angle)
+                for k, (dx, dy) in enumerate(((1, 0), (0, 1), (-1, 0), (0, -1))):
+                    extreme = k * math.pi / 2
+                    if a0 <= extreme <= a1 or a0 <= extreme + 2 * math.pi <= a1:
+                        flat.append((cx + dx * geo.radius, cy + dy * geo.radius))
             else:
                 cx, cy = geo.center
                 flat += [(cx - geo.radius, cy - geo.radius), (cx + geo.radius, cy + geo.radius)]

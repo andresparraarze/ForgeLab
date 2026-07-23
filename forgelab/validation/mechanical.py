@@ -13,6 +13,8 @@ inspectable here.
 
 from __future__ import annotations
 
+import math
+
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.mechanical import (
     NODE_BODY,
@@ -28,6 +30,9 @@ from forgelab.spec.mechanical import (
 
 # Endpoints within this distance (mm) are treated as the same vertex.
 _CLOSURE_TOL = 0.001
+
+# A 2D sketch-plane point.
+_Point = tuple[float, float]
 
 _FEATURE_TYPES = (
     NODE_SKETCH,
@@ -118,7 +123,9 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
     # closed-loop warning below does not apply to them.
     sweep_path_refs = {str(n.props.get("path", "")) for n in nodes if n.type == NODE_SWEEP} - {""}
 
-    # Sketch checks: circle radius positive (error) + line-loop closure (warn).
+    # Sketch checks: circle/arc radius positive (error) + open-curve closure
+    # (warn). Lines and arcs are both open segments, so they trace one profile
+    # together — a rounded rectangle is 4 lines plus 4 corner arcs.
     for node in nodes:
         if node.type != NODE_SKETCH:
             continue
@@ -126,20 +133,25 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
             str(node.props.get("name", "")) in sweep_path_refs
         )
         geometry = node.props.get("geometry") or []
-        lines: list[list[float]] = []
+        segments: list[tuple[_Point, _Point]] = []
         for geo in geometry:
             if not isinstance(geo, dict):
                 continue
-            if geo.get("geo_type") == "circle":
+            geo_type = geo.get("geo_type")
+            if geo_type in ("circle", "arc"):
                 if float(geo.get("radius", 0.0)) <= 0.0:
-                    errors.append(f"sketch {node.id!r} has a circle with radius <= 0")
-            elif geo.get("geo_type") == "line":
+                    errors.append(f"sketch {node.id!r} has a {geo_type} with radius <= 0")
+                elif geo_type == "arc":
+                    segments.append(_arc_endpoints(geo))
+            elif geo_type == "line":
                 points = geo.get("points") or []
                 if len(points) == 4:
-                    lines.append([float(p) for p in points])
-        if lines and not is_sweep_path and not _lines_form_closed_loop(lines):
+                    segments.append(
+                        ((float(points[0]), float(points[1])), (float(points[2]), float(points[3])))
+                    )
+        if segments and not is_sweep_path and not _segments_form_closed_loop(segments):
             warnings.append(
-                f"sketch {node.id!r} line geometry is not a closed loop; "
+                f"sketch {node.id!r} geometry is not a closed loop; "
                 f"an open profile cannot be padded"
             )
 
@@ -298,20 +310,50 @@ def _revolve_axis_error(revolve_id: str, props: dict, nodes: list) -> str | None
     return None
 
 
-def _lines_form_closed_loop(lines: list[list[float]]) -> bool:
-    """True if every line endpoint meets another line's start point.
+def _arc_endpoints(geo: dict[str, object]) -> tuple[_Point, _Point]:
+    """The two points where an arc meets its neighbours in a profile.
 
-    Each line is ``[x1, y1, x2, y2]``. A closed loop requires every end point to
-    coincide (within ``_CLOSURE_TOL``) with the start point of some other line.
+    Angles are degrees counter-clockwise from +X, matching FreeCAD's Sketcher
+    convention (see ``SketchGeometry``).
     """
-    starts = [(line[0], line[1]) for line in lines]
-    for i, line in enumerate(lines):
-        end = (line[2], line[3])
-        connected = any(j != i and _close(end, start) for j, start in enumerate(starts))
-        if not connected:
-            return False
-    return True
+    center = geo.get("center") or [0.0, 0.0]
+    cx, cy = float(center[0]), float(center[1])  # type: ignore[index]
+    radius = float(geo.get("radius", 0.0))  # type: ignore[arg-type]
+    a0 = math.radians(float(geo.get("start_angle", 0.0)))  # type: ignore[arg-type]
+    a1 = math.radians(float(geo.get("end_angle", 0.0)))  # type: ignore[arg-type]
+    return (
+        (cx + radius * math.cos(a0), cy + radius * math.sin(a0)),
+        (cx + radius * math.cos(a1), cy + radius * math.sin(a1)),
+    )
 
 
-def _close(a: tuple[float, float], b: tuple[float, float]) -> bool:
+def _segments_form_closed_loop(segments: list[tuple[_Point, _Point]]) -> bool:
+    """True if every open-curve endpoint in the profile meets exactly one other.
+
+    Lines and arcs are both open segments; a closed profile is one where the
+    endpoints pair up, so each distinct vertex (within ``_CLOSURE_TOL``) is
+    touched by exactly two segment ends. Several disjoint loops in one sketch
+    still pass — that is a legal profile with an island, e.g. a plate outline
+    plus a square cut-out.
+
+    The pairing is deliberately *undirected*. A FreeCAD arc always sweeps
+    counter-clockwise, so in a clockwise-traced profile an arc's ``start`` is
+    the point the traversal *leaves* by; requiring end-meets-start would reject
+    a perfectly closed outline for the direction its arcs are obliged to have.
+    """
+    vertices: list[_Point] = []
+    degree: list[int] = []
+    for segment in segments:
+        for point in segment:
+            for i, known in enumerate(vertices):
+                if _close(point, known):
+                    degree[i] += 1
+                    break
+            else:
+                vertices.append(point)
+                degree.append(1)
+    return all(count == 2 for count in degree)
+
+
+def _close(a: _Point, b: _Point) -> bool:
     return abs(a[0] - b[0]) <= _CLOSURE_TOL and abs(a[1] - b[1]) <= _CLOSURE_TOL

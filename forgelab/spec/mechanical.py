@@ -15,6 +15,8 @@ hardware ``Pad`` already exported there.
 
 from __future__ import annotations
 
+import math
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 NODE_PART = "part"
@@ -72,7 +74,23 @@ class Body(BaseModel):
 
 
 class SketchGeometry(BaseModel):
-    """One geometry primitive in a sketch: a line segment or a circle."""
+    """One geometry primitive in a sketch: a line segment, a circle or an arc.
+
+    ``line`` and ``circle`` are closed-profile building blocks on their own;
+    ``arc`` is an *open* curve segment — a piece of a circle — whose two
+    endpoints join adjacent lines (or other arcs) to form a rounded profile:
+    a rounded rectangle, a slot, a filleted 2D outline.
+
+    Arc angles are **degrees, counter-clockwise from the +X axis**, and the arc
+    always sweeps counter-clockwise from ``start_angle`` to ``end_angle``. That
+    is FreeCAD's own Sketcher convention (``Part.ArcOfCircle`` takes the same
+    two angles in radians), verified against FreeCAD 1.1: an arc built at
+    ``(0, 90)`` around the origin with radius 5 starts at ``(5, 0)`` and ends
+    at ``(0, 5)``. The endpoints therefore are::
+
+        start = center + radius * (cos(start_angle), sin(start_angle))
+        end   = center + radius * (cos(end_angle),   sin(end_angle))
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,12 +98,14 @@ class SketchGeometry(BaseModel):
     points: list[float] = Field(default_factory=list)
     center: list[float] = Field(default_factory=list)
     radius: float = 0.0
+    start_angle: float = 0.0
+    end_angle: float = 0.0
 
     @field_validator("geo_type")
     @classmethod
     def _known_geo_type(cls, value: str) -> str:
-        if value not in ("line", "circle"):
-            raise ValueError("geo_type must be 'line' or 'circle'")
+        if value not in ("line", "circle", "arc"):
+            raise ValueError("geo_type must be 'line', 'circle' or 'arc'")
         return value
 
     @model_validator(mode="after")
@@ -95,12 +115,39 @@ class SketchGeometry(BaseModel):
                 raise ValueError("line geometry needs points [x1, y1, x2, y2]")
             if self.center or self.radius:
                 raise ValueError("line geometry must not set center/radius")
-        else:  # circle
+        elif self.geo_type == "circle":
             if len(self.center) != 2:
                 raise ValueError("circle geometry needs center [x, y]")
             if self.points:
                 raise ValueError("circle geometry must not set points")
+        else:  # arc
+            if len(self.center) != 2:
+                raise ValueError("arc geometry needs center [x, y]")
+            if self.points:
+                raise ValueError("arc geometry must not set points")
+            if self.start_angle == self.end_angle:
+                raise ValueError("arc geometry needs start_angle != end_angle (zero sweep)")
+            return self
+        if self.start_angle or self.end_angle:
+            raise ValueError(f"{self.geo_type} geometry must not set start_angle/end_angle")
         return self
+
+    def endpoints(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        """The ``(start, end)`` points of an open curve, for profile closure.
+
+        Defined for ``line`` and ``arc``; a ``circle`` is closed on its own and
+        has no endpoints to join, so it raises.
+        """
+        if self.geo_type == "line":
+            return (self.points[0], self.points[1]), (self.points[2], self.points[3])
+        if self.geo_type == "arc":
+            cx, cy = self.center
+            a0, a1 = math.radians(self.start_angle), math.radians(self.end_angle)
+            return (
+                (cx + self.radius * math.cos(a0), cy + self.radius * math.sin(a0)),
+                (cx + self.radius * math.cos(a1), cy + self.radius * math.sin(a1)),
+            )
+        raise ValueError(f"{self.geo_type} geometry is a closed curve and has no endpoints")
 
 
 class Constraint(BaseModel):
