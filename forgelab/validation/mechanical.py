@@ -18,6 +18,7 @@ import math
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_BOOLEAN,
     NODE_FILLET,
     NODE_LOFT,
     NODE_PAD,
@@ -36,6 +37,7 @@ _Point = tuple[float, float]
 
 _FEATURE_TYPES = (
     NODE_SKETCH,
+    NODE_BOOLEAN,
     NODE_PAD,
     NODE_POCKET,
     NODE_LOFT,
@@ -248,8 +250,199 @@ def check_mechanical(document: ForgeDocument) -> tuple[list[str], list[str]]:
                 error = _revolve_axis_error(node.id, node.props, nodes)
                 if error:
                     errors.append(error)
+        elif node.type == NODE_BOOLEAN:
+            base_ref = str(node.props.get("base", ""))
+            tool_refs = [str(t) for t in (node.props.get("tools") or [])]
+            missing = [r for r in [base_ref, *tool_refs] if unresolved(r)]
+            for ref in missing:
+                role = "base" if ref == base_ref else "tool"
+                errors.append(
+                    f"boolean {node.id!r} references {role} {ref!r} "
+                    f"which does not exist in the document"
+                )
+            if not missing and str(node.props.get("operation", "")) == "cut":
+                warning = _empty_cut_warning(node.id, base_ref, tool_refs[0], nodes)
+                if warning:
+                    warnings.append(warning)
 
     return errors, warnings
+
+
+def _empty_cut_warning(boolean_id: str, base_ref: str, tool_ref: str, nodes: list) -> str | None:
+    """A warning when a cut's tool cannot possibly remove material.
+
+    THE HEURISTIC, and its limits. FreeCAD does not complain about a nonsense
+    boolean: a cut that removes everything, or nothing, recomputes to a valid,
+    "Up-to-date" compound holding zero solids and volume 0 (verified live in
+    FreeCAD 1.1). Nothing downstream catches it, so a cheap pre-flight is worth
+    having.
+
+    The check is deliberately coarse: it compares **axis-aligned bounding
+    boxes** and warns only when the tool's box does not touch the base's at
+    all — the one case where no solid geometry inside them could possibly
+    intersect. It is not a geometric intersection test, so a tool that sits
+    inside the base's box but misses its actual material (a pin passing through
+    a C-shaped part's opening) is NOT caught, and it never reports a false
+    alarm the other way.
+
+    Boxes are estimated from the parametric description: a pad is its sketch's
+    2D extent extruded along the plane normal, a body is the union of its pads,
+    a boolean is derived from its own inputs. Anything whose extent cannot be
+    derived that way (loft, sweep, revolve, fillet, shell) yields no box, and
+    the check silently passes rather than guessing.
+    """
+    base_box = _solid_bbox(base_ref, nodes, set())
+    tool_box = _solid_bbox(tool_ref, nodes, set())
+    if base_box is None or tool_box is None:
+        return None
+    if _boxes_overlap(base_box, tool_box):
+        return None
+    return (
+        f"boolean {boolean_id!r} cuts {tool_ref!r} out of {base_ref!r}, but their "
+        f"bounding boxes do not overlap, so the cut removes nothing and the "
+        f"result is the base unchanged"
+    )
+
+
+# An axis-aligned box (xmin, ymin, zmin, xmax, ymax, zmax) in world space.
+_Box = tuple[float, float, float, float, float, float]
+
+# In-plane (u, v) basis + normal per datum plane, for lifting sketch 2D
+# coordinates into world space. Mirrors the exporter's _PLANE_BASIS.
+_PLANE_AXES: dict[str, tuple[tuple[float, float, float], ...]] = {
+    "XY": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+    "XZ": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+    "YZ": ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)),
+}
+
+
+def _boxes_overlap(a: _Box, b: _Box) -> bool:
+    """True when two axis-aligned boxes share any volume (touching counts)."""
+    return all(
+        a[i] <= b[i + 3] + _CLOSURE_TOL and b[i] <= a[i + 3] + _CLOSURE_TOL for i in range(3)
+    )
+
+
+def _find(ref: str, nodes: list):
+    for node in nodes:
+        if node.id == ref or str(node.props.get("name", "")) == ref:
+            return node
+    return None
+
+
+def _sketch_extent(sketch_props: dict) -> tuple[float, float, float, float] | None:
+    """The 2D ``(xmin, ymin, xmax, ymax)`` of a sketch's geometry."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for geo in sketch_props.get("geometry") or []:
+        if not isinstance(geo, dict):
+            continue
+        kind = geo.get("geo_type")
+        if kind == "line":
+            points = [float(p) for p in geo.get("points") or []]
+            if len(points) == 4:
+                xs += [points[0], points[2]]
+                ys += [points[1], points[3]]
+        elif kind in ("circle", "arc"):
+            center = geo.get("center") or []
+            if len(center) == 2:
+                cx, cy = float(center[0]), float(center[1])
+                r = float(geo.get("radius", 0.0))
+                # The full circle bounds an arc too — generous on purpose, so
+                # the heuristic never warns about a cut that could work.
+                xs += [cx - r, cx + r]
+                ys += [cy - r, cy + r]
+    if not xs:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _pad_bbox(props: dict, nodes: list) -> _Box | None:
+    sketch = _find(str(props.get("profile", "")), nodes)
+    if sketch is None or sketch.type != NODE_SKETCH:
+        return None
+    extent = _sketch_extent(sketch.props)
+    if extent is None:
+        return None
+    u, v, n = _PLANE_AXES[_PLANE_KEYS.get(str(sketch.props.get("plane", "")).strip().upper(), "XY")]
+    origin = (sketch.props.get("placement") or {}).get("position") or [0.0, 0.0, 0.0]
+    length = float(props.get("length", 0.0))
+    if props.get("midplane"):
+        depths = (-length / 2, length / 2)
+    elif props.get("reversed"):
+        depths = (-length, 0.0)
+    else:
+        depths = (0.0, length)
+    corners = []
+    for x in (extent[0], extent[2]):
+        for y in (extent[1], extent[3]):
+            for d in depths:
+                corners.append(
+                    tuple(
+                        float(origin[i]) + x * u[i] + y * v[i] + d * n[i]  # type: ignore[index]
+                        for i in range(3)
+                    )
+                )
+    return (
+        min(c[0] for c in corners),
+        min(c[1] for c in corners),
+        min(c[2] for c in corners),
+        max(c[0] for c in corners),
+        max(c[1] for c in corners),
+        max(c[2] for c in corners),
+    )
+
+
+def _solid_bbox(ref: str, nodes: list, seen: set[str]) -> _Box | None:
+    """A world-space box for a boolean operand, or None when it can't be derived."""
+    node = _find(ref, nodes)
+    if node is None or node.id in seen:
+        return None
+    seen = seen | {node.id}
+    if node.type == NODE_PAD:
+        return _pad_bbox(node.props, nodes)
+    if node.type == NODE_BODY:
+        # A body is its pads; pockets only remove material, so they never grow
+        # the extent.
+        boxes = [
+            _pad_bbox(n.props, nodes)
+            for n in nodes
+            if n.type == NODE_PAD
+            and str(n.props.get("body", "")) in (node.id, str(node.props.get("name", "")))
+        ]
+        return _union_boxes([b for b in boxes if b is not None])
+    if node.type == NODE_BOOLEAN:
+        operation = str(node.props.get("operation", ""))
+        base = _solid_bbox(str(node.props.get("base", "")), nodes, seen)
+        if operation == "cut":
+            return base  # a cut never grows past its base
+        tools = [_solid_bbox(str(t), nodes, seen) for t in (node.props.get("tools") or [])]
+        parts = [b for b in [base, *tools] if b is not None]
+        if len(parts) != 1 + len(tools) or base is None:
+            return None
+        return _union_boxes(parts) if operation == "union" else _intersect_boxes(parts)
+    return None  # loft / sweep / revolve / fillet / shell: extent not derivable
+
+
+def _union_boxes(boxes: list[_Box]) -> _Box | None:
+    if not boxes:
+        return None
+    return (
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        min(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+        max(b[4] for b in boxes),
+        max(b[5] for b in boxes),
+    )
+
+
+def _intersect_boxes(boxes: list[_Box]) -> _Box | None:
+    lo = tuple(max(b[i] for b in boxes) for i in range(3))
+    hi = tuple(min(b[i + 3] for b in boxes) for i in range(3))
+    if any(lo[i] > hi[i] for i in range(3)):
+        return None  # disjoint: no common volume to bound
+    return (lo[0], lo[1], lo[2], hi[0], hi[1], hi[2])
 
 
 def _revolve_axis_error(revolve_id: str, props: dict, nodes: list) -> str | None:

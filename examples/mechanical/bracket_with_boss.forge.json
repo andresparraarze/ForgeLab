@@ -1,0 +1,248 @@
+{
+  "forgelab_version": "0.5.0",
+  "domain": "mechanical",
+  "meta": {
+    "name": "bracket-with-boss",
+    "generator": "forgelab",
+    "description": "Two independently-built solids unioned into one part: a 60x40x8 mm base plate and a separately-modelled r9 x 23 mm cylindrical boss sunk 3 mm into it."
+  },
+  "nodes": [
+    {
+      "id": "Bracket",
+      "type": "part",
+      "props": {
+        "name": "Bracket",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "Plate",
+      "type": "body",
+      "props": {
+        "name": "Plate",
+        "part": "Bracket",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "PlateProfile",
+      "type": "sketch",
+      "props": {
+        "name": "PlateProfile",
+        "body": "Plate",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              0.0,
+              60.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0,
+            "start_angle": 0.0,
+            "end_angle": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              60.0,
+              0.0,
+              60.0,
+              40.0
+            ],
+            "center": [],
+            "radius": 0.0,
+            "start_angle": 0.0,
+            "end_angle": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              60.0,
+              40.0,
+              0.0,
+              40.0
+            ],
+            "center": [],
+            "radius": 0.0,
+            "start_angle": 0.0,
+            "end_angle": 0.0
+          },
+          {
+            "geo_type": "line",
+            "points": [
+              0.0,
+              40.0,
+              0.0,
+              0.0
+            ],
+            "center": [],
+            "radius": 0.0,
+            "start_angle": 0.0,
+            "end_angle": 0.0
+          }
+        ],
+        "constraints": [
+          {
+            "ctype": "DistanceX",
+            "value": 60.0,
+            "name": "Width"
+          },
+          {
+            "ctype": "DistanceY",
+            "value": 40.0,
+            "name": "Depth"
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "PlatePad",
+      "type": "pad",
+      "props": {
+        "name": "PlatePad",
+        "body": "Plate",
+        "profile": "PlateProfile",
+        "length": 8.0,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    },
+    {
+      "id": "Boss",
+      "type": "body",
+      "props": {
+        "name": "Boss",
+        "part": "Bracket",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "children": []
+    },
+    {
+      "id": "BossProfile",
+      "type": "sketch",
+      "props": {
+        "name": "BossProfile",
+        "body": "Boss",
+        "plane": "XY_Plane",
+        "placement": {
+          "position": [
+            0.0,
+            0.0,
+            5.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "geometry": [
+          {
+            "geo_type": "circle",
+            "points": [],
+            "center": [
+              30.0,
+              20.0
+            ],
+            "radius": 9.0,
+            "start_angle": 0.0,
+            "end_angle": 0.0
+          }
+        ],
+        "constraints": [
+          {
+            "ctype": "Radius",
+            "value": 9.0,
+            "name": "BossRadius"
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "BossPad",
+      "type": "pad",
+      "props": {
+        "name": "BossPad",
+        "body": "Boss",
+        "profile": "BossProfile",
+        "length": 23.0,
+        "reversed": false,
+        "midplane": false
+      },
+      "children": []
+    },
+    {
+      "id": "Bracket_Assembly",
+      "type": "boolean",
+      "props": {
+        "name": "Bracket_Assembly",
+        "body": "",
+        "operation": "union",
+        "base": "Plate",
+        "tools": [
+          "Boss"
+        ]
+      },
+      "children": []
+    }
+  ]
+}

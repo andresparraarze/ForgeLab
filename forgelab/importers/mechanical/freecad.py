@@ -21,6 +21,7 @@ from forgelab.importers.mechanical.realxml import parse_real_document
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_BOOLEAN,
     NODE_FILLET,
     NODE_LOFT,
     NODE_PAD,
@@ -31,6 +32,7 @@ from forgelab.spec.mechanical import (
     NODE_SKETCH,
     NODE_SWEEP,
     Body,
+    Boolean,
     Fillet,
     Loft,
     Pad,
@@ -54,6 +56,7 @@ _NODE_BY_FCTYPE = {
     "Part::Fillet": NODE_FILLET,
     "Part::Thickness": NODE_SHELL,
     "Part::Revolution": NODE_REVOLVE,
+    "Part::Boolean": NODE_BOOLEAN,
 }
 
 _MODEL_BY_NODE = {
@@ -67,6 +70,7 @@ _MODEL_BY_NODE = {
     NODE_FILLET: Fillet,
     NODE_SHELL: Shell,
     NODE_REVOLVE: Revolve,
+    NODE_BOOLEAN: Boolean,
 }
 
 assert set(_NODE_BY_FCTYPE.values()) == set(_MODEL_BY_NODE), "FreeCAD type maps are out of sync"

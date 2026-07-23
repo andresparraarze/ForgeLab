@@ -33,6 +33,7 @@ from forgelab.formats import (
 from forgelab.spec import ForgeDocument
 from forgelab.spec.mechanical import (
     NODE_BODY,
+    NODE_BOOLEAN,
     NODE_FILLET,
     NODE_LOFT,
     NODE_PAD,
@@ -43,6 +44,7 @@ from forgelab.spec.mechanical import (
     NODE_SKETCH,
     NODE_SWEEP,
     Body,
+    Boolean,
     Fillet,
     Loft,
     Pad,
@@ -66,6 +68,10 @@ _FCTYPE_BY_NODE = {
     NODE_FILLET: "Part::Fillet",
     NODE_SHELL: "Part::Thickness",
     NODE_REVOLVE: "Part::Revolution",
+    # The sidecar is ForgeLab's own dialect, so it names the boolean family
+    # rather than one concrete member: the real Document.xml picks
+    # Part::MultiFuse / Part::MultiCommon / Part::Cut per operation.
+    NODE_BOOLEAN: "Part::Boolean",
 }
 
 _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
@@ -79,6 +85,7 @@ _MODEL_BY_NODE: dict[str, type[AnyModel]] = {
     NODE_FILLET: Fillet,
     NODE_SHELL: Shell,
     NODE_REVOLVE: Revolve,
+    NODE_BOOLEAN: Boolean,
 }
 
 # field name -> property type, per node type, in canonical write order.
@@ -144,6 +151,13 @@ _FIELDS = {
         ("profile", "Link"),
         ("axis", "String"),
         ("angle", "Float"),
+    ],
+    NODE_BOOLEAN: [
+        ("name", "String"),
+        ("body", "Link"),
+        ("operation", "String"),
+        ("base", "Link"),
+        ("tools", "StringList"),
     ],
 }
 

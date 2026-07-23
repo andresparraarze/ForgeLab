@@ -22,6 +22,7 @@ def test_registry_covers_all_domains():
         "fillet",
         "shell",
         "revolve",
+        "boolean",
     }
 
 
@@ -40,6 +41,7 @@ def test_mechanical_schema_pins_domain_and_includes_pad():
         "fillet",
         "shell",
         "revolve",
+        "boolean",
     }
 
 
