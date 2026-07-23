@@ -117,12 +117,18 @@ class GltfImporter(Importer):
                 indices: list[int] = []
                 if "indices" in prim:
                     indices = [int(v) for v in decode_accessor(gltf, prim["indices"])]
+                uvs: list[float] = []
+                uv_index = prim.get("attributes", {}).get("TEXCOORD_0")
+                if uv_index is not None:
+                    uvs = [float(v) for v in decode_accessor(gltf, uv_index)]
             except GltfError as exc:
                 raise GltfParseError(f"failed to decode primitive geometry: {exc}") from exc
             material = ""
             if "material" in prim:
                 material = _material_id(gltf, prim["material"])
-            prims.append(Primitive(positions=positions, indices=indices, material=material))
+            prims.append(
+                Primitive(positions=positions, indices=indices, uvs=uvs, material=material)
+            )
         return Mesh(name=mesh.get("name") or "mesh", primitives=prims)
 
     def _object(self, gltf: dict, index: int, counter: list[int]) -> Node:

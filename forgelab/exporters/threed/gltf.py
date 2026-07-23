@@ -14,7 +14,10 @@ land tipped — see ``forgelab.spec.threed``.)
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
+from pathlib import Path
 from typing import Any
 
 from forgelab.exporters.base import Exporter
@@ -51,10 +54,53 @@ def _resolve_ref(ref: str, index: dict[str, int], kind: str) -> int:
         ) from None
 
 
+# Sampler constants from the glTF 2.0 schema. LINEAR magnification with
+# trilinear mipmapping and REPEAT wrapping is the ordinary choice for a
+# surface-detail texture, and REPEAT is the spec default for wrapS/wrapT.
+_LINEAR = 9729
+_LINEAR_MIPMAP_LINEAR = 9987
+_REPEAT = 10497
+
+
+def _embed_image(path: str, base_dir: Path | None) -> dict[str, Any]:
+    """Read a texture file and return a glTF ``images`` entry embedding it.
+
+    The image goes in as a base64 data URI, matching how geometry already
+    travels in this exporter's single embedded buffer — a ``.gltf`` ForgeLab
+    writes stays one self-contained file with no sibling assets to lose. The
+    glTF schema allows exactly one of ``uri`` / ``bufferView`` per image, and a
+    data URI carries its own media type, so no separate ``mimeType`` is needed
+    (that field is only required alongside ``bufferView``).
+    """
+    resolved = Path(path)
+    if not resolved.is_absolute() and base_dir is not None:
+        resolved = base_dir / resolved
+    try:
+        data = resolved.read_bytes()
+    except OSError as exc:
+        raise ValueError(
+            f"base_color_texture {path!r} could not be read ({exc.strerror}). "
+            f"Texture paths resolve relative to the document's directory"
+            + (f" ({base_dir})" if base_dir is not None else ", which is unknown here")
+            + "."
+        ) from None
+    mime = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+    uri = f"data:{mime};base64," + base64.b64encode(data).decode()
+    return {"name": Path(path).name, "uri": uri}
+
+
 class GltfExporter(Exporter):
-    """Convert a ForgeDocument into glTF bytes."""
+    """Convert a ForgeDocument into glTF bytes.
+
+    ``base_dir`` is the document's directory, used to resolve a material's
+    ``base_color_texture`` path (mirroring the importers' ``base_dir``). A
+    document with no textures does not need it.
+    """
 
     tool_name = "gltf"
+
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        self.base_dir = Path(base_dir) if base_dir else None
 
     def from_ir(self, document: ForgeDocument) -> bytes:
         material_nodes = [n for n in document.nodes if n.type == NODE_MATERIAL]
@@ -79,16 +125,28 @@ class GltfExporter(Exporter):
         }
 
         materials = []
+        images: list[dict[str, Any]] = []
+        textures: list[dict[str, Any]] = []
+        texture_of_path: dict[str, int] = {}
         for n in material_nodes:
             m = Material.model_validate(n.props)
-            mat_entry: dict[str, Any] = {
-                "name": m.name,
-                "pbrMetallicRoughness": {
-                    "baseColorFactor": m.base_color,
-                    "metallicFactor": m.metallic,
-                    "roughnessFactor": m.roughness,
-                },
+            pbr: dict[str, Any] = {
+                "baseColorFactor": m.base_color,
+                "metallicFactor": m.metallic,
+                "roughnessFactor": m.roughness,
             }
+            if m.base_color_texture:
+                # Several materials may share one image file; emit it once.
+                if m.base_color_texture not in texture_of_path:
+                    images.append(_embed_image(m.base_color_texture, self.base_dir))
+                    textures.append({"sampler": 0, "source": len(images) - 1})
+                    texture_of_path[m.base_color_texture] = len(textures) - 1
+                # textureInfo: texCoord defaults to 0 (TEXCOORD_0), so it is
+                # left out. baseColorFactor stays: the spec defines it as a
+                # linear multiplier over the sampled texels, not an
+                # alternative to them.
+                pbr["baseColorTexture"] = {"index": texture_of_path[m.base_color_texture]}
+            mat_entry: dict[str, Any] = {"name": m.name, "pbrMetallicRoughness": pbr}
             # glTF materials default to alphaMode OPAQUE, under which viewers
             # ignore baseColorFactor's alpha entirely — a translucent material
             # must say BLEND explicitly or it renders solid.
@@ -97,6 +155,17 @@ class GltfExporter(Exporter):
             materials.append(mat_entry)
         if materials:
             gltf["materials"] = materials
+        if images:
+            gltf["images"] = images
+            gltf["samplers"] = [
+                {
+                    "magFilter": _LINEAR,
+                    "minFilter": _LINEAR_MIPMAP_LINEAR,
+                    "wrapS": _REPEAT,
+                    "wrapT": _REPEAT,
+                }
+            ]
+            gltf["textures"] = textures
 
         builder = BufferBuilder()
         meshes = []
@@ -104,9 +173,10 @@ class GltfExporter(Exporter):
             mesh = Mesh.model_validate(n.props)
             prims = []
             for prim in mesh.primitives:
-                entry: dict[str, Any] = {
-                    "attributes": {"POSITION": builder.add_vec3(prim.positions)},
-                }
+                attributes = {"POSITION": builder.add_vec3(prim.positions)}
+                if prim.uvs:
+                    attributes["TEXCOORD_0"] = builder.add_vec2(prim.uvs)
+                entry: dict[str, Any] = {"attributes": attributes}
                 if prim.indices:
                     entry["indices"] = builder.add_scalar_uint(prim.indices)
                 if prim.material:
