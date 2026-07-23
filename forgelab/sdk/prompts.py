@@ -69,7 +69,16 @@ _REFERENCE_HINTS: dict[str, str] = {
     "mechanical": (
         "Two modelling toolkits are available. PartDesign (sketch/pad/pocket) "
         "is for prismatic engineering parts — brackets, mounts, plates, "
-        "enclosures — built by extruding and cutting closed 2D profiles. The "
+        "enclosures — built by extruding and cutting closed 2D profiles. "
+        "Sketch geometry is line, circle or arc. An arc is an OPEN segment of "
+        'a circle — {"geo_type": "arc", "center": [x, y], "radius": r, '
+        '"start_angle": a0, "end_angle": a1} with angles in DEGREES '
+        "counter-clockwise from the +X axis, sweeping counter-clockwise from "
+        "start to end — so its two endpoints join adjacent lines the way two "
+        "lines join each other. Use arcs for rounded rectangles, slots and "
+        "filleted 2D outlines instead of approximating them with a circle "
+        "cut: a rounded rectangle is 4 straight edges plus 4 corner arcs "
+        "(see examples/mechanical/rounded_rect_plate.forge.json). The "
         "Part workbench (loft/sweep/fillet/shell) is for organic or curved "
         "shapes — grips, handles, knobs, ergonomic surfaces — where FreeCAD's OCC "
         "kernel computes real NURBS geometry. The canonical organic pattern "

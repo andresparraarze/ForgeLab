@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`arc` sketch geometry in the mechanical domain.** Sketches could draw only
+  `line` and `circle`, so a rounded rectangle, a slot or any filleted 2D
+  outline had no direct expression — a real build worked around it by cutting a
+  circle pocket. `SketchGeometry` now takes `geo_type: "arc"` with `center`,
+  `radius`, `start_angle` and `end_angle` in **degrees counter-clockwise from
+  +X**, sweeping counter-clockwise from start to end. That is FreeCAD's own
+  Sketcher convention, verified against FreeCAD 1.1 rather than assumed: arcs
+  were built through `Part.ArcOfCircle`, saved, and the resulting
+  `Document.xml` read back. The exporter emits the grammar that file uses —
+  `Part::GeomArcOfCircle` holding `<ArcOfCircle Center* Normal* AngleXU Radius
+  StartAngle EndAngle/>`, angles in radians — and reproduces FreeCAD's own
+  normalization (start wrapped into `[0, 2π)`, end pushed past it so the sweep
+  stays positive), so `(-90, 0)` and `(270, 360)` serialize identically, as
+  FreeCAD does.
+
+  An arc is an *open* curve, so `check_mechanical`'s profile-closure check now
+  traces loops through lines and arcs together, using an arc's two computed
+  endpoints as its connection points. The pairing is also now **undirected**:
+  a FreeCAD arc always sweeps counter-clockwise, so in a clockwise-traced
+  outline an arc's `start` is the point the traversal leaves by, and the old
+  end-meets-start rule would have rejected a perfectly closed profile for the
+  direction its arcs are obliged to have. Nothing that used to pass now fails.
+
+  New worked example `examples/mechanical/rounded_rect_plate.forge.json` — a
+  60 × 40 × 6 mm plate with 8 mm rounded corners, 4 straight edges plus 4
+  corner arcs. Verified live in FreeCAD 1.1: it recomputes clean into 8 edges
+  (4 `LineSegment`, 4 `ArcOfCircle`), volume **14070.372 mm³** — exactly
+  `60·40·6 − (4−π)·8²·6` — in a bounding box of exactly 60 × 40 × 6 at the
+  origin. The bounding box is the part that pins the angle convention; a
+  wrong one still closes the loop but moves the corners.
+
+  Adding two fields to `SketchGeometry` widens every sketch geometry dict by
+  `start_angle`/`end_angle` (0.0 for lines and circles), so
+  `examples/mechanical/box-with-hole.forge.json` was regenerated from its
+  `.FCStd`; the diff is those fields and nothing else. Archives written before
+  arcs existed still read back unchanged — the codec defaults both to 0.
+
 ### Fixed
 - **The Arduino Uno board's last two DRC warning categories.**
   `kicad-cli pcb drc --refill-zones` on the routed, poured, through-hole Uno

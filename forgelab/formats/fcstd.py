@@ -87,6 +87,8 @@ def _encode_property(parent: ET.Element, prop: FcProperty) -> None:
                     "points": ",".join(_fmt_float(x) for x in geo.get("points", [])),
                     "center": ",".join(_fmt_float(x) for x in geo.get("center", [])),
                     "radius": _fmt_float(geo.get("radius", 0.0)),
+                    "start_angle": _fmt_float(geo.get("start_angle", 0.0)),
+                    "end_angle": _fmt_float(geo.get("end_angle", 0.0)),
                 },
             )
     elif prop.ptype == "ConstraintList":
@@ -137,6 +139,11 @@ def _decode_property(el: ET.Element) -> FcProperty:
                 "points": _floats(g.get("points", "")),
                 "center": _floats(g.get("center", "")),
                 "radius": float(g.get("radius", "0")),
+                # Absent on archives written before arcs existed; 0/0 is what a
+                # line or circle carries anyway, so the default reads them back
+                # unchanged.
+                "start_angle": float(g.get("start_angle", "0")),
+                "end_angle": float(g.get("end_angle", "0")),
             }
             for g in el.findall("Geo")
         ]

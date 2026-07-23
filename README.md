@@ -199,7 +199,15 @@ integration tests when kicad-cli is installed. The only violations left are 24
 The mechanical domain covers both of FreeCAD's modelling styles. Use
 **PartDesign** (`sketch`/`pad`/`pocket`) for prismatic engineering parts —
 brackets, mounts, plates, enclosures — built by extruding and cutting closed 2D
-profiles. Use the **Part workbench** (`loft`/`sweep`/`fillet`/`shell`/`revolve`) for
+profiles. Sketch geometry is `line`, `circle` or `arc`. An **arc** is an open
+segment of a circle — `center`, `radius`, `start_angle`, `end_angle` in degrees
+counter-clockwise from +X, sweeping counter-clockwise (FreeCAD's own Sketcher
+convention) — whose two endpoints join adjacent lines the way two lines join
+each other, so a profile can be traced through a mix of both. That is what
+makes **rounded rectangles, slots and filleted 2D outlines** expressible
+directly instead of approximated with a circular cut: a rounded rectangle is 4
+straight edges plus 4 corner arcs (see
+`examples/mechanical/rounded_rect_plate.forge.json`). Use the **Part workbench** (`loft`/`sweep`/`fillet`/`shell`/`revolve`) for
 organic or curved shapes — grips, handles, knobs, ergonomic surfaces — where
 the exported file carries only the feature description and FreeCAD's own
 OpenCASCADE kernel computes the real NURBS geometry on recompute. Choose
