@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **The Arduino Uno board's last two DRC warning categories.**
+  `kicad-cli pcb drc --refill-zones` on the routed, poured, through-hole Uno
+  now reports **zero `silk_over_copper` (was 12) and zero `hole_to_hole`
+  (was 2)**. Two real causes, both fixed at the source:
+  - The KiCad exporter emitted a bare `(property "Reference" ...)`, which KiCad
+    places at the footprint origin — the middle of the pad row on a centred
+    part. References now carry an explicit `(at ...)`, `(layer "F.SilkS")` and
+    font, offset clear of the pads the way the KiCad library footprints do
+    (`(at 0 -2.38 0)` on a 2.54mm header), and stepped further out when the
+    default spot would cross a *neighbouring* part's copper on a densely
+    auto-placed board. `Value` moves to `F.Fab`, a fabrication layer that
+    cannot collide with copper at all — again matching the libraries.
+  - `route_board` dropped a via wherever a path changed layer, including on a
+    through-hole pad of the same net whose plated barrel already joins the
+    layers. Such vias are now suppressed: a second drill hole beside the pad's
+    own bought nothing and tripped the drill-to-drill rule. The Uno loses one
+    via (25 → 24) and no connectivity — same nets routed, same pours.
+
+  After both fixes the **only** violations KiCad reports on that board are 24
+  `lib_footprint_*` warnings: ForgeLab's synthesized footprints do not
+  byte-match the installed KiCad libraries. That is a separate footprint-fidelity
+  question, not a board defect, and it is not fixed here.
+
+  Note: reference-designator placement changes every KiCad export, SMD included,
+  so the pinned all-SMD byte-identity SHA was deliberately re-pinned once.
+
 ### Added
 - **Through-hole / drill support in the hardware domain.** `Pad` gains an
   optional `drill` (`{diameter}` round, `{oval: [w, h]}` slot, `plated` true by
@@ -31,11 +58,10 @@ All notable changes to this project are documented here. The format is based on
     real shorts caught by kicad-cli) and keeps tracks a board-edge clearance
     inside the outline (else edge-clearance errors). Those two correctness fixes
     drop the Uno auto-route from 25 to ~21 signal nets — an honest trade for a
-    DRC-error-clean, edge-clean board. Remaining warnings are cosmetic
-    (silk-over-copper where a reference designator crosses a larger pad, a
-    same-net hole-to-hole where a redundant via lands on a through-hole pad);
-    the SMD crystal and reset button in the example keep their real SMD
-    footprints and are untouched.
+    DRC-error-clean, edge-clean board. The two cosmetic warning categories the
+    larger pads introduced (silk-over-copper, same-net hole-to-hole) are fixed
+    under **Fixed** above. The SMD crystal and reset button in the example keep
+    their real SMD footprints and are untouched.
 - **Copper zones / pours in the hardware domain.** A new `zone` node type
   (net, layer, boundary polygon, clearance, min_thickness) expresses filled
   copper planes — the way every real 2-layer board carries power and ground,

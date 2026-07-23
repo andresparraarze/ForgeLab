@@ -16,6 +16,8 @@ round-trips stay identity.
 
 from __future__ import annotations
 
+import math
+
 from forgelab.exporters.base import Exporter
 from forgelab.formats import Symbol, dumps
 from forgelab.spec import (
@@ -52,6 +54,22 @@ _DEFAULT_LAYERS = [
 _ZONE_HATCH_PITCH = 0.5
 _ZONE_THERMAL_GAP = 0.5
 _ZONE_THERMAL_BRIDGE = 0.5
+
+# Footprint text (matches the KiCad library default: 1mm glyphs, 0.15mm pen).
+_TEXT_SIZE = 1.0
+_TEXT_THICKNESS = 0.15
+# Half the drawn height of a one-line reference designator, pen included.
+_TEXT_HALF_HEIGHT = _TEXT_SIZE / 2 + _TEXT_THICKNESS / 2
+# Gap left between that text and the nearest pad's solder-mask opening. KiCad's
+# silk_over_copper rule fires on any overlap, so the offset only has to clear
+# the copper; the extra margin keeps the silkscreen legible next to the pad.
+_SILK_PAD_GAP = 0.35
+# Per-character advance of KiCad's stroke font, as a fraction of the glyph box.
+_TEXT_ADVANCE = 0.8
+# How far, and in how many tries, a colliding reference designator is stepped
+# away from the part before giving up and taking the library-convention spot.
+_SILK_STEP = 0.6
+_SILK_MAX_STEPS = 8
 
 
 def _num(value: float) -> int | float:
@@ -103,6 +121,33 @@ def _flip_y(y: float, axis: float) -> float:
     return round(axis - y, 6) + 0.0  # + 0.0 normalizes -0.0
 
 
+# An axis-aligned rectangle (x0, y0, x1, y1) in the absolute KiCad frame.
+_Rect = tuple[float, float, float, float]
+
+
+def _rotate_local(x: float, y: float, angle: float) -> tuple[float, float]:
+    """Rotate a footprint-local (Y-down) offset by the footprint's angle.
+
+    KiCad's positive angle is counterclockwise on screen, so the rotation is
+    applied in the Y-up view and mapped back down.
+    """
+    theta = math.radians(angle)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    return x * cos_t + y * sin_t, -x * sin_t + y * cos_t
+
+
+def _rotated_half_extents(width: float, height: float, angle: float) -> tuple[float, float]:
+    """Half-extents of the axis-aligned bbox of a rotated w x h rectangle."""
+    theta = math.radians(angle)
+    cos_t, sin_t = abs(math.cos(theta)), abs(math.sin(theta))
+    return (width * cos_t + height * sin_t) / 2, (width * sin_t + height * cos_t) / 2
+
+
+def _overlaps(a: _Rect, b: _Rect) -> bool:
+    """True when two axis-aligned rectangles share any area."""
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
 class KiCadExporter(Exporter):
     """Export ForgeLab IR to a KiCad PCB."""
 
@@ -128,8 +173,11 @@ class KiCadExporter(Exporter):
         for net in sorted(nets, key=lambda n: n.code):
             tree.append(_s("net", net.code, net.name))
         tree.append(self._net_class_block(board.design_rules, nets))
+        # Silkscreen text is placed around every pad on the board, not just the
+        # part's own, so the obstacle set is built once up front.
+        obstacles = self._pad_obstacles(components, axis)
         for comp in components:
-            tree.append(self._footprint(comp, name_to_code, axis))
+            tree.append(self._footprint(comp, name_to_code, axis, obstacles))
         for node in document.nodes:
             if node.type == NODE_TRACK:
                 track = Track.model_validate(node.props)
@@ -233,21 +281,16 @@ class KiCadExporter(Exporter):
                 block.append(_s("add_net", net.name))
         return block
 
-    def _footprint(self, comp: Component, name_to_code: dict[str, int], axis: float) -> list:
-        fp: list = [Symbol("footprint"), comp.footprint, _s("layer", comp.layer)]
-        if comp.uuid is not None:
-            fp.append(_s("uuid", comp.uuid))
-        # Absolute Y is mirrored into KiCad's Y-down frame; the rotation angle
-        # passes through (CCW-on-screen in both conventions).
-        fp.append(_s("at", _num(comp.at[0]), _num(_flip_y(comp.at[1], axis)), _num(comp.at[2])))
-        fp.append(_s("property", "Reference", comp.reference))
-        fp.append(_s("property", "Value", comp.value))
+    def _placed_pads(self, comp: Component) -> list[tuple[Pad, float, float, float, float]]:
+        """Resolve every pad to ``(pad, x, y, width, height)`` in footprint-local
+        KiCad (Y-down) coordinates — the geometry the exporter emits, and the
+        same geometry the silkscreen placement has to keep clear of."""
         total = len(comp.pads)
         # Size-less pads render the shared pitch-aware default, so the copper
         # here matches what the layout and validation tools assumed.
         default = pad_default_size([p.at for p in comp.pads if p.at is not None])
+        placed: list[tuple[Pad, float, float, float, float]] = []
         for index, pad in enumerate(comp.pads):
-            code = name_to_code.get(pad.net, 0)
             # Honor an explicit pad offset; otherwise spread pads on a grid so
             # a multi-pin part doesn't collapse onto the footprint origin.
             if pad.at is not None:
@@ -260,6 +303,42 @@ class KiCadExporter(Exporter):
                 x, y = pad_grid_offset(index, total)
                 y = -y + 0.0
             width, height = (pad.size[0], pad.size[1]) if pad.size else (default, default)
+            placed.append((pad, x, y, width, height))
+        return placed
+
+    def _pad_obstacles(self, components: list[Component], axis: float) -> list[_Rect]:
+        """Every pad's copper as an absolute, axis-aligned rectangle in the KiCad
+        frame. Silkscreen text is routed around these so it never lands on a
+        pad's solder-mask opening — a ``silk_over_copper`` DRC warning."""
+        rects: list[_Rect] = []
+        for comp in components:
+            cx, cy, angle = comp.at[0], _flip_y(comp.at[1], axis), comp.at[2]
+            for _pad, x, y, width, height in self._placed_pads(comp):
+                px, py = _rotate_local(x, y, angle)
+                half_w, half_h = _rotated_half_extents(width, height, angle)
+                rects.append(
+                    (cx + px - half_w, cy + py - half_h, cx + px + half_w, cy + py + half_h)
+                )
+        return rects
+
+    def _footprint(
+        self,
+        comp: Component,
+        name_to_code: dict[str, int],
+        axis: float,
+        obstacles: list[_Rect],
+    ) -> list:
+        fp: list = [Symbol("footprint"), comp.footprint, _s("layer", comp.layer)]
+        if comp.uuid is not None:
+            fp.append(_s("uuid", comp.uuid))
+        # Absolute Y is mirrored into KiCad's Y-down frame; the rotation angle
+        # passes through (CCW-on-screen in both conventions).
+        fp.append(_s("at", _num(comp.at[0]), _num(_flip_y(comp.at[1], axis)), _num(comp.at[2])))
+        placed = self._placed_pads(comp)
+
+        fp.extend(self._text_properties(comp, placed, axis, obstacles))
+        for pad, x, y, width, height in placed:
+            code = name_to_code.get(pad.net, 0)
             shape = pad.shape if pad.shape else "roundrect"
             if pad.drill is None:
                 # SMD: copper on the component's layer only. Output unchanged.
@@ -278,6 +357,84 @@ class KiCadExporter(Exporter):
             else:
                 fp.append(self._through_hole_pad(pad, code, x, y, width, height, shape))
         return fp
+
+    def _text_properties(
+        self,
+        comp: Component,
+        placed: list[tuple[Pad, float, float, float, float]],
+        axis: float,
+        obstacles: list[_Rect],
+    ) -> list[list]:
+        """Reference on silkscreen clear of copper, Value on the fab layer.
+
+        A bare ``(property "Reference" ...)`` lands at the footprint origin,
+        which on a real part sits in the middle of the pad row — KiCad's DRC
+        then reports ``silk_over_copper`` against every pad the text crosses.
+        The KiCad libraries place the designator outside the pads instead (e.g.
+        ``(at 0 -2.38 0)`` on ``F.SilkS`` for a 2.54mm header), so this offsets
+        the text past the pads' bounding box by half its glyph height plus a
+        gap, and then steps it further out until it also clears *every other*
+        part's copper — a densely auto-placed board puts neighbours close
+        enough that clearing only your own pads is not sufficient. Value goes
+        to ``F.Fab``, which is not a silkscreen layer and so cannot collide
+        with copper at all, again matching the library footprints.
+
+        Coordinates are footprint-local and unrotated: KiCad rotates the text
+        with the footprint, so the offset stays clear of the pads at any angle.
+        """
+        if placed:
+            top = min(y - height / 2 for _pad, _x, y, _w, height in placed)
+            bottom = max(y + height / 2 for _pad, _x, y, _w, height in placed)
+        else:
+            top = bottom = 0.0
+        gap = _TEXT_HALF_HEIGHT + _SILK_PAD_GAP
+        ref_y = self._silk_offset(comp, top - gap, bottom + gap, axis, obstacles)
+        effects = _s(
+            "effects",
+            _s("font", _s("size", _TEXT_SIZE, _TEXT_SIZE), _s("thickness", _TEXT_THICKNESS)),
+        )
+        return [
+            _s(
+                "property",
+                "Reference",
+                comp.reference,
+                _s("at", 0, _num(round(ref_y, 6)), 0),
+                _s("layer", "F.SilkS"),
+                effects,
+            ),
+            _s(
+                "property",
+                "Value",
+                comp.value,
+                _s("at", 0, _num(round(bottom + gap, 6)), 0),
+                _s("layer", "F.Fab"),
+                effects,
+            ),
+        ]
+
+    def _silk_offset(
+        self, comp: Component, above: float, below: float, axis: float, obstacles: list[_Rect]
+    ) -> float:
+        """Pick the local Y for the reference designator that clears all copper.
+
+        Alternates above/below the part, stepping outward, and returns the first
+        offset whose text rectangle touches no pad on the board. Falls back to
+        the first candidate (directly above the part, the library convention) if
+        nothing within ``_SILK_MAX_STEPS`` is clear — better a warning than a
+        designator flung off into another part of the board.
+        """
+        cx, cy, angle = comp.at[0], _flip_y(comp.at[1], axis), comp.at[2]
+        # KiCad's stroke font advances a little under one glyph box per
+        # character; this over-estimates slightly, which is the safe direction.
+        half_w = len(comp.reference) * _TEXT_SIZE * _TEXT_ADVANCE / 2
+        for step in range(_SILK_MAX_STEPS):
+            for candidate in (above - step * _SILK_STEP, below + step * _SILK_STEP):
+                tx, ty = _rotate_local(0.0, candidate, angle)
+                ex, ey = _rotated_half_extents(2 * half_w, 2 * _TEXT_HALF_HEIGHT, angle)
+                rect = (cx + tx - ex, cy + ty - ey, cx + tx + ex, cy + ty + ey)
+                if not any(_overlaps(rect, other) for other in obstacles):
+                    return candidate
+        return above
 
     def _through_hole_pad(
         self, pad: Pad, code: int, x: float, y: float, width: float, height: float, shape: str

@@ -11,3 +11,6 @@ venv/
 .pyright/
 *.json.schema
 .claude/settings.local.json
+
+# MCP tool-call history written next to a project's documents
+.forge.history
