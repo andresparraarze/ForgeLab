@@ -58,6 +58,19 @@ def _unique(points: list[tuple[float, float, float]]) -> list[tuple[float, float
     return list(seen)
 
 
+def _mean(values: list[float]) -> float:
+    """The arithmetic mean, identical on every interpreter and platform.
+
+    ``math.fsum`` rather than the builtin ``sum``: CPython 3.12 changed
+    ``sum()`` over floats to Neumaier compensated summation (gh-100425), so the
+    same coordinates averaged to ``0.0`` on 3.12+ and ``6.27e-17`` on 3.11.
+    Those centres are written straight into the generated script, which made the
+    export bytes a function of the interpreter version. ``fsum`` is correctly
+    rounded by definition, so it has no such freedom.
+    """
+    return math.fsum(values) / len(values)
+
+
 def _detect_box(points: list[tuple[float, float, float]]) -> dict[str, Any] | None:
     uniq = _unique(points)
     if len(uniq) != 8:
@@ -82,10 +95,11 @@ def _detect_cylinder(points: list[tuple[float, float, float]]) -> dict[str, Any]
     n = len(uniq)
     if n < 8 or (n - 2) % 2 != 0:
         return None
-    cx = sum(p[0] for p in uniq) / n
-    cy = sum(p[1] for p in uniq) / n
-    cz = sum(p[2] for p in uniq) / n
-    center = (cx, cy, cz)
+    center = (
+        _mean([p[0] for p in uniq]),
+        _mean([p[1] for p in uniq]),
+        _mean([p[2] for p in uniq]),
+    )
     for axis in (0, 1, 2):
         o1, o2 = [i for i in (0, 1, 2) if i != axis]
         radii = [math.hypot(p[o1] - center[o1], p[o2] - center[o2]) for p in uniq]
@@ -114,13 +128,15 @@ def _detect_sphere(points: list[tuple[float, float, float]]) -> dict[str, Any] |
     uniq = _unique(points)
     if len(uniq) < 12:
         return None
-    cx = sum(p[0] for p in uniq) / len(uniq)
-    cy = sum(p[1] for p in uniq) / len(uniq)
-    cz = sum(p[2] for p in uniq) / len(uniq)
-    radii = [math.dist(p, (cx, cy, cz)) for p in uniq]
+    center = (
+        _mean([p[0] for p in uniq]),
+        _mean([p[1] for p in uniq]),
+        _mean([p[2] for p in uniq]),
+    )
+    radii = [math.dist(p, center) for p in uniq]
     if max(radii) - min(radii) > _TOL or min(radii) <= _TOL:
         return None
-    return {"kind": "sphere", "center": (cx, cy, cz), "radius": sum(radii) / len(radii)}
+    return {"kind": "sphere", "center": center, "radius": _mean(radii)}
 
 
 def _detect_primitive(mesh: Mesh) -> dict[str, Any] | None:

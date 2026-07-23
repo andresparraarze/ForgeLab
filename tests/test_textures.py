@@ -55,6 +55,12 @@ _TEXTURE = "textures/wood_planks.png"
 # SHA-256 of each untextured example's export, captured from the commit BEFORE
 # textures existed (checked out and hashed, not taken from the new code). A
 # document with no base_color_texture and no uvs must still hash to these.
+#
+# These values are interpreter-independent: verified byte-identical on CPython
+# 3.11.15 and 3.14.5. They are unchanged from when they were first captured --
+# a 3.11-only float-summation bug (see tests/test_export_determinism.py) once
+# made 3.11 miss three of them, and the fix was to correct the arithmetic, not
+# to re-pin the hashes.
 _UNTEXTURED_SHAS = {
     "space_station": (
         "dcbd9ed89829344d6bfc6849eda8b66e150ba3f7ca59c399af5d47c1fe0f83b8",
