@@ -1480,6 +1480,14 @@ def export_document(
     lighting — prefer it over ``gltf`` when the target is Blender). Call
     ``list_formats`` for the full list.
 
+    A mechanical document also exports to ``step`` — the ISO 10303 format every
+    other CAD package reads, and the right choice for handing a part to
+    SolidWorks, Fusion, Onshape or a machinist — and to ``stl`` for slicers and
+    mesh tools. Both build the part in FreeCAD, so both need it installed (see
+    ``generation_status``), whereas ``freecad`` writes the parametric recipe and
+    needs nothing. Note ``stl`` imports into the threed domain but exports from
+    the mechanical one, so it is not a round trip.
+
     Without ``output_path``, returns the file inline:
     {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
 

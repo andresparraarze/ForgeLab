@@ -9,7 +9,12 @@ from collections.abc import Callable, Sequence
 
 from forgelab.core.registry import Registry
 from forgelab.exporters.hardware import AltiumExporter, GerberExporter, KiCadExporter
-from forgelab.exporters.mechanical import FreeCADExporter, Fusion360Exporter
+from forgelab.exporters.mechanical import (
+    FreeCADExporter,
+    Fusion360Exporter,
+    StepExporter,
+    StlExporter,
+)
 from forgelab.exporters.threed import (
     BlenderExporter,
     BlenderScriptExporter,
@@ -48,6 +53,8 @@ _EXPORTERS = [
     GerberExporter,
     Fusion360Exporter,
     FreeCADExporter,
+    StepExporter,
+    StlExporter,
     BlenderExporter,
     BlenderScriptExporter,
     UnrealExporter,
