@@ -44,9 +44,10 @@ condition of its own:
 ```python
 from external_tools import requires_freecad
 
+
 @requires_freecad
 def test_the_part_builds():
-    ...
+    assert verify_document(document)["verified"]
 ```
 
 ## Adding an importer or exporter

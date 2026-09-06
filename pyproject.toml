@@ -36,8 +36,16 @@ mcp = ["mcp>=1.12,<2"]
 dev = [
   "pytest>=8.0",
   "httpx>=0.27",
-  "ruff>=0.4",
-  "pyright>=1.1.350",
+  # Exact pins, on purpose. A checker whose output is a gate and whose rules
+  # change by design gets pinned; a library gets a range. Unpinned, a ruff or
+  # pyright release turns main red with no commit behind it — which is what
+  # happened twice on 2026-09-06 (ruff 0.16 began formatting Markdown code
+  # blocks, pyright 1.1.411 stopped narrowing a getattr on a discriminated
+  # union). It also cuts the other way: this box was two ruff minors behind CI,
+  # so the local gates were not the gates that mattered. The weekly
+  # tooling-drift workflow reports new releases so these move deliberately.
+  "ruff==0.16.6",
+  "pyright==1.1.411",
   "pyjwt>=2.8",
   "cryptography>=42",
   "python-multipart>=0.0.9",
@@ -63,13 +71,16 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.format]
-# ruff 0.16 began formatting Python code blocks inside Markdown. Everything it
-# wants to touch is under docs/superpowers/ — the dated spec and plan documents
-# for work already shipped. Those are a record of what was proposed at the time,
-# not living source, so rewriting their snippets is both noise and a small
-# falsification of the archive. CI installs ruff unpinned, so without this the
-# format check breaks on a version bump alone.
-exclude = ["**/*.md"]
+# ruff 0.16 began formatting Python code blocks inside Markdown. The only
+# Markdown in this repo carrying Python blocks is docs/superpowers/ — the dated
+# spec and plan documents for work already shipped. Those are a record of what
+# was proposed at the time, not living source, so rewriting their snippets is
+# both noise and a small falsification of the archive.
+#
+# Scoped to that directory rather than all Markdown: a snippet added to
+# README.md or CHANGELOG.md should be held to the same standard as the code it
+# documents, and a blanket **/*.md would exempt it silently.
+exclude = ["docs/superpowers/**/*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]

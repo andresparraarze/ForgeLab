@@ -14,6 +14,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "scripts/check.sh"
 _WORKFLOW = _ROOT / ".github/workflows/ci.yml"
+_WORKFLOWS = sorted((_ROOT / ".github/workflows").glob("*.yml"))
 
 #: Gate names the script declares in its ALL_GATES array.
 _DECLARED = re.search(r"ALL_GATES=\(([^)]*)\)", _SCRIPT.read_text()).group(1).split()
@@ -41,20 +42,22 @@ def test_ci_runs_every_gate_the_script_defines():
     assert set(_INVOKED) == set(_DECLARED)
 
 
-def test_ci_does_not_run_the_tools_directly():
+@pytest.mark.parametrize("workflow", _WORKFLOWS, ids=lambda p: p.name)
+def test_no_workflow_runs_the_tools_directly(workflow):
     """Every check goes through the script, or the two can diverge again.
 
-    A bare `run: pytest` in the workflow would look identical in the UI and
-    quietly stop matching what `scripts/check.sh` runs locally.
+    A bare `run: pytest` in a workflow would look identical in the UI and
+    quietly stop matching what `scripts/check.sh` runs locally. Checked across
+    every workflow, not just ci.yml, so a new one cannot reintroduce the split.
     """
-    for line in _WORKFLOW.read_text().splitlines():
+    for line in workflow.read_text().splitlines():
         run = line.strip()
         if not run.startswith("run:"):
             continue
         command = run[len("run:") :].strip()
         first = command.split()[0] if command else ""
         assert first not in {"ruff", "pyright", "pytest"}, (
-            f"ci.yml invokes {first!r} directly; call scripts/check.sh instead"
+            f"{workflow.name} invokes {first!r} directly; call scripts/check.sh instead"
         )
 
 
