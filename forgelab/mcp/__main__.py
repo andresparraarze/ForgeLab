@@ -18,13 +18,25 @@ def _build(argv: list[str] | None = None):
     if args.transport == "stdio":
         server = create_server(None)
     else:
-        server = create_server(AuthSettings.from_env(os.environ), host=args.host, port=args.port)
+        server = create_server(AuthSettings.from_env(os.environ))
     return server, args
 
 
 def main(argv: list[str] | None = None) -> None:
     server, args = _build(argv)
-    server.run(transport=args.transport)
+    if args.transport == "stdio":
+        server.run(transport="stdio")
+        return
+    # Transport settings belong to run(), not to the constructor. Passing them
+    # to a transport that ignores them would hide a typo, so stdio is dispatched
+    # separately rather than handing it a host and port it will drop.
+    server.run(
+        transport="streamable-http",
+        host=args.host,
+        port=args.port,
+        stateless_http=True,
+        json_response=True,
+    )
 
 
 if __name__ == "__main__":
