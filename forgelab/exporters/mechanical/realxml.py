@@ -717,6 +717,9 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
     datas = []
     extra_objects: list[tuple[str, str, list[str]]] = []
     files: dict[str, bytes] = {}
+    #: node id -> edge count the all-edges fillet estimator produced. Only the
+    #: kernel knows the true count, so verification checks these against it.
+    estimated_edges: dict[str, int] = {}
     for nid, ntype, model in items:
         fcname = name_of[nid]
         object_names.append(fcname)
@@ -838,10 +841,18 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
                 count = _estimate_edge_count(model_of[target_id], sketch_model_of)
                 if count is None:
                     raise ValueError(
-                        f"fillet {nid!r}: cannot derive the edge count of target "
-                        f"{model.target!r}; give an explicit 'edges' list"
+                        f"fillet {nid!r} asks to round every edge of {model.target!r}, "
+                        f"but the edge count of a {type(model_of[target_id]).__name__.lower()} "
+                        f"cannot be derived without an OCC kernel. Give an explicit "
+                        f"'edges' list (1-based OCC edge indices on the target's shape). "
+                        f"To find the real count: remove this fillet, run verify_geometry, "
+                        f"and read 'edges' from the target's node report"
                     )
                 edges = list(range(1, count + 1))
+                # Recorded so verification can hold the estimate to account: it
+                # is derived analytically, and only the kernel knows the true
+                # count. See forgelab.verify.
+                estimated_edges[nid] = count
             entry = f"{fcname}.Edges"
             files[entry] = fillet_edges_blob(edges, model.radius)
             props = [
@@ -917,7 +928,9 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         f"</Document>\n"
     )
     gui_xml = _gui_document_xml(object_names, visible_names, _camera_settings(items))
-    return RealDocument(document_xml, gui_xml, files, solid_names, solid_body_names)
+    return RealDocument(
+        document_xml, gui_xml, files, solid_names, solid_body_names, estimated_edges
+    )
 
 
 class RealDocument(NamedTuple):
@@ -936,6 +949,13 @@ class RealDocument(NamedTuple):
     ``solid_body_names`` lists the bodies that own a pad/pocket chain, and so
     are expected to have a tip shape at all — the rest are containers whose null
     shape is normal.
+
+    ``estimated_fillet_edges`` maps a fillet's node id to the edge count
+    :func:`_estimate_edge_count` produced for it, for the all-edges fillets only
+    (a fillet with an explicit ``edges`` list is absent). The exporter has no OCC
+    kernel and derives that number analytically, so it is a claim, not a fact —
+    recorded here so ``forgelab.verify`` can hold it against what the kernel
+    reports the target's edge count actually is.
     """
 
     document_xml: str
@@ -943,6 +963,7 @@ class RealDocument(NamedTuple):
     files: dict[str, bytes]
     solid_names: tuple[str, ...] = ()
     solid_body_names: tuple[str, ...] = ()
+    estimated_fillet_edges: dict[str, int] = {}
 
 
 def _estimate_bounds(
