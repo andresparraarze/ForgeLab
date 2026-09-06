@@ -25,6 +25,9 @@ from forgelab.calc import (
     calculate_board_layout as _calc_board_layout,
 )
 from forgelab.calc import (
+    calculate_bolt_circle as _calc_bolt_circle,
+)
+from forgelab.calc import (
     calculate_pad_positions as _calc_pad_positions,
 )
 from forgelab.calc import (
@@ -32,6 +35,12 @@ from forgelab.calc import (
 )
 from forgelab.calc import (
     calculate_rotation_matrix as _calc_rotation_matrix,
+)
+from forgelab.calc import (
+    calculate_rounded_rect as _calc_rounded_rect,
+)
+from forgelab.calc import (
+    calculate_slot as _calc_slot,
 )
 from forgelab.calc import (
     calculate_trace_width as _calc_trace_width,
@@ -1334,6 +1343,67 @@ def calculate_polygon(sides: int, radius: float, center: list[float] | None = No
     """
     require_scope("forge:read")
     return _calc_polygon(sides, radius, center)
+
+
+def calculate_bolt_circle(
+    count: int,
+    radius: float,
+    hole_radius: float,
+    center: list[float] | None = None,
+    start_angle: float = 0.0,
+) -> list[dict[str, object]]:
+    """Holes evenly spaced around a bolt circle, as mechanical sketch geometry.
+
+    The standard way holes are specified on a flange, a motor face or a lid.
+    Drop the result straight into a sketch node's ``geometry`` and pocket it.
+
+    ``radius`` is the bolt-circle radius (pattern centre to hole centre).
+    ``hole_radius`` is a RADIUS, not a diameter — an M3 clearance hole is 1.7.
+    ``center`` is the pattern's ``[x, y]`` (default origin) and ``start_angle``
+    the degrees counter-clockwise from +X for the first hole.
+
+    Returns ``count`` circle primitives. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_bolt_circle(count, radius, hole_radius, center, start_angle)
+
+
+def calculate_rounded_rect(
+    width: float,
+    height: float,
+    corner_radius: float,
+    origin: list[float] | None = None,
+) -> list[dict[str, object]]:
+    """A closed rounded-rectangle sketch profile: 4 lines + 4 corner arcs.
+
+    Rounded rectangles are the most common mechanical outline and the most
+    tedious to write: each corner arc needs a centre plus start and end angles
+    in degrees counter-clockwise from +X, and every endpoint must land exactly
+    on the neighbouring line or the profile will not close and nothing can be
+    padded from it. This gets all eight pieces right.
+
+    ``origin`` is the ``[x, y]`` lower-left corner of the bounding box (default
+    origin); ``corner_radius`` must be under half the shorter side.
+
+    Returns eight primitives forming one closed loop. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_rounded_rect(width, height, corner_radius, origin)
+
+
+def calculate_slot(
+    x1: float, y1: float, x2: float, y2: float, width: float
+) -> list[dict[str, object]]:
+    """A closed slot profile: two parallel lines capped by two semicircles.
+
+    An adjustment slot or a cable cut-out. ``(x1, y1)`` and ``(x2, y2)`` are the
+    centres of the END CAPS, not the extreme ends, so the overall length is
+    their distance plus ``width``. Works at any angle.
+
+    Returns four primitives forming one closed loop. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_slot(x1, y1, x2, y2, width)
 
 
 def calculate_rotation_matrix(angle_deg: float, axis: str = "y") -> list[float]:

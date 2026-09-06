@@ -34,6 +34,21 @@ _FEW_SHOT: dict[str, list[tuple[str, str]]] = {
             "a NEMA17 stepper motor mount plate",
             "mechanical/motor_mount.forge.json",
         ),
+        # The prismatic example above never leaves sketch/pad/pocket. This one
+        # shows the other half of the vocabulary — a revolve — because a model
+        # given only pad/pocket examples reaches for stacked pads to fake a
+        # round shape instead of spinning one profile.
+        (
+            "a rounded control knob",
+            "mechanical/rounded_knob.forge.json",
+        ),
+        # Booleans get the longest paragraph in the guidance below and are the
+        # only way to combine separately-built solids, so they are worth a
+        # worked example rather than prose alone.
+        (
+            "an L-bracket with a cylindrical boss on the upright",
+            "mechanical/bracket_with_boss.forge.json",
+        ),
     ],
 }
 
@@ -124,7 +139,30 @@ _REFERENCE_HINTS: dict[str, str] = {
         "take several tools at once; cut takes exactly one (chain booleans to "
         "cut more). Position the operands so they actually meet: FreeCAD "
         "reports NO error for a cut that removes nothing or an intersection "
-        "that is empty — it returns an empty result instead."
+        "that is empty — it returns an empty result instead.\n\n"
+        "Do not compute sketch trigonometry by hand. Three tools return "
+        "ready-to-paste geometry for the profiles that are laborious and easy "
+        "to get subtly wrong: calculate_rounded_rect(width, height, "
+        "corner_radius, origin) for a rounded outline (4 lines + 4 corner arcs "
+        "whose endpoints must meet exactly, or the profile does not close and "
+        "nothing can be padded from it), calculate_bolt_circle(count, radius, "
+        "hole_radius, center, start_angle) for holes on a flange, motor face "
+        "or lid (hole_radius is a RADIUS — an M3 clearance hole is 1.7, not "
+        "3.4), and calculate_slot(x1, y1, x2, y2, width) for an adjustment "
+        "slot or cable cut-out (the two points are the END-CAP CENTRES, so the "
+        "overall length is their distance plus width). Drop the returned list "
+        'straight into a sketch node\'s "geometry".\n\n'
+        "Check your work, because a mechanical part can fail silently. FreeCAD "
+        "returns no error for a feature that builds nothing — an impossible "
+        "fillet radius, a shell with no opening, a boolean whose operands miss "
+        "— so the document validates and exports while the part comes out "
+        "empty. After building a mechanical document, call verify_geometry on "
+        "it: it recomputes the part in the real FreeCAD kernel and names the "
+        "specific node that produced no solid. Then call preview_render to see "
+        "it (iso/front/right/top views) and critique_render to judge it "
+        "against the request. verify_geometry says whether the part exists; "
+        "the render says whether it is the right part. Both need FreeCAD "
+        "installed — generation_status reports whether it is available."
     ),
 }
 

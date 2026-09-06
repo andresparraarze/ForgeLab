@@ -10,6 +10,11 @@ from forgelab.calc.electrical import calculate_trace_width
 from forgelab.calc.geometry import calculate_polygon, calculate_rotation_matrix
 from forgelab.calc.layout import calculate_board_layout
 from forgelab.calc.pads import calculate_pad_positions
+from forgelab.calc.sketch import (
+    calculate_bolt_circle,
+    calculate_rounded_rect,
+    calculate_slot,
+)
 
 __all__ = [
     "calculate_pad_positions",
@@ -17,4 +22,7 @@ __all__ = [
     "calculate_rotation_matrix",
     "calculate_trace_width",
     "calculate_board_layout",
+    "calculate_bolt_circle",
+    "calculate_rounded_rect",
+    "calculate_slot",
 ]
