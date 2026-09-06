@@ -62,6 +62,15 @@ packages = ["forgelab"]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.format]
+# ruff 0.16 began formatting Python code blocks inside Markdown. Everything it
+# wants to touch is under docs/superpowers/ — the dated spec and plan documents
+# for work already shipped. Those are a record of what was proposed at the time,
+# not living source, so rewriting their snippets is both noise and a small
+# falsification of the archive. CI installs ruff unpinned, so without this the
+# format check breaks on a version bump alone.
+exclude = ["**/*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 

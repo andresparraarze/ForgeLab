@@ -58,6 +58,13 @@ class ForgeAgent:
             messages=[{"role": "user", "content": prompt}],
         )
         for block in message.content:
-            if getattr(block, "type", None) == "tool_use" and block.name == _TOOL_NAME:
+            # Compare block.type directly rather than through getattr: the SDK's
+            # content blocks are a discriminated union, and a plain attribute
+            # comparison is what narrows it to ToolUseBlock so .name/.input
+            # resolve. Reading the discriminant with getattr defeats that, and a
+            # type checker then looks for .name on every block class in the
+            # union — 20 errors under pyright 1.1.411. Every block has .type, so
+            # the default was never reachable anyway.
+            if block.type == "tool_use" and block.name == _TOOL_NAME:
                 return validate_llm_output(block.input, domain=domain)
         raise LLMOutputError("Claude did not return a ForgeLab tool call.")
