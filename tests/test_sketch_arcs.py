@@ -15,7 +15,6 @@ always positive.
 import json
 import math
 import re
-import shutil
 import subprocess
 import textwrap
 import zipfile
@@ -23,6 +22,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 from pydantic import ValidationError
 
 from forgelab.core import validate
@@ -230,7 +230,7 @@ def test_rounded_rect_plate_example_validates():
     assert kinds.count("line") == 4 and kinds.count("arc") == 4
 
 
-@pytest.mark.skipif(shutil.which("freecadcmd") is None, reason="FreeCAD is not installed")
+@requires_freecad
 def test_rounded_rect_plate_example_builds_the_right_solid_in_freecad(tmp_path):
     """The live check: FreeCAD recomputes the example and the solid it builds
     has the volume and bounding box a rounded rectangle must have.

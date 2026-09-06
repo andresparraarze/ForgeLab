@@ -20,7 +20,6 @@ and the probing turned up four things worth pinning:
 
 import json
 import math
-import shutil
 import subprocess
 import textwrap
 import zipfile
@@ -28,6 +27,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 from pydantic import ValidationError
 
 from forgelab.core import validate
@@ -46,7 +46,6 @@ from forgelab.validation import check_mechanical
 
 _EXAMPLE = Path(__file__).resolve().parents[1] / "examples/mechanical/bracket_with_boss.forge.json"
 
-_FREECAD = pytest.mark.skipif(shutil.which("freecadcmd") is None, reason="FreeCAD is not installed")
 
 # The fixture geometry every operation test below shares: a 20 x 20 x 10 base
 # block and a 10 x 10 x 20 tool block sitting at (0, 0) and rising from z=0, so
@@ -311,7 +310,7 @@ def _volumes(out: str) -> dict[str, float]:
     }
 
 
-@_FREECAD
+@requires_freecad
 def test_union_of_two_non_overlapping_solids_is_the_sum(tmp_path):
     # The tool starts exactly at the base's top face: they touch, share no
     # volume, and the union is the plain sum.
@@ -324,7 +323,7 @@ def test_union_of_two_non_overlapping_solids_is_the_sum(tmp_path):
     assert "SOLIDS: 1" in out  # genuinely joined, not a two-solid compound
 
 
-@_FREECAD
+@requires_freecad
 def test_union_of_two_overlapping_solids_subtracts_the_overlap(tmp_path):
     out = _run_freecad(tmp_path, doc := _two_body_doc("union"), _VOLUME_PROBE)
     assert doc is not None
@@ -334,7 +333,7 @@ def test_union_of_two_overlapping_solids_subtracts_the_overlap(tmp_path):
     assert v["RESULT"] == pytest.approx(v["BASE"] + v["TOOL"] - v["OVERLAP"])
 
 
-@_FREECAD
+@requires_freecad
 def test_cut_removes_exactly_the_intersection(tmp_path):
     out = _run_freecad(tmp_path, _two_body_doc("cut"), _VOLUME_PROBE)
     v = _volumes(out)
@@ -342,7 +341,7 @@ def test_cut_removes_exactly_the_intersection(tmp_path):
     assert v["RESULT"] == pytest.approx(_BASE_VOLUME - _OVERLAP)
 
 
-@_FREECAD
+@requires_freecad
 def test_common_keeps_only_the_overlapping_volume(tmp_path):
     out = _run_freecad(tmp_path, _two_body_doc("common"), _VOLUME_PROBE)
     v = _volumes(out)
@@ -350,7 +349,7 @@ def test_common_keeps_only_the_overlapping_volume(tmp_path):
     assert v["RESULT"] == pytest.approx(_OVERLAP)
 
 
-@_FREECAD
+@requires_freecad
 def test_a_boolean_result_is_a_compound_not_a_solid(tmp_path):
     """Pinned because it is counter-intuitive and would break any downstream
     check written as ``ShapeType == "Solid"``."""
@@ -359,7 +358,7 @@ def test_a_boolean_result_is_a_compound_not_a_solid(tmp_path):
     assert "SOLIDS: 1" in out
 
 
-@_FREECAD
+@requires_freecad
 def test_no_operand_link_falls_outside_freecads_allowed_scope(tmp_path):
     """FreeCAD logs "Link(s) to object(s) ... go out of the allowed scope" when
     a boolean reaches into a container it does not share. It still computes, so
@@ -387,7 +386,7 @@ def test_bracket_with_boss_example_validates():
     assert boolean.props["base"] == "Plate" and boolean.props["tools"] == ["Boss"]
 
 
-@_FREECAD
+@requires_freecad
 def test_bracket_with_boss_example_builds_the_computed_volume(tmp_path):
     """The plate and the boss are modelled in separate bodies and the boss is
     sunk 3mm into the plate, so the union has a real overlap to subtract.

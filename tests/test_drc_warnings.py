@@ -10,11 +10,10 @@ own DRC as the ground truth.
 
 import json
 import math
-import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
+from external_tools import requires_kicad_cli
 
 from forgelab.exporters.hardware.kicad import KiCadExporter
 from forgelab.formats import parse
@@ -161,7 +160,7 @@ def test_suppressing_redundant_vias_does_not_cost_routed_nets():
 # ------------------------------------------------- kicad-cli DRC ground truth
 
 
-@pytest.mark.skipif(shutil.which("kicad-cli") is None, reason="kicad-cli not installed")
+@requires_kicad_cli
 def test_uno_board_has_no_silk_or_hole_to_hole_warnings(tmp_path):
     """KiCad's own DRC on the routed, poured, through-hole Uno.
 

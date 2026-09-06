@@ -3,16 +3,13 @@
 Runs only where FreeCAD is installed (``freecadcmd`` on PATH); skipped in CI.
 """
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
 
-import pytest
+from external_tools import requires_freecad
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
+pytestmark = requires_freecad
 
 _CHECK = textwrap.dedent(
     """

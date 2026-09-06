@@ -12,11 +12,11 @@ carries it anyway.
 import json
 import math
 import random
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+from external_tools import requires_kicad_cli
 
 from forgelab.exporters.hardware.kicad import KiCadExporter
 from forgelab.layout import place_components, route_document
@@ -241,7 +241,7 @@ def test_check_fab_rules_catches_track_over_foreign_pad():
 # ------------------------------------------------- kicad-cli DRC ground truth
 
 
-@pytest.mark.skipif(shutil.which("kicad-cli") is None, reason="kicad-cli not installed")
+@requires_kicad_cli
 def test_routed_uno_export_is_short_free_under_kicad_drc(tmp_path):
     """KiCad's own DRC is the ground truth the fix was verified against.
 

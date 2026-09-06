@@ -13,20 +13,16 @@ valid, "Up-to-date" object holding nothing at all.
 """
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.core import validate
 from forgelab.exporters.mechanical import FreeCADExporter
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.validation.mechanical import check_mechanical
 from forgelab.verify import VerifyError, verify_document
-
-needs_freecad = pytest.mark.skipif(
-    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 _EXAMPLE_NAMES = sorted(p.name for p in _EXAMPLES.glob("*.forge.json"))
@@ -139,7 +135,7 @@ def test_verification_rejects_a_non_mechanical_document():
 # --- real kernel ------------------------------------------------------------ #
 
 
-@needs_freecad
+@requires_freecad
 @pytest.mark.parametrize("name", _EXAMPLE_NAMES)
 def test_every_shipped_example_actually_builds(name):
     """The regression net: each example must recompute to a real solid."""
@@ -150,7 +146,7 @@ def test_every_shipped_example_actually_builds(name):
     assert report["bbox"] is not None
 
 
-@needs_freecad
+@requires_freecad
 def test_motor_mount_volume_matches_its_described_dimensions():
     """A plate minus its bore and holes — arithmetic the kernel has to agree with.
 
@@ -164,7 +160,7 @@ def test_motor_mount_volume_matches_its_described_dimensions():
     assert report["bbox"][3:5] == pytest.approx([100.0, 60.0], abs=1e-6)
 
 
-@needs_freecad
+@requires_freecad
 def test_an_impossible_fillet_radius_is_caught_although_every_cheap_check_passes():
     """A 50mm round on a 10mm cube. Nothing but the kernel can know."""
     doc = _cube_doc(
@@ -178,7 +174,7 @@ def test_an_impossible_fillet_radius_is_caught_although_every_cheap_check_passes
     assert any("'F'" in e for e in report["errors"])
 
 
-@needs_freecad
+@requires_freecad
 def test_a_shell_with_no_opening_is_caught_although_every_cheap_check_passes():
     """The trap the Shell docstring warns about in prose, now actually detected.
 
@@ -197,7 +193,7 @@ def test_a_shell_with_no_opening_is_caught_although_every_cheap_check_passes():
     assert any("'H'" in e for e in report["errors"])
 
 
-@needs_freecad
+@requires_freecad
 def test_a_sound_fillet_verifies_and_removes_the_volume_it_should():
     """The same shape with a workable radius: 12 edges rounded off a 1000mm^3 cube."""
     doc = _cube_doc(
@@ -210,7 +206,7 @@ def test_a_sound_fillet_verifies_and_removes_the_volume_it_should():
     assert 970 < report["total_volume"] < 1000
 
 
-@needs_freecad
+@requires_freecad
 def test_each_node_is_reported_under_its_own_ir_id():
     """Diagnostics name IR nodes, not FreeCAD's internal object names."""
     report = verify_document(_example("motor_mount.forge.json"))
@@ -265,7 +261,7 @@ def test_mcp_verify_geometry_rejects_an_unparseable_document(tmp_path):
         tools.verify_geometry(str(path))
 
 
-@needs_freecad
+@requires_freecad
 def test_mcp_verify_geometry_reports_a_good_part(tmp_path):
     from forgelab.mcp import tools
 
@@ -274,7 +270,7 @@ def test_mcp_verify_geometry_reports_a_good_part(tmp_path):
     assert report["solid_count"] == 1
 
 
-@needs_freecad
+@requires_freecad
 def test_mcp_verify_geometry_reports_a_broken_part(tmp_path):
     from forgelab.mcp import tools
 
@@ -286,7 +282,7 @@ def test_mcp_verify_geometry_reports_a_broken_part(tmp_path):
     assert report["errors"]
 
 
-@needs_freecad
+@requires_freecad
 def test_a_feature_built_on_the_wrong_predecessor_is_warned_about():
     """Found by accident while exercising the tool, which is why it is pinned.
 
@@ -328,7 +324,7 @@ def test_a_feature_built_on_the_wrong_predecessor_is_warned_about():
     assert any("wrong predecessor" in w for w in report["warnings"])
 
 
-@needs_freecad
+@requires_freecad
 def test_reported_bbox_is_the_true_extent_not_the_conservative_bound():
     """OCC's cheap BoundBox over-reports on curved shapes; the exact one is used.
 
