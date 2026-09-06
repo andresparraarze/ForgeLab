@@ -219,3 +219,68 @@ def test_each_node_is_reported_under_its_own_ir_id():
     assert by_id["PlatePad"]["type"] == "pad"
     assert by_id["Body"]["final"] is True
     assert by_id["Plate"]["final"] is False  # a sketch is not a finished solid
+
+
+# --- MCP surface ------------------------------------------------------------ #
+
+
+def _write(tmp_path: Path, doc: ForgeDocument) -> str:
+    path = tmp_path / "part.forge.json"
+    path.write_text(json.dumps(doc.model_dump(mode="json")))
+    return str(path)
+
+
+def test_generation_status_reports_whether_the_kernel_is_reachable():
+    """An agent should know before it calls, not after it fails."""
+    from forgelab.mcp import tools
+
+    status = tools.generation_status()
+    assert isinstance(status["freecad_kernel"], bool)
+    assert status["verify_geometry"] == status["freecad_kernel"]
+    if not status["freecad_kernel"]:
+        # The .FCStd exporter is pure stdlib; the reason must not suggest
+        # mechanical export is broken without FreeCAD.
+        assert "still export to .FCStd" in status["freecad_reason"]
+
+
+def test_mcp_verify_geometry_rejects_a_non_mechanical_document(tmp_path):
+    from forgelab.mcp import tools
+
+    doc = ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.THREED,
+        meta=DocumentMeta(name="scene"),
+        nodes=[],
+    )
+    with pytest.raises(ValueError, match="mechanical documents only"):
+        tools.verify_geometry(_write(tmp_path, doc))
+
+
+def test_mcp_verify_geometry_rejects_an_unparseable_document(tmp_path):
+    from forgelab.mcp import tools
+
+    path = tmp_path / "broken.forge.json"
+    path.write_text('{"domain": "mechanical"}')
+    with pytest.raises(ValueError, match="invalid document"):
+        tools.verify_geometry(str(path))
+
+
+@needs_freecad
+def test_mcp_verify_geometry_reports_a_good_part(tmp_path):
+    from forgelab.mcp import tools
+
+    report = tools.verify_geometry(_write(tmp_path, _example("motor_mount.forge.json")))
+    assert report["verified"]
+    assert report["solid_count"] == 1
+
+
+@needs_freecad
+def test_mcp_verify_geometry_reports_a_broken_part(tmp_path):
+    from forgelab.mcp import tools
+
+    doc = _cube_doc(
+        Node(id="F", type="fillet", props={"name": "F", "body": "B", "target": "P", "radius": 50.0})
+    )
+    report = tools.verify_geometry(_write(tmp_path, doc))
+    assert not report["verified"]
+    assert report["errors"]

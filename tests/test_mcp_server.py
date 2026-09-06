@@ -28,6 +28,7 @@ _EXPECTED = {
     "route_board",
     "preview_render",
     "critique_render",
+    "verify_geometry",
     "get_projection_schema",
     "calculate_pad_positions",
     "calculate_polygon",

@@ -35,6 +35,7 @@ _TOOLS = [
     tools.route_board,
     tools.preview_render,
     tools.critique_render,
+    tools.verify_geometry,
     tools.get_projection_schema,
     tools.calculate_pad_positions,
     tools.calculate_polygon,
