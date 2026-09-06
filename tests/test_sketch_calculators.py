@@ -246,6 +246,7 @@ def test_calculated_profiles_build_a_real_solid_in_freecad():
     # A 80x50x4 blank is 16000 mm^3; rounding four r=8 corners and drilling six
     # r=2.2 holes takes off a few hundred, so the solid lands just under 15500.
     assert 15000 < report["total_volume"] < 15600
-    # Kernel output carries float noise (a -2e-14 zero), so compare loosely.
-    assert report["bbox"][:3] == pytest.approx([0.0, 0.0, 0.0], abs=1e-9)
-    assert report["bbox"][3:] == pytest.approx([80.0, 50.0, 4.0], abs=1e-9)
+    # The exact bounding box is computed from triangulation, so it carries ~1e-7
+    # of noise. Still nine orders of magnitude below anything dimensional.
+    assert report["bbox"][:3] == pytest.approx([0.0, 0.0, 0.0], abs=1e-6)
+    assert report["bbox"][3:] == pytest.approx([80.0, 50.0, 4.0], abs=1e-6)

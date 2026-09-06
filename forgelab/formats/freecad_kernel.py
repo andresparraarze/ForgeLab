@@ -215,7 +215,18 @@ for obj in doc.Objects:
                 "solids": 0, "faces": 0, "bbox": None,
             })
         else:
+            # Shape.BoundBox is a CONSERVATIVE bound, not the real extent: on
+            # curved geometry it is computed from control polygons and comes out
+            # too big. A filleted 70x45 plate measured -0.494 to 70.494, half a
+            # millimetre of pure fiction on each side, which is exactly the sort
+            # of number a caller would read as the part's dimensions.
+            # optimalBoundingBox() gives the true extent; fall back if it is
+            # unavailable or fails on some shape.
             box = shape.BoundBox
+            try:
+                box = shape.optimalBoundingBox(True)
+            except Exception:
+                pass
             entry.update({
                 "valid": bool(shape.isValid()),
                 "volume": float(shape.Volume),

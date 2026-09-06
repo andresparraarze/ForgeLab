@@ -91,6 +91,9 @@ def verify_document(document: ForgeDocument, timeout: int | None = None) -> dict
     a shape — ``valid``, ``null``, ``volume``, ``area``, ``solids``, ``faces``,
     ``bbox`` and ``state``.
 
+    ``volume`` is exact and ``bbox`` is the true extent (the kernel's cheap
+    ``BoundBox`` over-reports on curved shapes, so the optimal one is used).
+
     Raises :class:`VerifyError` for a non-mechanical document, and
     ``FreeCADKernelError`` when FreeCAD is not installed or the build fails.
     """
@@ -164,6 +167,21 @@ def verify_document(document: ForgeDocument, timeout: int | None = None) -> dict
     finals = [by_fc_name[n] for n in build.solid_names if n in by_fc_name]
     if not finals:
         errors.append("the document produced no finished solid; there is nothing to export")
+    elif len(finals) > 1:
+        # Not an error — a document may legitimately describe several parts —
+        # but for a document meant to be ONE part this is the signature of a
+        # feature built on the wrong predecessor, and the result is two solids
+        # overlapping in space rather than one. Seen for real: a fillet whose
+        # target was the pad rather than the last pocket left the fully-pocketed
+        # body and a fillet of the raw pad as separate finished solids, with the
+        # holes present in one and absent in the other.
+        names = ", ".join(repr(n) for n in build.solid_names)
+        warnings.append(
+            f"the document produced {len(finals)} separate finished solids ({names}); "
+            f"if this is meant to be one part, a feature is probably built on the "
+            f"wrong predecessor — check that each fillet/shell/boolean targets the "
+            f"last feature in the chain, not an earlier one"
+        )
 
     return {
         "verified": not errors,
