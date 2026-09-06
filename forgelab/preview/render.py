@@ -1,16 +1,21 @@
-"""Flat-shaded multi-angle preview renders of threed documents.
+"""Flat-shaded multi-angle preview renders of ForgeLab documents.
 
-Renders a document's triangle meshes with matplotlib's ``Poly3DCollection`` —
-no Blender, no GPU, no system dependencies, just the ``preview`` extra
-(matplotlib + numpy). The technique matches the proven manual workflow: apply
-each object's transform to its mesh triangles, remap the threed domain's Y-up
-coordinates into matplotlib's Z-up axes, shade each face by a fixed light
-direction, and lay several camera angles side by side in one PNG so a single
-image shows the whole shape.
+Renders a document's triangles with matplotlib's ``Poly3DCollection`` — no
+Blender, no GPU, no system dependencies, just the ``preview`` extra (matplotlib
++ numpy). The technique matches the proven manual workflow: get the geometry
+into matplotlib's Z-up axes, shade each face by a fixed light direction, and lay
+several camera angles side by side in one PNG so a single image shows the whole
+shape.
 
-The renderer draws the *baked* triangle geometry. Blender modifier stacks
-(subsurf/bevel/boolean/solidify) are procedural descriptions evaluated by
-Blender itself, so previews show the base meshes those modifiers start from.
+Two domains, two ways of getting the triangles:
+
+- **threed** documents already carry baked triangle meshes, so the geometry
+  comes straight from the IR (:func:`collect_triangles`). The renderer draws
+  the base meshes: Blender modifier stacks (subsurf/bevel/boolean/solidify) are
+  procedural descriptions evaluated by Blender itself.
+- **mechanical** documents carry a parametric feature tree with no triangles in
+  it at all, so :mod:`forgelab.preview.mechanical` has the real OCC kernel
+  tessellate the built solids. That needs FreeCAD installed.
 
 Depends only on ``forgelab.spec`` (boundary rule); matplotlib and numpy are
 imported lazily so the core library works without the extra installed.
@@ -30,6 +35,17 @@ _VIEWS = (
     ("side", 12.0, 0.0),
     ("rear-3/4", 22.0, 120.0),
     ("top", 75.0, -90.0),
+)
+
+# Mechanical parts are read as engineering drawings, not as scenes: one pictorial
+# view to show the form, then the orthographic elevations a machinist expects.
+# Straight-on angles are deliberate — they are what makes a hole look round and a
+# wall look parallel, which is how a proportion error becomes visible at all.
+_MECHANICAL_VIEWS = (
+    ("iso", 30.0, -60.0),
+    ("front", 0.0, -90.0),
+    ("right", 0.0, 0.0),
+    ("top", 90.0, -90.0),
 )
 
 _LIGHT_DIR = (0.35, 0.45, 0.82)  # fixed key light, roughly over the shoulder
@@ -145,12 +161,57 @@ def collect_triangles(
 
 
 def render_preview(document: ForgeDocument, output_path: str, views: int = 3) -> dict[str, Any]:
-    """Render a flat-shaded multi-angle preview PNG of a threed document.
+    """Render a flat-shaded multi-angle preview PNG of a document.
+
+    Handles both threed (baked meshes from the IR) and mechanical (the FreeCAD
+    kernel tessellates the built solids) documents.
 
     Returns ``{"triangle_count", "views"}`` (``views`` is the list of view
-    names rendered). Raises ``PreviewError`` for a non-threed document or a
-    scene with no triangle geometry, and ``ImportError`` when the ``preview``
-    extra is not installed.
+    names rendered). Raises ``PreviewError`` for an unsupported domain or a
+    document with no geometry, ``ImportError`` when the ``preview`` extra is not
+    installed, and — for mechanical — ``FreeCADKernelError`` without FreeCAD.
+    """
+    if document.domain == Domain.MECHANICAL:
+        from forgelab.preview import mechanical
+
+        triangles, colors = mechanical.collect_triangles(document)
+        if not triangles:
+            raise PreviewError(
+                "part has no solid geometry to render — the feature tree built "
+                "nothing (run geometry verification to find out which feature)"
+            )
+        return _render_triangles(triangles, colors, output_path, views, _MECHANICAL_VIEWS)
+
+    if document.domain != Domain.THREED:
+        raise PreviewError(
+            f"preview rendering applies to threed and mechanical documents, "
+            f"not {document.domain.value!r}"
+        )
+    triangles, colors = collect_triangles(document)
+    if not triangles:
+        raise PreviewError(
+            "scene has no triangle geometry to render — add mesh nodes with "
+            "positions/indices and object nodes referencing them"
+        )
+    # Y-up (glTF convention) -> matplotlib Z-up, right-handed: (x, y, z) -> (x, -z, y).
+    # Mechanical geometry arrives from FreeCAD already Z-up and is NOT remapped;
+    # doing so would lay every part on its side.
+    remapped = [[(x, -z, y) for x, y, z in tri] for tri in triangles]
+    return _render_triangles(remapped, colors, output_path, views, _VIEWS)
+
+
+def _render_triangles(
+    triangles: list[list[tuple[float, float, float]]],
+    colors: list[tuple[float, float, float, float]],
+    output_path: str,
+    views: int,
+    view_presets: tuple[tuple[str, float, float], ...],
+) -> dict[str, Any]:
+    """Rasterise world-space Z-up triangles into a multi-view PNG.
+
+    Domain-agnostic on purpose: everything domain-specific (where triangles come
+    from, which way is up, which camera angles read well) is settled by the
+    caller, so both domains share one shading and layout path.
     """
     import matplotlib
 
@@ -159,18 +220,7 @@ def render_preview(document: ForgeDocument, output_path: str, views: int = 3) ->
     import numpy as np
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-    if document.domain != Domain.THREED:
-        raise PreviewError("preview rendering applies to threed documents only")
-    triangles, colors = collect_triangles(document)
-    if not triangles:
-        raise PreviewError(
-            "scene has no triangle geometry to render — add mesh nodes with "
-            "positions/indices and object nodes referencing them"
-        )
-
-    # Y-up (glTF convention) -> matplotlib Z-up, right-handed: (x, y, z) -> (x, -z, y).
     tris = np.array(triangles, dtype=float)
-    tris = np.stack([tris[..., 0], -tris[..., 2], tris[..., 1]], axis=-1)
 
     # Flat shading: face normal against the fixed light, floored so back faces
     # stay visible instead of going black.
@@ -182,20 +232,29 @@ def render_preview(document: ForgeDocument, output_path: str, views: int = 3) ->
     base = np.array(colors, dtype=float)
     face_colors = np.column_stack([base[:, :3] * shade[:, None], base[:, 3]])
 
+    # Frame each axis on its own extent and give the drawing box those same
+    # proportions. Every axis then maps one millimetre to the same distance on
+    # screen — so nothing is distorted — while the shape fills the canvas.
+    #
+    # The earlier approach put the largest extent on all three axes, which is
+    # also undistorted but wastes the frame on anything that is not roughly
+    # cubic: a 100x60x3 plate got a 115mm-tall Z axis and rendered as a sliver
+    # in a mostly empty image. Flat parts are the mechanical common case.
     lo, hi = tris.reshape(-1, 3).min(axis=0), tris.reshape(-1, 3).max(axis=0)
     centre = (lo + hi) / 2
-    half = float((hi - lo).max()) / 2 or 1.0
-    half *= 1.15  # a little margin around the shape
+    extent = hi - lo
+    # A perfectly flat part has a zero extent on one axis; keep the box finite.
+    span = np.maximum(extent, float(extent.max()) * 1e-3 or 1.0) * 1.05
 
-    view_list = _VIEWS[: max(1, min(views, len(_VIEWS)))]
+    view_list = view_presets[: max(1, min(views, len(view_presets)))]
     fig = plt.figure(figsize=(4.4 * len(view_list), 4.4), dpi=110)
     for i, (name, elev, azim) in enumerate(view_list, start=1):
         ax = fig.add_subplot(1, len(view_list), i, projection="3d")
         collection = Poly3DCollection(tris, facecolors=face_colors, edgecolors="none")
         ax.add_collection3d(collection)
         for setter, c in ((ax.set_xlim, 0), (ax.set_ylim, 1), (ax.set_zlim, 2)):
-            setter(centre[c] - half, centre[c] + half)
-        ax.set_box_aspect((1, 1, 1))
+            setter(centre[c] - span[c] / 2, centre[c] + span[c] / 2)
+        ax.set_box_aspect(tuple(span))
         ax.view_init(elev=elev, azim=azim)
         ax.set_axis_off()
         ax.set_title(name, fontsize=10)

@@ -1,4 +1,13 @@
-"""Neutral file-format primitives shared by importers and exporters."""
+"""Neutral file-format primitives shared by importers and exporters.
+
+Two members are imported by module rather than re-exported flat, because their
+entry points have deliberately generic names (``available``, ``tessellate``,
+``convert``, ``normalize``) that would be meaningless in this namespace::
+
+    from forgelab.formats import freecad_kernel, step
+
+Only their error type is re-exported here, matching ``FcstdError``/``GltfError``.
+"""
 
 from forgelab.formats.fcstd import (
     FcDocument,
@@ -11,6 +20,7 @@ from forgelab.formats.fcstd import (
     write_archive,
     write_fcstd,
 )
+from forgelab.formats.freecad_kernel import FreeCADKernelError
 from forgelab.formats.gltf import (
     ARRAY_BUFFER,
     ELEMENT_ARRAY_BUFFER,
@@ -41,6 +51,7 @@ __all__ = [
     "FcObject",
     "FcProperty",
     "FcstdError",
+    "FreeCADKernelError",
     "read_archive_entry",
     "read_document",
     "read_objects",

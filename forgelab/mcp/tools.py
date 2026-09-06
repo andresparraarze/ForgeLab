@@ -25,6 +25,9 @@ from forgelab.calc import (
     calculate_board_layout as _calc_board_layout,
 )
 from forgelab.calc import (
+    calculate_bolt_circle as _calc_bolt_circle,
+)
+from forgelab.calc import (
     calculate_pad_positions as _calc_pad_positions,
 )
 from forgelab.calc import (
@@ -32,6 +35,12 @@ from forgelab.calc import (
 )
 from forgelab.calc import (
     calculate_rotation_matrix as _calc_rotation_matrix,
+)
+from forgelab.calc import (
+    calculate_rounded_rect as _calc_rounded_rect,
+)
+from forgelab.calc import (
+    calculate_slot as _calc_slot,
 )
 from forgelab.calc import (
     calculate_trace_width as _calc_trace_width,
@@ -1336,6 +1345,67 @@ def calculate_polygon(sides: int, radius: float, center: list[float] | None = No
     return _calc_polygon(sides, radius, center)
 
 
+def calculate_bolt_circle(
+    count: int,
+    radius: float,
+    hole_radius: float,
+    center: list[float] | None = None,
+    start_angle: float = 0.0,
+) -> list[dict[str, object]]:
+    """Holes evenly spaced around a bolt circle, as mechanical sketch geometry.
+
+    The standard way holes are specified on a flange, a motor face or a lid.
+    Drop the result straight into a sketch node's ``geometry`` and pocket it.
+
+    ``radius`` is the bolt-circle radius (pattern centre to hole centre).
+    ``hole_radius`` is a RADIUS, not a diameter — an M3 clearance hole is 1.7.
+    ``center`` is the pattern's ``[x, y]`` (default origin) and ``start_angle``
+    the degrees counter-clockwise from +X for the first hole.
+
+    Returns ``count`` circle primitives. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_bolt_circle(count, radius, hole_radius, center, start_angle)
+
+
+def calculate_rounded_rect(
+    width: float,
+    height: float,
+    corner_radius: float,
+    origin: list[float] | None = None,
+) -> list[dict[str, object]]:
+    """A closed rounded-rectangle sketch profile: 4 lines + 4 corner arcs.
+
+    Rounded rectangles are the most common mechanical outline and the most
+    tedious to write: each corner arc needs a centre plus start and end angles
+    in degrees counter-clockwise from +X, and every endpoint must land exactly
+    on the neighbouring line or the profile will not close and nothing can be
+    padded from it. This gets all eight pieces right.
+
+    ``origin`` is the ``[x, y]`` lower-left corner of the bounding box (default
+    origin); ``corner_radius`` must be under half the shorter side.
+
+    Returns eight primitives forming one closed loop. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_rounded_rect(width, height, corner_radius, origin)
+
+
+def calculate_slot(
+    x1: float, y1: float, x2: float, y2: float, width: float
+) -> list[dict[str, object]]:
+    """A closed slot profile: two parallel lines capped by two semicircles.
+
+    An adjustment slot or a cable cut-out. ``(x1, y1)`` and ``(x2, y2)`` are the
+    centres of the END CAPS, not the extreme ends, so the overall length is
+    their distance plus ``width``. Works at any angle.
+
+    Returns four primitives forming one closed loop. Scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    return _calc_slot(x1, y1, x2, y2, width)
+
+
 def calculate_rotation_matrix(angle_deg: float, axis: str = "y") -> list[float]:
     """Rotation quaternion ``[x, y, z, w]`` for the threed transform rotation field.
 
@@ -1415,26 +1485,39 @@ def generation_status() -> dict[str, Any]:
     document yourself against the schema instead.
 
     Returns ``{"available": bool, "generate_document": bool, "analyze_image":
-    bool, "critique_render": bool, "preview_render": bool}``; when the API
-    tools are unavailable, also ``"reason"`` and an ``"alternative"``
-    describing how to proceed. ``critique_render`` shares the API tools'
-    requirements; ``preview_render`` is pure-local and only needs the
-    ``preview`` extra (``preview_reason`` says so when it is missing).
-    ``available`` mirrors ``generate_document`` for backward compatibility.
+    bool, "critique_render": bool, "preview_render": bool, "freecad_kernel":
+    bool, "verify_geometry": bool}``; when the API tools are unavailable, also
+    ``"reason"`` and an ``"alternative"`` describing how to proceed.
+    ``critique_render`` shares the API tools' requirements; ``preview_render``
+    is pure-local and only needs the ``preview`` extra (``preview_reason`` says
+    so when it is missing). ``freecad_kernel`` reports whether FreeCAD is
+    installed, which ``verify_geometry``, STEP/STL export and *mechanical*
+    previews all require (``freecad_reason`` says so when it is missing);
+    threed previews do not. ``available`` mirrors ``generate_document`` for
+    backward compatibility.
     """
     require_scope("forge:read")
     available, reason = _generation_availability()
     preview_ok = _preview_extra_installed()
+    freecad_ok = _freecad_kernel_available()
     status: dict[str, Any] = {
         "available": available,
         "generate_document": available,
         "analyze_image": available,
         "critique_render": available,
         "preview_render": preview_ok,
+        "freecad_kernel": freecad_ok,
+        "verify_geometry": freecad_ok,
     }
     if not preview_ok:
         status["preview_reason"] = (
             'the preview extra is not installed (pip install "forgelab[preview]")'
+        )
+    if not freecad_ok:
+        status["freecad_reason"] = (
+            "FreeCAD is not installed (freecadcmd is not on PATH); mechanical "
+            "documents still export to .FCStd, but cannot be verified, previewed "
+            "or converted to STEP/STL"
         )
     if not available:
         status["reason"] = reason
@@ -1466,6 +1549,14 @@ def export_document(
     Principled BSDF materials, recognised primitives, a camera and three-point
     lighting — prefer it over ``gltf`` when the target is Blender). Call
     ``list_formats`` for the full list.
+
+    A mechanical document also exports to ``step`` — the ISO 10303 format every
+    other CAD package reads, and the right choice for handing a part to
+    SolidWorks, Fusion, Onshape or a machinist — and to ``stl`` for slicers and
+    mesh tools. Both build the part in FreeCAD, so both need it installed (see
+    ``generation_status``), whereas ``freecad`` writes the parametric recipe and
+    needs nothing. Note ``stl`` imports into the threed domain but exports from
+    the mechanical one, so it is not a round trip.
 
     Without ``output_path``, returns the file inline:
     {"tool", "encoding": "utf-8"|"base64", "content": <str>}.
@@ -1770,20 +1861,82 @@ def _preview_extra_installed() -> bool:
     )
 
 
-def preview_render(document_path: str, output_path: str, views: int = 3) -> dict[str, Any]:
-    """Render a threed document to a flat-shaded multi-angle preview PNG.
+def _import_verify() -> Any:
+    """Import the geometry verifier. Indirection so tests can simulate absence."""
+    from forgelab import verify
 
-    Pure-local computation (matplotlib, no Blender, no GPU): each object's
-    transform is applied to its mesh triangles and up to four camera angles
-    (front-3/4, side, rear-3/4, top) are laid side by side in one PNG, so an
-    agent can *see* the shape it built without the user screenshotting
-    anything. Renders the baked triangle geometry; Blender modifier stacks are
-    evaluated by Blender itself, so previews show the base meshes. Pair with
-    ``critique_render`` for the iterative refine loop.
+    return verify
+
+
+def _freecad_kernel_available() -> bool:
+    try:
+        return bool(_import_verify().available())
+    except ImportError:
+        return False
+
+
+def verify_geometry(document_path: str) -> dict[str, Any]:
+    """Build a mechanical document in FreeCAD and report what it actually made.
+
+    ``validate_document`` checks the description: closed profiles, positive
+    radii, references that resolve. This checks the *result*, and it is a
+    different question. FreeCAD reports no error for geometry that produces
+    nothing — a boolean whose operands never meet, a fillet radius larger than
+    the face it rounds, a shell with no opening — so a document can validate
+    cleanly, export cleanly, and open as an empty part. Only the kernel knows.
+
+    Run this after generating or patching a mechanical part, before handing the
+    file to anyone. It pairs with ``preview_render``: this says whether the part
+    exists, the render shows whether it is the right one.
 
     Args:
-        document_path: path to the threed ``.forge.json`` (a bare filename
+        document_path: path to the mechanical ``.forge.json`` (a bare filename
             resolves against ``FORGELAB_OUTPUT_DIR``).
+
+    Returns:
+        ``{"verified", "errors", "warnings", "solid_count", "total_volume",
+        "bbox", "nodes"}``. ``errors`` names the specific IR node that built
+        nothing; ``total_volume`` is mm³ and ``bbox`` is
+        ``[xmin, ymin, zmin, xmax, ymax, zmax]``. Requires FreeCAD (see
+        ``generation_status``); scope ``forge:read``.
+    """
+    require_scope("forge:read")
+    data = _read_document_file(document_path)
+    try:
+        document_model = _core_validate(data)
+    except Exception as exc:
+        raise ValueError(f"invalid document: {exc}") from exc
+    try:
+        verify = _import_verify()
+    except ImportError as exc:  # pragma: no cover - verify has no optional deps
+        raise ValueError(f"geometry verification unavailable: {exc}") from exc
+    try:
+        return verify.verify_document(document_model)
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def preview_render(document_path: str, output_path: str, views: int = 3) -> dict[str, Any]:
+    """Render a threed or mechanical document to a multi-angle preview PNG.
+
+    Lays up to four camera angles side by side in one PNG so an agent can *see*
+    the shape it built without the user screenshotting anything. Pair with
+    ``critique_render`` for the iterative refine loop.
+
+    **threed**: pure-local (matplotlib, no Blender, no GPU). Each object's
+    transform is applied to its mesh triangles; views are front-3/4, side,
+    rear-3/4, top. Renders the baked triangle geometry, so Blender modifier
+    stacks show as the base meshes they start from.
+
+    **mechanical**: a parametric feature tree holds no triangles, so FreeCAD
+    builds the part and tessellates it — this needs FreeCAD installed (see
+    ``generation_status``). Views are the engineering set: iso, front, right,
+    top. Pair with ``verify_geometry``, which says whether the part built at
+    all; the render says whether it is the right part.
+
+    Args:
+        document_path: path to the ``.forge.json`` (a bare filename resolves
+            against ``FORGELAB_OUTPUT_DIR``).
         output_path: where to write the preview PNG.
         views: how many camera angles to render, 1-4 (default 3).
 

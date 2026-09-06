@@ -182,6 +182,14 @@ def test_importers_registered():
 
 
 def test_list_formats_includes_obj_and_stl():
+    """``stl`` reports export too, but it is NOT the counterpart of this importer.
+
+    StlImporter reads a mesh into a **threed** document; StlExporter writes one
+    from a **mechanical** part. They are the only import/export pair in the
+    registry serving different domains, so ``stl`` showing both ways does not
+    mean an STL round trip exists — exporting a threed document as STL fails
+    with a message saying to use ``gltf``.
+    """
     formats = tools.list_formats()
     assert formats["obj"] == {"import": True, "export": False}
-    assert formats["stl"] == {"import": True, "export": False}
+    assert formats["stl"] == {"import": True, "export": True}

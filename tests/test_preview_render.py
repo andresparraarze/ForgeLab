@@ -174,13 +174,30 @@ def test_preview_render_empty_scene_errors_clearly(tmp_path, monkeypatch):
         tools.preview_render(src, "preview.png")
 
 
-def test_preview_render_rejects_non_threed_documents(tmp_path, monkeypatch):
+def test_preview_render_rejects_domains_it_cannot_draw(tmp_path, monkeypatch):
+    """threed and mechanical are renderable; hardware is not.
+
+    Mechanical used to be rejected here too. It is now supported (the FreeCAD
+    kernel tessellates the built solids), so the unrenderable domain is the one
+    with no 3D geometry at all.
+    """
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    doc = _cube_doc()
+    doc["domain"] = "hardware"
+    doc["nodes"] = []
+    src = _write_doc(tmp_path, doc)
+    with pytest.raises(ValueError, match="threed and mechanical"):
+        tools.preview_render(src, "preview.png")
+
+
+def test_preview_render_says_which_features_built_nothing(tmp_path, monkeypatch):
+    """An empty mechanical part points at the tool that can diagnose it."""
     monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
     doc = _cube_doc()
     doc["domain"] = "mechanical"
     doc["nodes"] = [{"id": "b", "type": "body", "props": {"name": "B"}}]
     src = _write_doc(tmp_path, doc)
-    with pytest.raises(ValueError, match="threed documents only"):
+    with pytest.raises(ValueError, match="no solid geometry|FreeCAD is not installed"):
         tools.preview_render(src, "preview.png")
 
 

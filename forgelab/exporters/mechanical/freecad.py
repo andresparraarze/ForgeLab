@@ -16,6 +16,7 @@ Writes an archive FreeCAD genuinely opens:
 """
 
 import xml.etree.ElementTree as ET
+from typing import NamedTuple
 
 from forgelab.exporters.base import Exporter
 from forgelab.exporters.mechanical.realxml import (
@@ -168,12 +169,36 @@ assert set(_FCTYPE_BY_NODE) == set(_FIELDS) == set(_MODEL_BY_NODE), (
 _SIDECAR = "ForgeLab.Document.xml"
 
 
+class FcstdBuild(NamedTuple):
+    """A built ``.FCStd`` plus the object names holding its finished solids.
+
+    ``solid_names`` is what a downstream geometry consumer needs in order to
+    open the archive in the real kernel and read the right shapes — see
+    ``RealDocument.solid_names`` for why the visible set is not the same thing.
+    ``solid_body_names`` says which bodies are even expected to have a shape.
+    """
+
+    data: bytes
+    solid_names: tuple[str, ...]
+    solid_body_names: tuple[str, ...] = ()
+
+
 class FreeCADExporter(Exporter):
     """Export ForgeLab mechanical IR to a FreeCAD .FCStd file."""
 
     tool_name = "freecad"
 
     def from_ir(self, document: ForgeDocument) -> bytes:
+        return self.build(document).data
+
+    def build(self, document: ForgeDocument) -> FcstdBuild:
+        """Export, also reporting which objects hold the finished solids.
+
+        ``from_ir`` is the ``Exporter`` contract and yields bytes alone; callers
+        that go on to drive FreeCAD itself (verification, preview, STEP/STL)
+        need the solid selection too, and it is only derivable while the
+        document is being built.
+        """
         objects: list[FcObject] = []
         items: list[tuple[str, str, AnyModel]] = []
         # Walk the whole tree: agents express the part->body->feature hierarchy
@@ -206,7 +231,7 @@ class FreeCADExporter(Exporter):
         # verify_sync can later tell whether this file is still in sync.
         sidecar_xml = _stamp_hash(sidecar_xml, document_hash(document.model_dump(mode="json")))
         real = build_real_document_xml(items, document.meta.name)
-        return write_archive(
+        data = write_archive(
             {
                 "Document.xml": real.document_xml,
                 "GuiDocument.xml": real.gui_document_xml,
@@ -214,6 +239,7 @@ class FreeCADExporter(Exporter):
                 **real.files,
             }
         )
+        return FcstdBuild(data, real.solid_names, real.solid_body_names)
 
 
 def _stamp_hash(document_xml: bytes, hash_value: str) -> bytes:
