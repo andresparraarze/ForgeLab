@@ -1,0 +1,221 @@
+"""Geometric verification against the real FreeCAD kernel.
+
+Two halves. The solid-selection tests are pure Python and run everywhere — they
+pin which objects a geometry consumer should read, which is where the
+double-counting bugs live. The rest need FreeCAD and skip without it, exactly
+like ``test_freecad_e2e.py``.
+
+What makes these tests worth having: every "broken" document below passes
+``check_mechanical`` with no errors and no warnings. That is the point. The
+cheap checks cannot see that a shell collapsed or a fillet was impossible,
+because only OpenCASCADE knows — and FreeCAD reports no error either, leaving a
+valid, "Up-to-date" object holding nothing at all.
+"""
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+
+from forgelab.core import validate
+from forgelab.exporters.mechanical import FreeCADExporter
+from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.validation.mechanical import check_mechanical
+from forgelab.verify import VerifyError, verify_document
+
+needs_freecad = pytest.mark.skipif(
+    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
+)
+
+_EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
+_EXAMPLE_NAMES = sorted(p.name for p in _EXAMPLES.glob("*.forge.json"))
+
+
+def _example(name: str) -> ForgeDocument:
+    return validate(json.loads((_EXAMPLES / name).read_text()))
+
+
+def _cube_doc(*extra: Node) -> ForgeDocument:
+    """A 10mm cube body (sketch + pad), plus whatever features are appended."""
+    nodes = [
+        Node(id="B", type="body", props={"name": "B"}),
+        Node(
+            id="S",
+            type="sketch",
+            props={
+                "name": "S",
+                "body": "B",
+                "plane": "XY",
+                "geometry": [
+                    {"geo_type": "line", "points": [0, 0, 10, 0]},
+                    {"geo_type": "line", "points": [10, 0, 10, 10]},
+                    {"geo_type": "line", "points": [10, 10, 0, 10]},
+                    {"geo_type": "line", "points": [0, 10, 0, 0]},
+                ],
+            },
+        ),
+        Node(id="P", type="pad", props={"name": "P", "body": "B", "profile": "S", "length": 10.0}),
+        *extra,
+    ]
+    return ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.MECHANICAL,
+        meta=DocumentMeta(name="cube"),
+        nodes=nodes,
+    )
+
+
+# --- solid selection (no FreeCAD needed) ------------------------------------ #
+
+
+@pytest.mark.parametrize("name", _EXAMPLE_NAMES)
+def test_each_example_reports_exactly_one_finished_solid(name):
+    """Every shipped example is one part, so it must select one solid.
+
+    Selecting more means double counting: handing Part.export a body AND its tip
+    writes the same shape twice (a 20790-byte STEP for a part that is 8439).
+    """
+    build = FreeCADExporter().build(_example(name))
+    assert len(build.solid_names) == 1, f"{name} selected {build.solid_names}"
+
+
+def test_a_fillet_supersedes_the_body_whose_tip_it_rounds():
+    """The body renders its tip's shape, so counting both doubles the part."""
+    doc = _cube_doc(
+        Node(id="F", type="fillet", props={"name": "F", "body": "B", "target": "P", "radius": 1.0})
+    )
+    assert FreeCADExporter().build(doc).solid_names == ("F",)
+
+
+def test_a_body_holding_only_part_features_is_not_expected_to_have_a_shape():
+    """A loft/revolve never becomes a tip, so its body's null shape is normal.
+
+    organic_grip and rounded_knob are both built this way; treating their empty
+    bodies as failures would fail two perfectly good examples.
+    """
+    build = FreeCADExporter().build(_example("organic_grip.forge.json"))
+    assert build.solid_names == ("grip_fillet",)
+    assert build.solid_body_names == ()
+
+
+def test_a_body_with_a_pad_chain_is_expected_to_have_a_shape():
+    build = FreeCADExporter().build(_example("motor_mount.forge.json"))
+    assert build.solid_body_names == ("Body",)
+
+
+def test_only_the_finished_shape_is_left_visible(tmp_path):
+    """Regression: FreeCAD drew the raw pad on top of the fillet built from it.
+
+    Both were marked visible, so the part looked entirely unfilleted on open and
+    the fillet appeared to be a no-op.
+    """
+    import io
+    import re
+    import zipfile
+
+    doc = _cube_doc(
+        Node(id="F", type="fillet", props={"name": "F", "body": "B", "target": "P", "radius": 1.0})
+    )
+    archive = zipfile.ZipFile(io.BytesIO(FreeCADExporter().from_ir(doc)))
+    gui = archive.read("GuiDocument.xml").decode()
+    visibility = dict(re.findall(r'<ViewProvider name="(\w+)".*?value="(\w+)"', gui, re.S))
+    assert visibility["F"] == "true"
+    for superseded in ("B", "P", "S"):
+        assert visibility[superseded] == "false", f"{superseded} would be drawn over the fillet"
+
+
+def test_verification_rejects_a_non_mechanical_document():
+    doc = ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.THREED,
+        meta=DocumentMeta(name="scene"),
+        nodes=[],
+    )
+    with pytest.raises(VerifyError, match="mechanical documents only"):
+        verify_document(doc)
+
+
+# --- real kernel ------------------------------------------------------------ #
+
+
+@needs_freecad
+@pytest.mark.parametrize("name", _EXAMPLE_NAMES)
+def test_every_shipped_example_actually_builds(name):
+    """The regression net: each example must recompute to a real solid."""
+    report = verify_document(_example(name))
+    assert report["verified"], f"{name}: {report['errors']}"
+    assert report["solid_count"] >= 1
+    assert report["total_volume"] > 0.0
+    assert report["bbox"] is not None
+
+
+@needs_freecad
+def test_motor_mount_volume_matches_its_described_dimensions():
+    """A plate minus its bore and holes — arithmetic the kernel has to agree with.
+
+    100x60x3 = 18000 mm^3, less a 19mm-radius through bore (pi*19^2*3 = 3402).
+    The eight mounting holes take a further ~290, so the solid lands just under
+    14300 rather than at some arbitrary number.
+    """
+    report = verify_document(_example("motor_mount.forge.json"))
+    assert 14200 < report["total_volume"] < 14400
+    assert report["bbox"][:2] == [0.0, 0.0]
+    assert report["bbox"][3:5] == [100.0, 60.0]
+
+
+@needs_freecad
+def test_an_impossible_fillet_radius_is_caught_although_every_cheap_check_passes():
+    """A 50mm round on a 10mm cube. Nothing but the kernel can know."""
+    doc = _cube_doc(
+        Node(id="F", type="fillet", props={"name": "F", "body": "B", "target": "P", "radius": 50.0})
+    )
+    assert check_mechanical(doc) == ([], []), "the premise: cheap checks see nothing wrong"
+
+    report = verify_document(doc)
+    assert not report["verified"]
+    assert report["total_volume"] == 0.0
+    assert any("'F'" in e for e in report["errors"])
+
+
+@needs_freecad
+def test_a_shell_with_no_opening_is_caught_although_every_cheap_check_passes():
+    """The trap the Shell docstring warns about in prose, now actually detected.
+
+    ``Shell`` says a solid with no ``faces_to_remove`` "exports but produces a
+    null shape on recompute". Until now nothing enforced that.
+    """
+    doc = _cube_doc(
+        Node(
+            id="H", type="shell", props={"name": "H", "body": "B", "target": "P", "thickness": 1.0}
+        )
+    )
+    assert check_mechanical(doc) == ([], []), "the premise: cheap checks see nothing wrong"
+
+    report = verify_document(doc)
+    assert not report["verified"]
+    assert any("'H'" in e for e in report["errors"])
+
+
+@needs_freecad
+def test_a_sound_fillet_verifies_and_removes_the_volume_it_should():
+    """The same shape with a workable radius: 12 edges rounded off a 1000mm^3 cube."""
+    doc = _cube_doc(
+        Node(id="F", type="fillet", props={"name": "F", "body": "B", "target": "P", "radius": 1.0})
+    )
+    report = verify_document(doc)
+    assert report["verified"], report["errors"]
+    assert report["solid_count"] == 1
+    # Not 2000: the body and the fillet are one part, not two.
+    assert 970 < report["total_volume"] < 1000
+
+
+@needs_freecad
+def test_each_node_is_reported_under_its_own_ir_id():
+    """Diagnostics name IR nodes, not FreeCAD's internal object names."""
+    report = verify_document(_example("motor_mount.forge.json"))
+    by_id = {n["node_id"]: n for n in report["nodes"]}
+    assert {"MotorMount", "Body", "Plate", "PlatePad"} <= set(by_id)
+    assert by_id["PlatePad"]["type"] == "pad"
+    assert by_id["Body"]["final"] is True
+    assert by_id["Plate"]["final"] is False  # a sketch is not a finished solid

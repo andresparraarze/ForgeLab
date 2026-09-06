@@ -641,15 +641,11 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             boolean_consumed.add(src)
             boolean_consumed.update(features_of.get(src, ()))
 
-    visible_names: set[str] = set()
-    for nid, ntype, _ in items:
-        if ntype == NODE_BODY and nid not in boolean_consumed:
-            visible_names.add(name_of[nid])
-    for solids in solids_of.values():
-        if solids and solids[-1] not in boolean_consumed:
-            visible_names.add(name_of[solids[-1]])
     # Part-workbench features: show the terminal ones — a loft consumed by a
     # fillet stays hidden, the fillet (the finished shape) is what renders.
+    # This set must be built BEFORE the body/tip rules below, because a fillet
+    # or shell can just as well consume a body's tip pad, and then the body is
+    # superseded too.
     part_feature_ids = [nid for nid, ntype, _ in items if ntype in _PART_FEATURES]
     consumed: set[str] = set(boolean_consumed)
     for nid in part_feature_ids:
@@ -658,12 +654,63 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
             target_id = resolve_ref(model.target)
             if target_id is not None:
                 consumed.add(target_id)
+
+    visible_names: set[str] = set()
+    # A body renders its tip's shape, so a body whose tip has been consumed must
+    # be hidden along with the tip. Testing only ``boolean_consumed`` here drew
+    # the raw pad AND the fillet built from it on top of each other — the part
+    # looked completely unfilleted when opened, the fillet apparently a no-op.
+    for nid, ntype, _ in items:
+        if ntype != NODE_BODY or nid in consumed:
+            continue
+        tip = solids_of.get(nid) or []
+        if not tip or tip[-1] not in consumed:
+            visible_names.add(name_of[nid])
+    for solids in solids_of.values():
+        if solids and solids[-1] not in consumed:
+            visible_names.add(name_of[solids[-1]])
     for nid in part_feature_ids:
         if nid not in consumed:
             visible_names.add(name_of[nid])
     for nid in boolean_inputs:
         if nid not in consumed:  # a boolean feeding another boolean stays hidden
             visible_names.add(name_of[nid])
+
+    # The finished solids, deduplicated — what a geometry consumer (STEP/STL
+    # export, tessellation for a preview) should read.
+    #
+    # This is NOT ``visible_names``. Visibility shows a body AND its tip because
+    # FreeCAD needs both switched on to render a PartDesign body normally, but a
+    # body's Shape *is* its tip's shape: handing both to Part.export writes the
+    # same solid twice (verified — exporting all four objects of the
+    # box-with-hole example produced a 20790-byte STEP against 8439 bytes for
+    # the one real solid). So a body stands in for its tip here, and the
+    # App::Part container — whose Shape is a compound of its children — is left
+    # out for the same reason.
+    #
+    # A body with no solid feature chain has a null Shape (its features are all
+    # Part-workbench objects, which never become a tip), so it is skipped rather
+    # than exported as nothing.
+    # A body counts only while it is still the finished thing: not consumed by a
+    # boolean, and with a tip no Part feature has taken over. A fillet whose
+    # target is the body's pad supersedes it, so counting both would report the
+    # raw pad AND its rounded result — two solids and twice the volume for one
+    # part.
+    solid_ids = {
+        nid
+        for nid in body_ids
+        if nid not in boolean_consumed and solids_of.get(nid) and solids_of[nid][-1] not in consumed
+    }
+    solid_ids |= {nid for nid in part_feature_ids if nid not in consumed}
+    solid_ids |= {nid for nid in boolean_inputs if nid not in consumed}
+    solid_names = tuple(name_of[nid] for nid, _, _ in items if nid in solid_ids)
+
+    # Bodies that own a pad/pocket chain, and so are expected to have a tip
+    # shape. A body holding only Part-workbench features (a loft, a revolve) has
+    # none — those are top-level objects that never become a tip — so its own
+    # shape is legitimately null and a consumer must not read that as a failure.
+    solid_body_names = tuple(name_of[b] for b in body_ids if solids_of.get(b))
+
     object_names: list[str] = []
 
     decls = []
@@ -870,7 +917,7 @@ def build_real_document_xml(items: list[tuple[str, str, AnyModel]], doc_name: st
         f"</Document>\n"
     )
     gui_xml = _gui_document_xml(object_names, visible_names, _camera_settings(items))
-    return RealDocument(document_xml, gui_xml, files)
+    return RealDocument(document_xml, gui_xml, files, solid_names, solid_body_names)
 
 
 class RealDocument(NamedTuple):
@@ -878,11 +925,24 @@ class RealDocument(NamedTuple):
 
     ``files`` holds named binary payloads referenced from Document.xml (today:
     ``Part::PropertyFilletEdges`` edge tables, one entry per fillet).
+
+    ``solid_names`` lists the FreeCAD object names holding the part's finished,
+    deduplicated solids, in document order. It is not written into the archive;
+    it is the selection a geometry consumer needs when it opens the result in
+    the real kernel (``forgelab.verify``, the mechanical preview, the STEP/STL
+    exporters), so it is computed here — beside the visibility rules it is
+    derived from — rather than re-guessed downstream.
+
+    ``solid_body_names`` lists the bodies that own a pad/pocket chain, and so
+    are expected to have a tip shape at all — the rest are containers whose null
+    shape is normal.
     """
 
     document_xml: str
     gui_document_xml: str
     files: dict[str, bytes]
+    solid_names: tuple[str, ...] = ()
+    solid_body_names: tuple[str, ...] = ()
 
 
 def _estimate_bounds(
