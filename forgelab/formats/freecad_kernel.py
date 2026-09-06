@@ -60,8 +60,24 @@ _UNAVAILABLE = (
 )
 
 
-class FreeCADKernelError(RuntimeError):
-    """Raised when the FreeCAD kernel is unavailable or a script fails."""
+class FreeCADKernelError(ValueError):
+    """Raised when the FreeCAD kernel is unavailable or a script fails.
+
+    ``ValueError``, not ``RuntimeError``, and that choice is load-bearing. In
+    this codebase ``ValueError`` means "the caller can act on this": every error
+    in ``forgelab.formats`` derives from it (:class:`~forgelab.formats.fcstd.FcstdError`,
+    :class:`~forgelab.formats.sexpr.SExprError`, :class:`~forgelab.formats.gltf.GltfError`),
+    as does every service error above it, and the MCP layer turns that one class
+    into a message the model is shown. "FreeCAD is not installed" is the most
+    actionable error here — it names a program to install.
+
+    Deriving this from ``RuntimeError`` instead made it the single exception to
+    that rule, so each of the three consumers (verify, preview, the STEP/STL
+    exporters) had to remember to convert it by hand. Two did; the exporters did
+    not, and ``export_document`` leaked a RuntimeError to callers for it. Being a
+    ``ValueError`` is what removes the conversion, and the thing to forget, from
+    every present and future consumer at once.
+    """
 
 
 def available() -> bool:
