@@ -7,6 +7,85 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Mechanical parts can now be verified, seen, and handed to other CAD tools.**
+  A generated FreeCAD part was previously both unverified and invisible. The
+  threed domain has had a render–critique loop since 2026-07-03 and hardware has
+  `kicad-cli` DRC as ground truth; mechanical had neither, so an agent designed
+  geometry blind and nothing checked the result.
+
+  The gap was real, not theoretical. `check_mechanical` reasons from the
+  parametric text alone — closed profiles, positive radii, overlapping bounding
+  boxes — and says so itself: its empty-cut check "is not a geometric
+  intersection test". Meanwhile **FreeCAD reports no error** for geometry that
+  builds nothing: a boolean whose operands miss, a fillet radius larger than the
+  face it rounds, a shell with no opening (a trap the `Shell` docstring warns
+  about in prose but nothing enforced). All of these recompute to a valid,
+  "Up-to-date" object holding zero solids and volume 0, so the document
+  validates, exports, and opens as an empty part.
+
+  Four additions, all built on a new neutral primitive
+  (`formats/freecad_kernel.py`) that drives headless `freecadcmd`:
+
+  - **`verify_geometry`** (new MCP tool) exports the document, recomputes it in
+    the real kernel, and reports per IR node what got built — solids, volume,
+    validity, recompute state — naming the specific node that produced nothing.
+  - **Mechanical previews.** `preview_render` raised `PreviewError` for anything
+    but threed, so `critique_render` could never look at a part. A parametric
+    feature tree contains no triangles, so FreeCAD tessellates the built solids
+    rather than the geometry being approximated in Python — an approximation
+    would draw confident pictures of exactly the features most likely to be
+    wrong. Mechanical parts get engineering views (iso/front/right/top).
+  - **STEP and STL export**, the formats that get a part out of FreeCAD at all.
+  - **`calculate_rounded_rect` / `calculate_bolt_circle` / `calculate_slot`**,
+    returning ready-to-paste sketch geometry, plus a mechanical prompt that
+    tells the model they exist and to verify what it builds. Few-shots went from
+    one (prismatic only) to three, adding a revolve and a boolean.
+
+  FreeCAD stays **optional**: it is needed for verification, mechanical preview
+  and STEP/STL, but not for `.FCStd` export, which writes the parametric recipe
+  and lets FreeCAD build it on open. `generation_status` reports
+  `freecad_kernel` so an agent learns the kernel is unreachable before it calls
+  rather than after it fails, and every FreeCAD-gated test skips without it.
+
+  Details worth knowing, each learned from real output rather than assumed:
+  - **`freecadcmd` stdout cannot be scraped** — a banner, ~100 newline-less
+    `(NN %)` progress fragments, a trailing cwd notice. Results are
+    sentinel-framed and recovered by regex.
+  - **OCC throws `Standard_NullObject`** out of `isValid()`/`Volume`/`BoundBox`
+    on a NULL shape — the very thing being detected — so the null test has to
+    short-circuit the rest.
+  - **STEP is not reproducible as OCC writes it.** Every file carries a
+    wall-clock stamp in its `FILE_NAME` header, so the same document exported to
+    different bytes one second apart. `formats/step.py` pins it to the FCStd
+    writer's own 1980-01-01 epoch, bounded to the HEADER section so a
+    timestamp-shaped string in DATA survives. The guarantee is scoped honestly:
+    identical across runs, not across OCC versions.
+  - **FreeCAD is Z-up**, which is already matplotlib's convention, so the threed
+    Y-up remap `(x,y,z) -> (x,-z,y)` must NOT be applied to mechanical geometry.
+    Applying it would lay every part on its side in every preview.
+  - **`stl` is now the only tool name whose importer and exporter serve
+    different domains** (`StlImporter` reads a mesh into threed; `StlExporter`
+    writes one from mechanical), so `list_formats` shows it both ways without
+    it being a round trip. Exporting a threed document as STL fails with a
+    message saying to use `gltf`.
+
+  Verified against FreeCAD 1.1.3: all 8 shipped mechanical examples build with
+  physically sensible volumes (motor_mount 14297.85 mm³ against ~14300 by hand),
+  and an exported STEP re-imports as exactly one solid at the same 14297.85.
+
+### Fixed
+- **A fillet over a body's pad rendered as though it had done nothing.** The
+  exporter marked the body, its pad AND the fillet visible, so FreeCAD drew the
+  raw box on top of the rounded result — opening the file showed square corners
+  and the fillet looked like a no-op. The same root cause double-counted
+  geometry for any consumer reading the built solids: a body renders its tip's
+  shape, so taking both reported one part as two solids at twice the volume (a
+  10 mm cube with 1 mm fillets measured 1975.59 mm³ instead of 975.59, and its
+  STEP came out 20790 bytes against 8439). Both came from the visibility rules
+  running before the set of consumed features was known; computing that set
+  first fixes both.
+
+### Added
 - **Image textures on threed materials, and the UV coordinates they need.**
   Every material was a flat PBR colour, so no surface could carry real detail —
   wood grain, brushed metal, woven fabric. Two additions close that:

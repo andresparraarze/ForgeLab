@@ -80,7 +80,7 @@ Every tool imports its native files into one JSON IR and exports the IR back. Ag
 | Hardware       | KiCad         |   ✅   |   ✅   | `.kicad_pcb` round-trip (components/nets/board), routed track/via export, copper-pour zones (KiCad fills them) |
 | Hardware       | Altium        |   ❌   |   ❌   | **not planned** — Altium's native format is closed/proprietary with no public spec; supporting it would mean depending on a paid SDK, which ForgeLab won't do |
 | Hardware       | Gerber        |   🚧   |   ✅   | export RS-274X layer set + Excellon drill, zipped (F/B copper, mask, silk, outline) |
-| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve) |
+| Mechanical CAD | FreeCAD       |   ✅   |   ✅   | `.FCStd` round-trip (parts/bodies/features/sketches, loft/sweep/fillet/shell/revolve); STEP/STL export, geometry verification and preview with FreeCAD installed |
 | Mechanical CAD | Fusion 360    |   ❌   |   ❌   | **not planned** — Fusion 360 is cloud-only and requires an Autodesk account, which conflicts with ForgeLab's no-login, self-contained design |
 | 3D / Game      | glTF          |   ✅   |   ✅   | `.gltf` round-trip (meshes/materials/scene); translucent materials (base-color alpha < 1) export `alphaMode: "BLEND"` |
 | 3D / Game      | OBJ           |   ✅   |        | import `.obj` (+ companion `.mtl`); fan-triangulated, per-object meshes |
@@ -234,6 +234,28 @@ error for a boolean that produces nothing — an empty intersection or a cut tha
 misses recomputes to a valid, up-to-date result holding zero solids — so
 `check_mechanical` warns when a cut's tool cannot reach its base.
 
+Those cheap checks read the description, not the result, so mechanical documents
+also get **`verify_geometry`**: it builds the part in a headless FreeCAD and
+reports, per node, what the kernel actually made — solids, volume, validity. It
+catches the whole class of features that fail silently (an impossible fillet
+radius, a shell with no opening, a boolean whose operands miss) and names the
+node that produced nothing. Pair it with **`preview_render`**, which now works
+on mechanical documents: FreeCAD tessellates the built solids and the part is
+drawn as iso/front/right/top engineering views, so `critique_render` can judge
+it against the original request. `verify_geometry` says whether the part exists;
+the render says whether it is the right part.
+
+Mechanical parts also export to **STEP** — the ISO 10303 format every other CAD
+package reads — and **STL** for slicers. These need FreeCAD installed, as does
+verification and mechanical preview; `.FCStd` export does not, because it writes
+the parametric recipe and lets FreeCAD build it on open. `generation_status`
+reports whether the kernel is available.
+
+Three helpers return ready-to-paste sketch geometry so profiles are not derived
+by hand: `calculate_rounded_rect` (four lines plus four corner arcs that must
+meet exactly, or the profile will not close), `calculate_bolt_circle`, and
+`calculate_slot`.
+
 Threed materials can carry **image textures** — the surface detail (wood grain,
 brushed metal, woven fabric) that a flat PBR colour cannot express. A material
 takes an optional `base_color_texture`, a path to an image resolved relative to
@@ -306,7 +328,7 @@ Thirty-six tools, same for every client. Over stdio all are local; over HTTP eac
 | Tool | Description |
 | --- | --- |
 | `list_domains` | List supported design domains |
-| `list_formats` | List format tools (KiCad, glTF, FreeCAD) |
+| `list_formats` | List format tools (KiCad, glTF, FreeCAD, STEP, STL) |
 | `get_domain_schema` | JSON Schema for a domain |
 | `get_prompt` | System-prompt template for a domain |
 | `get_projection_schema` | What each projection level keeps or strips |
@@ -356,7 +378,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 | Tool | Description |
 | --- | --- |
-| `export_document` | IR → native file (KiCad, glTF, FreeCAD, Blender `.py`) |
+| `export_document` | IR → native file (KiCad, glTF, FreeCAD, STEP, STL, Blender `.py`) |
 | `import_file` | Native file → IR (KiCad, glTF, OBJ, STL, FreeCAD) |
 
 ### Generate
@@ -379,7 +401,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **36 MCP tools**, and **692 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import** and a **Blender script** export that renders a finished product shot; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. The one remaining tool integration is Gerber *import* (a scaffolded stub). Altium and Fusion 360 are **not planned** (closed proprietary format / cloud-only with mandatory account — see Tool support), and Unreal Engine needs no integration: it natively imports the glTF that ForgeLab already exports. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **40 MCP tools**, and **927 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import**, **STEP/STL export**, and a **Blender script** export that renders a finished product shot; **geometry verification and preview** for mechanical parts against a real FreeCAD kernel; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. The one remaining tool integration is Gerber *import* (a scaffolded stub). Altium and Fusion 360 are **not planned** (closed proprietary format / cloud-only with mandatory account — see Tool support), and Unreal Engine needs no integration: it natively imports the glTF that ForgeLab already exports. APIs may change before 1.0.
 
 ## Roadmap
 
