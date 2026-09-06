@@ -190,8 +190,15 @@ def test_preview_render_rejects_domains_it_cannot_draw(tmp_path, monkeypatch):
         tools.preview_render(src, "preview.png")
 
 
-def test_preview_render_says_which_features_built_nothing(tmp_path, monkeypatch):
-    """An empty mechanical part points at the tool that can diagnose it."""
+def test_preview_render_reports_mechanical_failures_as_value_errors(tmp_path, monkeypatch):
+    """Both outcomes are a ValueError, whichever machine this runs on.
+
+    With FreeCAD present the empty body builds no solid; without it the kernel
+    is unreachable. The two messages differ, but an MCP caller must not have to
+    catch a different exception type depending on the host — which is exactly
+    what happened when the FreeCAD path escaped as a RuntimeError and this test
+    passed locally while failing on all four CI interpreters.
+    """
     monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
     doc = _cube_doc()
     doc["domain"] = "mechanical"
@@ -334,3 +341,21 @@ def test_critique_render_prose_response_raises_actionable_error(tmp_path, monkey
     _install_client(monkeypatch, "I cannot critique this render, sorry.")
     with pytest.raises(ValueError, match="did not return parseable critique JSON"):
         tools.critique_render(_render_png(tmp_path), "a sleek sports car")
+
+
+def test_preview_render_without_freecad_still_raises_a_value_error(tmp_path, monkeypatch):
+    """Simulates a machine with no FreeCAD, which is what CI always is.
+
+    Worth pinning explicitly: a dev box with FreeCAD installed never exercises
+    this path, so the only signal is a red CI run.
+    """
+    from forgelab.formats import freecad_kernel
+
+    monkeypatch.setattr(freecad_kernel.shutil, "which", lambda name: None)
+    monkeypatch.setenv("FORGELAB_OUTPUT_DIR", str(tmp_path))
+    doc = _cube_doc()
+    doc["domain"] = "mechanical"
+    doc["nodes"] = [{"id": "b", "type": "body", "props": {"name": "B"}}]
+    src = _write_doc(tmp_path, doc)
+    with pytest.raises(ValueError, match="FreeCAD is not installed"):
+        tools.preview_render(src, "preview.png")
