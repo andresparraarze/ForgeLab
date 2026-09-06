@@ -21,13 +21,34 @@ pip install -e ".[dev,api]"
 ## Checks (must pass)
 
 ```bash
-ruff check .          # lint
-ruff format --check . # formatting
-pyright               # type checking
-pytest                # tests
+./scripts/check.sh
 ```
 
-CI runs all of these on every push and pull request.
+That runs five gates — `lint`, `format`, `types`, `tests`, `tests-bare` — and
+you can run one at a time with `./scripts/check.sh types`. CI calls the same
+script for each of its steps, so there is one place a command is written down
+and the two cannot drift apart.
+
+`tests-bare` is `pytest --no-external-tools`, and it is the gate worth knowing
+about. ForgeLab shells out to FreeCAD and `kicad-cli` for geometry ground truth;
+neither is a pip dependency, both are installed on developer machines, and
+neither is present in CI. Without this gate the code paths taken when a tool is
+*missing* never run locally — which is exactly how a mechanical `preview_render`
+came to raise the wrong exception type past a green local suite and break all
+four CI interpreters. Run it before pushing anything that touches an optional
+external tool.
+
+A test that needs one of those tools declares it, rather than computing a skip
+condition of its own:
+
+```python
+from external_tools import requires_freecad
+
+
+@requires_freecad
+def test_the_part_builds():
+    assert verify_document(document)["verified"]
+```
 
 ## Adding an importer or exporter
 

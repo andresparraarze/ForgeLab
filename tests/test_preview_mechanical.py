@@ -7,18 +7,14 @@ threed domain's Y-up axis remap to coordinates that are already Z-up.
 """
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.core import validate
 from forgelab.preview import PreviewError, render_preview
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
-
-needs_freecad = pytest.mark.skipif(
-    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 
@@ -58,7 +54,7 @@ def _tower(height: float = 40.0) -> ForgeDocument:
     )
 
 
-@needs_freecad
+@requires_freecad
 def test_mechanical_geometry_stays_z_up():
     """The single most consequential detail: no Y-up remap on FreeCAD output.
 
@@ -77,7 +73,7 @@ def test_mechanical_geometry_stays_z_up():
     assert extent == pytest.approx([10.0, 10.0, 40.0], abs=1e-6)
 
 
-@needs_freecad
+@requires_freecad
 def test_only_finished_solids_are_tessellated():
     """A body and its tip are one shape; drawing both paints them over each other."""
     from forgelab.preview.mechanical import collect_triangles
@@ -89,7 +85,7 @@ def test_only_finished_solids_are_tessellated():
     assert len(triangles) == 12
 
 
-@needs_freecad
+@requires_freecad
 def test_each_solid_gets_its_own_colour():
     """A multi-solid part must not read as one undifferentiated blob."""
     from forgelab.preview.mechanical import _SOLID_COLORS, collect_triangles
@@ -99,7 +95,7 @@ def test_each_solid_gets_its_own_colour():
     assert set(colors) == {_SOLID_COLORS[0]}
 
 
-@needs_freecad
+@requires_freecad
 @pytest.mark.parametrize(
     "name", ["motor_mount.forge.json", "enclosure.forge.json", "rounded_knob.forge.json"]
 )
@@ -113,7 +109,7 @@ def test_examples_render_to_a_real_png(tmp_path, name):
     assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-@needs_freecad
+@requires_freecad
 def test_mechanical_views_are_engineering_views_not_scene_views(tmp_path):
     """A part is read as a drawing: a pictorial view plus orthographic elevations."""
     result = render_preview(_example("motor_mount.forge.json"), str(tmp_path / "p.png"), views=3)
@@ -122,7 +118,7 @@ def test_mechanical_views_are_engineering_views_not_scene_views(tmp_path):
     assert "front-3/4" not in result["views"]
 
 
-@needs_freecad
+@requires_freecad
 def test_a_part_that_builds_nothing_reports_why(tmp_path):
     """An empty body has no solids; say so, and point at the diagnosis."""
     doc = ForgeDocument(

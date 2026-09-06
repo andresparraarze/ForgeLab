@@ -13,20 +13,17 @@ valid, "Up-to-date" object holding nothing at all.
 """
 
 import json
-import shutil
+import math
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.core import validate
-from forgelab.exporters.mechanical import FreeCADExporter
+from forgelab.exporters.mechanical import FreeCADExporter, realxml
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.validation.mechanical import check_mechanical
 from forgelab.verify import VerifyError, verify_document
-
-needs_freecad = pytest.mark.skipif(
-    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 _EXAMPLE_NAMES = sorted(p.name for p in _EXAMPLES.glob("*.forge.json"))
@@ -139,7 +136,7 @@ def test_verification_rejects_a_non_mechanical_document():
 # --- real kernel ------------------------------------------------------------ #
 
 
-@needs_freecad
+@requires_freecad
 @pytest.mark.parametrize("name", _EXAMPLE_NAMES)
 def test_every_shipped_example_actually_builds(name):
     """The regression net: each example must recompute to a real solid."""
@@ -150,7 +147,7 @@ def test_every_shipped_example_actually_builds(name):
     assert report["bbox"] is not None
 
 
-@needs_freecad
+@requires_freecad
 def test_motor_mount_volume_matches_its_described_dimensions():
     """A plate minus its bore and holes — arithmetic the kernel has to agree with.
 
@@ -164,7 +161,7 @@ def test_motor_mount_volume_matches_its_described_dimensions():
     assert report["bbox"][3:5] == pytest.approx([100.0, 60.0], abs=1e-6)
 
 
-@needs_freecad
+@requires_freecad
 def test_an_impossible_fillet_radius_is_caught_although_every_cheap_check_passes():
     """A 50mm round on a 10mm cube. Nothing but the kernel can know."""
     doc = _cube_doc(
@@ -178,7 +175,7 @@ def test_an_impossible_fillet_radius_is_caught_although_every_cheap_check_passes
     assert any("'F'" in e for e in report["errors"])
 
 
-@needs_freecad
+@requires_freecad
 def test_a_shell_with_no_opening_is_caught_although_every_cheap_check_passes():
     """The trap the Shell docstring warns about in prose, now actually detected.
 
@@ -197,7 +194,7 @@ def test_a_shell_with_no_opening_is_caught_although_every_cheap_check_passes():
     assert any("'H'" in e for e in report["errors"])
 
 
-@needs_freecad
+@requires_freecad
 def test_a_sound_fillet_verifies_and_removes_the_volume_it_should():
     """The same shape with a workable radius: 12 edges rounded off a 1000mm^3 cube."""
     doc = _cube_doc(
@@ -210,7 +207,7 @@ def test_a_sound_fillet_verifies_and_removes_the_volume_it_should():
     assert 970 < report["total_volume"] < 1000
 
 
-@needs_freecad
+@requires_freecad
 def test_each_node_is_reported_under_its_own_ir_id():
     """Diagnostics name IR nodes, not FreeCAD's internal object names."""
     report = verify_document(_example("motor_mount.forge.json"))
@@ -265,7 +262,7 @@ def test_mcp_verify_geometry_rejects_an_unparseable_document(tmp_path):
         tools.verify_geometry(str(path))
 
 
-@needs_freecad
+@requires_freecad
 def test_mcp_verify_geometry_reports_a_good_part(tmp_path):
     from forgelab.mcp import tools
 
@@ -274,7 +271,7 @@ def test_mcp_verify_geometry_reports_a_good_part(tmp_path):
     assert report["solid_count"] == 1
 
 
-@needs_freecad
+@requires_freecad
 def test_mcp_verify_geometry_reports_a_broken_part(tmp_path):
     from forgelab.mcp import tools
 
@@ -286,7 +283,7 @@ def test_mcp_verify_geometry_reports_a_broken_part(tmp_path):
     assert report["errors"]
 
 
-@needs_freecad
+@requires_freecad
 def test_a_feature_built_on_the_wrong_predecessor_is_warned_about():
     """Found by accident while exercising the tool, which is why it is pinned.
 
@@ -328,7 +325,7 @@ def test_a_feature_built_on_the_wrong_predecessor_is_warned_about():
     assert any("wrong predecessor" in w for w in report["warnings"])
 
 
-@needs_freecad
+@requires_freecad
 def test_reported_bbox_is_the_true_extent_not_the_conservative_bound():
     """OCC's cheap BoundBox over-reports on curved shapes; the exact one is used.
 
@@ -341,3 +338,198 @@ def test_reported_bbox_is_the_true_extent_not_the_conservative_bound():
     )
     report = verify_document(doc)
     assert report["bbox"] == pytest.approx([0.0, 0.0, 0.0, 10.0, 10.0, 10.0], abs=1e-6)
+
+
+# --- features that built something, but not what was asked for -------------- #
+#
+# The checks above ask "did this build?". These ask the harder question: "did it
+# do what it said?" A feature can produce a perfectly valid solid that is simply
+# not the one the document describes, and every check the project had before
+# this — cheap and geometric alike — calls that a success.
+
+
+def test_the_exporter_records_what_it_guessed_for_an_all_edges_fillet():
+    """No FreeCAD needed: the estimate has to be visible before it can be checked.
+
+    A fillet with an explicit ``edges`` list is a fact and is not recorded; only
+    the derived counts are, because only those can be wrong.
+    """
+    derived = FreeCADExporter().build(
+        _cube_doc(Node(id="F", type="fillet", props={"name": "F", "target": "P", "radius": 1.0}))
+    )
+    assert derived.estimated_fillet_edges == {"F": 12}
+
+    explicit = FreeCADExporter().build(
+        _cube_doc(
+            Node(
+                id="F",
+                type="fillet",
+                props={"name": "F", "target": "P", "radius": 1.0, "edges": [1, 2]},
+            )
+        )
+    )
+    assert explicit.estimated_fillet_edges == {}
+
+
+@requires_freecad
+def test_the_estimate_matches_the_kernel_for_every_shipped_example():
+    """The regression net for _estimate_edge_count, against ground truth.
+
+    Its formulas were pinned experimentally against FreeCAD 1.1 and have never
+    had anything to hold them to account. This is that.
+    """
+    for name in _EXAMPLE_NAMES:
+        doc = _example(name)
+        if not FreeCADExporter().build(doc).estimated_fillet_edges:
+            continue
+        report = verify_document(doc)
+        assert not [e for e in report["errors"] if "asks to round every edge" in e], name
+
+
+@requires_freecad
+def test_an_undercounted_all_edges_fillet_is_reported(monkeypatch):
+    """The silent failure this check exists for, forced into the open.
+
+    An under-count is invisible to everything else: the part builds, the volume
+    is plausible, and some edges are just left sharp — the one outcome someone
+    asking to round every edge would notice at a glance and no check would.
+    The estimator is right today, so the wrong answer is injected rather than
+    waiting for a shape it gets wrong; what is under test is the detection.
+    """
+    monkeypatch.setattr(realxml, "_estimate_edge_count", lambda *a, **k: 4)
+    doc = _cube_doc(Node(id="F", type="fillet", props={"name": "F", "target": "P", "radius": 0.5}))
+    assert check_mechanical(doc) == ([], [])  # the cheap checks see nothing wrong
+
+    report = verify_document(doc)
+    assert not report["verified"]
+    message = next(e for e in report["errors"] if e.startswith("fillet 'F'"))
+    assert "derived 4 edges" in message
+    assert "the kernel reports 12" in message
+    assert "8 edges were left sharp" in message
+
+
+@requires_freecad
+def test_an_overcounted_fillet_still_fails_the_way_it_always_did():
+    """The other direction needs no new check: FreeCAD refuses outright.
+
+    Worth pinning so the two failures stay distinguishable — an impossible
+    fillet is a recompute failure, not a miscount.
+    """
+    doc = _cube_doc(
+        Node(
+            id="F",
+            type="fillet",
+            props={"name": "F", "target": "P", "radius": 0.5, "edges": list(range(1, 21))},
+        )
+    )
+    report = verify_document(doc)
+    assert not report["verified"]
+    assert any("failed to recompute" in e for e in report["errors"])
+
+
+@requires_freecad
+def test_a_shell_that_hollows_nothing_is_reported():
+    """verify_geometry called a no-op shell 'verified' before this.
+
+    check_mechanical catches this particular document by a different route
+    (thickness <= 0), but verify_geometry is a tool of its own and an agent may
+    reach for it alone; reporting a solid that was never hollowed as verified
+    is the wrong answer whichever other check exists.
+    """
+    doc = _cube_doc(
+        Node(
+            id="H",
+            type="shell",
+            props={"name": "H", "target": "P", "thickness": 0.0, "faces_to_remove": [1]},
+        )
+    )
+    report = verify_document(doc)
+    assert not report["verified"]
+    assert any("hollowed nothing" in e for e in report["errors"])
+
+
+@requires_freecad
+def test_a_healthy_shell_and_fillet_are_left_alone():
+    """The control: neither check may fire on a part that is fine."""
+    for feature in (
+        Node(id="F", type="fillet", props={"name": "F", "target": "P", "radius": 1.0}),
+        Node(
+            id="H",
+            type="shell",
+            props={"name": "H", "target": "P", "thickness": 2.0, "faces_to_remove": [1]},
+        ),
+    ):
+        report = verify_document(_cube_doc(feature))
+        assert report["verified"], report["errors"]
+        assert report["total_volume"] < 1000.0  # material really was removed
+
+
+def _pocketed_cube(**pocket_props):
+    """A 20mm cube with a Ø6 pocket sketched on XY — the classic wrong-way cut."""
+    props = {"name": "K", "body": "B", "profile": "S2", "length": 5.0}
+    props.update(pocket_props)
+    return ForgeDocument(
+        forgelab_version="0.5.0",
+        domain=Domain.MECHANICAL,
+        meta=DocumentMeta(name="pocketed"),
+        nodes=[
+            Node(id="B", type="body", props={"name": "B"}),
+            Node(
+                id="S",
+                type="sketch",
+                props={
+                    "name": "S",
+                    "body": "B",
+                    "plane": "XY",
+                    "geometry": [
+                        {"geo_type": "line", "points": [0, 0, 20, 0]},
+                        {"geo_type": "line", "points": [20, 0, 20, 20]},
+                        {"geo_type": "line", "points": [20, 20, 0, 20]},
+                        {"geo_type": "line", "points": [0, 20, 0, 0]},
+                    ],
+                },
+            ),
+            Node(
+                id="P", type="pad", props={"name": "P", "body": "B", "profile": "S", "length": 10.0}
+            ),
+            Node(
+                id="S2",
+                type="sketch",
+                props={
+                    "name": "S2",
+                    "body": "B",
+                    "plane": "XY",
+                    "geometry": [{"geo_type": "circle", "center": [10, 10], "radius": 3.0}],
+                },
+            ),
+            Node(id="K", type="pocket", props=props),
+        ],
+    )
+
+
+@requires_freecad
+def test_a_pocket_that_cuts_nothing_is_reported():
+    """The most likely mistake in the whole mechanical vocabulary.
+
+    A sketch on the XY plane cuts *downward*, so a pocket over a pad that rises
+    from z=0 removes nothing at all unless ``reversed`` is true. Found while
+    testing the fillet check, in a document written without thinking about it —
+    the part built, exported, rendered, and had no hole, and both check_mechanical
+    and verify_geometry called it fine.
+    """
+    doc = _pocketed_cube()
+    assert check_mechanical(doc) == ([], [])  # the cheap checks cannot see this
+
+    report = verify_document(doc)
+    assert not report["verified"]
+    message = next(e for e in report["errors"] if e.startswith("pocket 'K'"))
+    assert "cut nothing" in message
+    assert "reversed" in message  # the message has to say what to do about it
+
+
+@requires_freecad
+def test_a_pocket_that_cuts_the_right_way_is_left_alone():
+    """The control, pinned to arithmetic: 20x20x10 less a Ø6 pocket 5 deep."""
+    report = verify_document(_pocketed_cube(reversed=True))
+    assert report["verified"], report["errors"]
+    assert report["total_volume"] == pytest.approx(20 * 20 * 10 - math.pi * 9 * 5, abs=1e-6)

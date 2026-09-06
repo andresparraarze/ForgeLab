@@ -11,21 +11,17 @@ different bytes one second apart.
 """
 
 import json
-import shutil
 import time
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.core import validate
 from forgelab.core.pipeline import default_registry
 from forgelab.exporters.mechanical import StepExporter, StlExporter
 from forgelab.formats import freecad_kernel, step
 from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
-
-needs_freecad = pytest.mark.skipif(
-    shutil.which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 
@@ -82,7 +78,7 @@ def test_refuses_without_freecad_naming_what_to_install(exporter, monkeypatch):
 # --- real kernel ------------------------------------------------------------ #
 
 
-@needs_freecad
+@requires_freecad
 def test_step_reimports_into_freecad_with_the_same_volume(tmp_path):
     """The end-to-end claim: the STEP contains the part, not an approximation."""
     doc = _example("motor_mount.forge.json")
@@ -111,7 +107,7 @@ def test_step_reimports_into_freecad_with_the_same_volume(tmp_path):
     assert "VOLUME: 14297.85" in result.stdout, result.stdout
 
 
-@needs_freecad
+@requires_freecad
 def test_step_export_is_byte_identical_across_a_clock_tick():
     """Without header normalization these differ: OCC stamps the wall clock."""
     doc = _example("motor_mount.forge.json")
@@ -121,7 +117,7 @@ def test_step_export_is_byte_identical_across_a_clock_tick():
     assert first == second
 
 
-@needs_freecad
+@requires_freecad
 def test_step_export_embeds_no_wall_clock_time():
     """The same rule the generated Blender scripts are held to."""
     data = StepExporter().from_ir(_example("motor_mount.forge.json"))
@@ -130,7 +126,7 @@ def test_step_export_embeds_no_wall_clock_time():
     assert time.strftime("%Y-%m-%d").encode() not in data
 
 
-@needs_freecad
+@requires_freecad
 def test_step_is_a_wellformed_iso_10303_file():
     data = StepExporter().from_ir(_example("rounded_knob.forge.json"))
     assert data.startswith(b"ISO-10303-21;")
@@ -138,7 +134,7 @@ def test_step_is_a_wellformed_iso_10303_file():
     assert b"ADVANCED_BREP_SHAPE_REPRESENTATION" in data or b"MANIFOLD_SOLID_BREP" in data
 
 
-@needs_freecad
+@requires_freecad
 def test_stl_export_is_a_binary_mesh_with_the_right_extent(tmp_path):
     doc = _example("motor_mount.forge.json")
     data = StlExporter().from_ir(doc)
@@ -152,7 +148,7 @@ def test_stl_export_is_a_binary_mesh_with_the_right_extent(tmp_path):
     assert len(data) == 84 + facets * 50
 
 
-@needs_freecad
+@requires_freecad
 def test_stl_export_is_deterministic():
     doc = _example("motor_mount.forge.json")
     first = StlExporter().from_ir(doc)
@@ -160,7 +156,7 @@ def test_stl_export_is_deterministic():
     assert StlExporter().from_ir(doc) == first
 
 
-@needs_freecad
+@requires_freecad
 @pytest.mark.parametrize("tool", ["step", "stl"])
 def test_export_document_writes_the_file_through_mcp(tmp_path, monkeypatch, tool):
     from forgelab.mcp import tools

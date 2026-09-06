@@ -7,7 +7,6 @@ the live FreeCAD recompute reproduces exactly.
 
 import json
 import re
-import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
@@ -15,6 +14,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.exporters.mechanical.freecad import FreeCADExporter
 from forgelab.spec import SPEC_VERSION, ForgeDocument
@@ -196,7 +196,7 @@ def test_rounded_knob_example_validates_and_exports():
     assert re.search(r'<ViewProvider name="knob_revolve".*?<Bool value="true"/>', gui, re.S)
 
 
-@pytest.mark.skipif(shutil.which("freecadcmd") is None, reason="FreeCAD is not installed")
+@requires_freecad
 def test_rounded_knob_export_recomputes_in_freecad(tmp_path):
     document = ForgeDocument.model_validate(json.loads(_EXAMPLE.read_text()))
     fcstd = tmp_path / "rounded_knob.FCStd"

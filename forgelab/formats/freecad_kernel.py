@@ -60,8 +60,24 @@ _UNAVAILABLE = (
 )
 
 
-class FreeCADKernelError(RuntimeError):
-    """Raised when the FreeCAD kernel is unavailable or a script fails."""
+class FreeCADKernelError(ValueError):
+    """Raised when the FreeCAD kernel is unavailable or a script fails.
+
+    ``ValueError``, not ``RuntimeError``, and that choice is load-bearing. In
+    this codebase ``ValueError`` means "the caller can act on this": every error
+    in ``forgelab.formats`` derives from it (:class:`~forgelab.formats.fcstd.FcstdError`,
+    :class:`~forgelab.formats.sexpr.SExprError`, :class:`~forgelab.formats.gltf.GltfError`),
+    as does every service error above it, and the MCP layer turns that one class
+    into a message the model is shown. "FreeCAD is not installed" is the most
+    actionable error here — it names a program to install.
+
+    Deriving this from ``RuntimeError`` instead made it the single exception to
+    that rule, so each of the three consumers (verify, preview, the STEP/STL
+    exporters) had to remember to convert it by hand. Two did; the exporters did
+    not, and ``export_document`` leaked a RuntimeError to callers for it. Being a
+    ``ValueError`` is what removes the conversion, and the thing to forget, from
+    every present and future consumer at once.
+    """
 
 
 def available() -> bool:
@@ -212,7 +228,7 @@ for obj in doc.Objects:
         if null:
             entry.update({
                 "valid": False, "volume": 0.0, "area": 0.0,
-                "solids": 0, "faces": 0, "bbox": None,
+                "solids": 0, "faces": 0, "edges": 0, "bbox": None,
             })
         else:
             # Shape.BoundBox is a CONSERVATIVE bound, not the real extent: on
@@ -233,6 +249,11 @@ for obj in doc.Objects:
                 "area": float(shape.Area),
                 "solids": len(shape.Solids),
                 "faces": len(shape.Faces),
+                # The true edge count, which nothing outside a kernel can know.
+                # The .FCStd exporter derives an all-edges fillet's edge ids
+                # analytically, so this is what its arithmetic is checked
+                # against.
+                "edges": len(shape.Edges),
                 "bbox": [box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax],
             })
     objects.append(entry)
@@ -245,7 +266,7 @@ def inspect_document(path: str | Path, timeout: int = DEFAULT_TIMEOUT) -> list[d
 
     Each entry carries ``name``/``label``/``type_id``/``state``/``has_shape``,
     plus — for objects that have a shape — ``valid``, ``null``, ``volume``,
-    ``area``, ``solids``, ``faces`` and ``bbox``. Zero ``solids`` or zero
+    ``area``, ``solids``, ``faces``, ``edges`` and ``bbox``. Zero ``solids`` or zero
     ``volume`` on a feature that should be solid is the signature of geometry
     that silently built nothing.
     """

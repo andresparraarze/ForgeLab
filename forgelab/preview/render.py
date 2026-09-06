@@ -170,6 +170,8 @@ def render_preview(document: ForgeDocument, output_path: str, views: int = 3) ->
     names rendered). Raises ``PreviewError`` for an unsupported domain or a
     document with no geometry, ``ImportError`` when the ``preview`` extra is not
     installed, and — for mechanical — ``FreeCADKernelError`` without FreeCAD.
+    Both error classes are ``ValueError`` subclasses, so a caller that wants to
+    report any actionable failure can catch that one type.
     """
     if document.domain == Domain.MECHANICAL:
         from forgelab.preview import mechanical

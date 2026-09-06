@@ -6,7 +6,70 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **The fixes that got the last release green were band-aids; these are the
+  changes underneath them.** Three of them would have failed again, and one was
+  still broken.
+
+  - **`FreeCADKernelError` is now a `ValueError`.** The bug that broke CI on
+    2026-09-06 was patched in `preview_render` and left live everywhere else:
+    `export_document(tool="step")` still leaked a `RuntimeError` when FreeCAD
+    was missing. Every error class in `forgelab/formats/` derives from
+    `ValueError` — `FcstdError`, `SExprError`, `GltfError` — as does every
+    service error above them. `FreeCADKernelError` deriving from `RuntimeError`
+    made it the single exception to that rule, so each of the three consumers
+    had to remember to convert it; two did. Making it a `ValueError` removes the
+    conversion, and the thing to forget, from every consumer at once.
+  - **Migrated to the MCP SDK 2.x**, replacing the `mcp<2` pin — which was a
+    pin, not a fix, since `server.py` still imported the removed
+    `mcp.server.fastmcp`. Not just a rename: in 2.1 only a `ToolError` carries
+    its message to the client, and everything else arrives as the bare string
+    `Error executing tool <name>`. ForgeLab raises `ToolError` nowhere and
+    `ValueError` everywhere, so ported naively every actionable message the
+    tools are built around would have gone silent while every test still passed.
+    `server._guard` translates once at the boundary and keeps the distinction:
+    `ValueError`/`PermissionError` become `ToolError` and are shown; anything
+    else stays a crash, logged with its traceback, because a bug must not be
+    able to dress itself up as user error. Transport settings (`host`, `port`,
+    `stateless_http`, `json_response`) moved from the constructor to `run()`.
+  - **`ruff` and `pyright` are pinned exactly**, and a weekly, non-blocking
+    `tooling-drift` workflow installs the latest and reports. Unpinned, a
+    release of either turned main red with no commit behind it — twice in one
+    afternoon. The `ruff format` Markdown exclude narrowed from all `**/*.md` to
+    `docs/superpowers/**/*.md`, so a snippet in README or CHANGELOG is held to
+    the standard of the code it documents.
+
 ### Added
+- **`pytest --no-external-tools` and `scripts/check.sh`.** FreeCAD and
+  `kicad-cli` are installed on every machine this project is developed on and on
+  no CI runner, so the code paths taken when a tool is *missing* were unreachable
+  locally — which is exactly how the wrong exception type reached main past a
+  green suite. The flag hides those two executables (patching `shutil.which`, so
+  production code takes its real not-installed path) and `scripts/check.sh` runs
+  it as a gate. That script is now the single definition of every check, called
+  by `ci.yml` for each of its steps, so local and CI cannot drift apart again.
+  The skip condition that had been copy-pasted into twelve test modules is one
+  `@requires_freecad` / `@requires_kicad_cli` marker, resolved during collection.
+- **Verification catches features that build a valid solid and do nothing.**
+  Asking "did this build?" is not the same as asking "did it do what it said?",
+  and a feature can produce a perfectly good solid that is not the one described:
+
+  - **A pocket that cuts nothing.** A sketch on the XY plane cuts *downward*, so
+    a pocket over a pad rising from z=0 removes no material unless `reversed` is
+    true. The part builds, exports, renders — without the hole. Found by writing
+    exactly that document by accident, and watching every existing check call it
+    fine. The mechanical prompt now warns about it too.
+  - **A shell that hollows nothing**, which `verify_geometry` reported as
+    verified.
+  - **An all-edges fillet that rounds fewer edges than exist.** The exporter has
+    no OCC kernel, so it derives edge ids analytically from the sketch. Guessing
+    too high always failed loudly; guessing too low was invisible — plausible
+    volume, valid solid, some edges simply left sharp. The exporter now records
+    what it guessed and the kernel reports the true count, so verification can
+    compare them and say how many edges were left.
+
+  `verify_geometry` node reports gained `edges`, and the export error for a
+  target whose edge count cannot be derived now says what to do about it.
 - **Mechanical parts can now be verified, seen, and handed to other CAD tools.**
   A generated FreeCAD part was previously both unverified and invisible. The
   threed domain has had a render–critique loop since 2026-07-03 and hardware has

@@ -1,0 +1,52 @@
+# Early warning for the pinned toolchain. Never gates a push.
+#
+# ruff and pyright are pinned to exact versions in pyproject's dev extra
+# because their rules change by design: a release can turn main red with no
+# commit behind it, which is how 2026-09-06 went. Pins fix that but introduce
+# the opposite risk — falling behind quietly, so that the eventual upgrade is a
+# pile of unrelated findings at the worst possible moment.
+#
+# This job installs the *latest* of each and runs the same gates. When it goes
+# red, nothing is blocked: it means the next version wants something, and the
+# bump can be made deliberately, on its own branch, at a time of our choosing.
+
+name: Tooling drift
+
+on:
+  schedule:
+    # Mondays, early UTC — a week's notice before it matters.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+# Nothing here is a required check; the point is the notification.
+permissions:
+  contents: read
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # One interpreter is enough: this asks "what do the new tools think",
+          # not "does the code work on every Python" — ci.yml covers that.
+          python-version: "3.13"
+      - name: Install with the latest toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+          pip install --upgrade ruff pyright mcp
+      - name: Report the versions under test
+        run: |
+          ruff --version
+          pyright --version
+          python -c "import importlib.metadata as m; print('mcp', m.version('mcp'))"
+      - name: Ruff lint
+        run: scripts/check.sh lint
+      - name: Ruff format
+        run: scripts/check.sh format
+      - name: Pyright
+        run: scripts/check.sh types
+      - name: Pytest
+        run: scripts/check.sh tests

@@ -1966,14 +1966,6 @@ def preview_render(document_path: str, output_path: str, views: int = 3) -> dict
             "preview rendering unavailable: install the preview extra "
             '(pip install "forgelab[preview]")'
         ) from exc
-    except ValueError:
-        raise  # PreviewError and friends are already the right shape
-    except Exception as exc:
-        # A mechanical preview drives FreeCAD, which raises FreeCADKernelError
-        # (a RuntimeError) when it is not installed. Every other failure this
-        # tool reports is a ValueError, and the message is already actionable,
-        # so re-shape rather than let one path out through a different type.
-        raise ValueError(str(exc)) from exc
     return {
         "rendered": True,
         "path": str(target),

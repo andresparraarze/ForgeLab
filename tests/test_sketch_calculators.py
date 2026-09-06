@@ -11,6 +11,7 @@ to — and to the real ``SketchGeometry`` model.
 import math
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.calc import calculate_bolt_circle, calculate_rounded_rect, calculate_slot
 from forgelab.spec.mechanical import Sketch, SketchGeometry
@@ -183,9 +184,7 @@ def test_calculators_are_exposed_as_mcp_tools():
 # --- end to end ------------------------------------------------------------- #
 
 
-@pytest.mark.skipif(
-    __import__("shutil").which("freecadcmd") is None, reason="FreeCAD is not installed"
-)
+@requires_freecad
 def test_calculated_profiles_build_a_real_solid_in_freecad():
     """The claim that matters: these profiles pad and pocket in the real kernel.
 

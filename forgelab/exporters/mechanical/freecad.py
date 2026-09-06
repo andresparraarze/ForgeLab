@@ -176,11 +176,14 @@ class FcstdBuild(NamedTuple):
     open the archive in the real kernel and read the right shapes — see
     ``RealDocument.solid_names`` for why the visible set is not the same thing.
     ``solid_body_names`` says which bodies are even expected to have a shape.
+    ``estimated_fillet_edges`` carries the analytically-derived edge counts, so
+    verification can check them against the kernel.
     """
 
     data: bytes
     solid_names: tuple[str, ...]
     solid_body_names: tuple[str, ...] = ()
+    estimated_fillet_edges: dict[str, int] = {}
 
 
 class FreeCADExporter(Exporter):
@@ -239,7 +242,9 @@ class FreeCADExporter(Exporter):
                 **real.files,
             }
         )
-        return FcstdBuild(data, real.solid_names, real.solid_body_names)
+        return FcstdBuild(
+            data, real.solid_names, real.solid_body_names, real.estimated_fillet_edges
+        )
 
 
 def _stamp_hash(document_xml: bytes, hash_value: str) -> bytes:

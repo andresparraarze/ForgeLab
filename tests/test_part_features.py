@@ -9,7 +9,6 @@ organic_grip example.
 
 import json
 import re
-import shutil
 import struct
 import subprocess
 import xml.etree.ElementTree as ET
@@ -18,6 +17,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from external_tools import requires_freecad
 
 from forgelab.exporters.mechanical import FreeCADExporter
 from forgelab.importers.mechanical import FreeCADImporter
@@ -306,7 +306,7 @@ def test_organic_grip_example_validates_and_exports():
     assert re.search(r'<ViewProvider name="grip_loft".*?<Bool value="false"/>', gui, re.S)
 
 
-@pytest.mark.skipif(shutil.which("freecadcmd") is None, reason="FreeCAD is not installed")
+@requires_freecad
 def test_organic_grip_export_recomputes_in_freecad(tmp_path):
     document = ForgeDocument.model_validate(json.loads(_EXAMPLE.read_text()))
     fcstd = tmp_path / "organic_grip.FCStd"

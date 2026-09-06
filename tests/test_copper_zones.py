@@ -9,11 +9,10 @@ router's copper was pinned against.
 """
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
+from external_tools import requires_kicad_cli
 
 from forgelab.exporters.hardware.kicad import KiCadExporter
 from forgelab.layout import place_components, route_document
@@ -146,7 +145,7 @@ def test_gerber_completeness_warns_about_unrendered_zones():
     assert any("zone" in w or "pour" in w for w in result["warnings"])
 
 
-@pytest.mark.skipif(shutil.which("kicad-cli") is None, reason="kicad-cli not installed")
+@requires_kicad_cli
 def test_zone_export_is_copper_clean_under_kicad_drc(tmp_path):
     """KiCad's own DRC, with the zones refilled, is the ground truth.
 
