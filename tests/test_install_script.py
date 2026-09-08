@@ -123,3 +123,77 @@ def test_append_is_idempotent(tmp_path):
 def test_bashrc_updated_only_when_present(tmp_path):
     home = _run_setup(tmp_path, zsh_zdotdir=str(tmp_path / "home"), make_bashrc=True)
     assert _expected_line(home) in (home / ".bashrc").read_text()
+
+
+# --- the four agent wrappers ------------------------------------------------
+#
+# The wrappers are deliberately thin: registration lives in `forgelab init`
+# (see tests/test_cli_init.py), which is the only place the per-CLI flags are
+# written down. What these tests protect is that the wrappers keep delegating
+# rather than growing a second, drifting copy of `<agent> mcp add`.
+
+WRAPPERS = {
+    "install-claude-code.sh": ("claude-code", "claude"),
+    "install-codex.sh": ("codex", "codex"),
+    "install-hermes.sh": ("hermes", "hermes"),
+    "install-openclaw.sh": ("openclaw", "openclaw"),
+}
+
+
+def _code(script: str) -> list[str]:
+    """The wrapper's executable lines — comments explain the flags, so a
+    substring search over the whole file would match the explanation."""
+    lines = (Path("scripts") / script).read_text().splitlines()
+    return [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+@pytest.mark.parametrize("script,expected", sorted(WRAPPERS.items()))
+def test_wrapper_delegates_registration_to_forgelab_init(script, expected):
+    agent, binary = expected
+    code = _code(script)
+
+    assert any(f"init --agent {agent}" in ln for ln in code)
+    assert any(f"command -v {binary}" in ln for ln in code)
+    # No hand-rolled registration: that is what `forgelab init` is for.
+    assert not any(f"{binary} mcp add" in ln for ln in code)
+
+
+@pytest.mark.parametrize("script", sorted(WRAPPERS))
+def test_wrapper_does_not_let_a_prompt_eat_the_install_script(script):
+    """Under `curl ... | bash` the script itself is stdin.
+
+    Hermes and OpenClaw probe the server and then ask before saving; without a
+    redirect they would consume the remaining lines of the installer.
+    """
+    init_line = next(ln for ln in _code(script) if "init --agent" in ln)
+    assert "</dev/null" in init_line
+
+
+@pytest.mark.parametrize("script", sorted(WRAPPERS) + ["install.sh"])
+def test_scripts_are_executable_and_valid_bash(script):
+    path = Path("scripts") / script
+    assert path.stat().st_mode & 0o111, f"{script} is not executable"
+    subprocess.run(["bash", "-n", str(path)], check=True)
+
+
+def test_installer_installs_the_extras_the_mcp_tools_need():
+    """preview_render and critique_render are 2 of the 40 tools.
+
+    Without matplotlib/numpy they are the two that fail on a machine where
+    everything else works — and nothing else in the dependency tree pulls them.
+    """
+    body = SCRIPT.read_text()
+    assert body.count("[mcp,agent,preview]") >= 2
+    assert "[mcp,agent]" not in body.replace("[mcp,agent,preview]", "")
+
+
+def test_installer_upgrades_rather_than_reusing_an_existing_install():
+    """pip 23.x and older refuse to reinstall a git URL at an unchanged version.
+
+    That made re-running the one-liner a silent no-op. The version is derived
+    from git now, but --upgrade is what makes the intent explicit.
+    """
+    installs = [ln for ln in SCRIPT.read_text().splitlines() if 'pip" install' in ln]
+    forgelab_installs = [ln for ln in installs if "forgelab" in ln]
+    assert forgelab_installs
+    assert all("--upgrade" in ln for ln in forgelab_installs), forgelab_installs

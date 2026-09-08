@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# One-line ForgeLab installer for Codex CLI.
+# One-line ForgeLab installer for Hermes Agent.
 #
-#   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-codex.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-hermes.sh | bash
 #
 # Thin wrapper: runs the generic installer (scripts/install.sh — venv at
 # ~/.forgelab, forgelab[mcp,agent,preview], ~/forgelab-output, PATH), then
-# registers the MCP server with Codex CLI over stdio. Standalone: no prior
+# registers the MCP server with Hermes Agent over stdio. Standalone: no prior
 # ForgeLab install and no other agent required.
 #
-# The registration itself is `forgelab init --agent codex`, not a hand-written
-# `codex mcp add` line. These four CLIs disagree in small ways that are easy to
+# The registration itself is `forgelab init --agent hermes`, not a hand-written
+# `hermes mcp add` line. These four CLIs disagree in small ways that are easy to
 # copy wrong — scope defaults, how server arguments are passed, whether removal
 # is spelled "remove" or "unset", whether adding prompts for confirmation — so
 # the commands live in forgelab/cli.py where tests can assert them exactly.
@@ -34,17 +34,17 @@ else
   curl -fsSL "$REPO_RAW/scripts/install.sh" | bash
 fi
 
-# 2. Register with Codex CLI
-step "Registering MCP server with Codex CLI"
-command -v codex >/dev/null 2>&1 \
-  || fail "The 'codex' CLI was not found. Install Codex CLI first, then re-run."
+# 2. Register with Hermes Agent
+step "Registering MCP server with Hermes Agent"
+command -v hermes >/dev/null 2>&1 \
+  || fail "The 'hermes' CLI was not found. Install Hermes Agent first, then re-run."
 # </dev/null: under `curl ... | bash` this script *is* stdin, and a registrar
 # that asks a question would otherwise swallow the rest of it.
-"$VENV/bin/forgelab" init --agent codex --output-dir "$FORGELAB_OUTPUT_DIR" </dev/null \
-  || fail "forgelab init --agent codex failed."
+"$VENV/bin/forgelab" init --agent hermes --output-dir "$FORGELAB_OUTPUT_DIR" </dev/null \
+  || fail "forgelab init --agent hermes failed."
 
 echo
-ok "Done! Run /mcp inside a Codex session to confirm ForgeLab's tools are listed, then try:"
+ok "Done! Start a new Hermes session (hermes mcp list shows the server) and try:"
 echo "    \"Generate a blinky LED board and export it to KiCad as blinky.kicad_pcb\""
 echo "  Exports land in: $FORGELAB_OUTPUT_DIR"
 echo "  Note: generate_document needs ANTHROPIC_API_KEY available to the server."

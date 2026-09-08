@@ -168,10 +168,10 @@ def render_preview(document: ForgeDocument, output_path: str, views: int = 3) ->
 
     Returns ``{"triangle_count", "views"}`` (``views`` is the list of view
     names rendered). Raises ``PreviewError`` for an unsupported domain or a
-    document with no geometry, ``ImportError`` when the ``preview`` extra is not
-    installed, and — for mechanical — ``FreeCADKernelError`` without FreeCAD.
-    Both error classes are ``ValueError`` subclasses, so a caller that wants to
-    report any actionable failure can catch that one type.
+    document with no geometry or a missing ``preview`` extra, and — for
+    mechanical — ``FreeCADKernelError`` without FreeCAD. Both error classes are
+    ``ValueError`` subclasses, so a caller that wants to report any actionable
+    failure can catch that one type.
     """
     if document.domain == Domain.MECHANICAL:
         from forgelab.preview import mechanical
@@ -215,12 +215,22 @@ def _render_triangles(
     from, which way is up, which camera angles read well) is settled by the
     caller, so both domains share one shading and layout path.
     """
-    import matplotlib
+    try:
+        import matplotlib
 
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    except ImportError as exc:  # pragma: no cover - exercised without the extra
+        # A bare ModuleNotFoundError is not a ValueError, so the MCP error
+        # boundary would not carry it to the model: the caller would be told
+        # only "Error executing tool preview_render" while the one sentence
+        # that fixes it stayed in the server log.
+        raise PreviewError(
+            "the 'preview' extra is not installed, so there is nothing to "
+            "render with — run: pip install 'forgelab[preview]'"
+        ) from exc
 
     tris = np.array(triangles, dtype=float)
 

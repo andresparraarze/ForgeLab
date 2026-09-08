@@ -7,6 +7,53 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- **Install and update, checked against a stranger's machine rather than this
+  one.** Six defects, four of them silent — nothing errored, the user just got
+  a ForgeLab that was not there, not current, or missing a tool. Nothing in the
+  suite would have caught any of them, because CI never performed an install.
+
+  - **Claude Code is registered at `--scope user`.** `claude mcp add` defaults
+    to `local`, which files the server under the *current directory's* project
+    entry. Installing from `$HOME` — what the one-liner does — left ForgeLab
+    invisible in every other directory the user works in.
+  - **Hermes Agent and OpenClaw get real installers.** Both ship an `mcp add`
+    CLI; the README had been asking users to paste a paragraph at their agent,
+    and the Hermes one told it to hand-start a *foreground* streamable-http
+    server that was never registered and died with the shell.
+  - **The four registration commands live in `forgelab/cli.py`,** and
+    `install-*.sh` call `forgelab init --agent <name>`. The CLIs disagree in
+    ways that are easy to copy wrong and are now asserted argv-for-argv:
+    `--scope` defaults, `--` versus `--command`, OpenClaw spelling removal
+    `unset`, and Hermes passing *no* server arguments at all — its `--args` is
+    `nargs="*"`, which argparse cannot fill with a value starting in `-`, so
+    ForgeLab relies on `forgelab-mcp` defaulting to stdio. Hermes and OpenClaw
+    also probe the server and *ask* before saving, and under `curl … | bash`
+    the parent's stdin is the install script itself, so stdin is now always
+    supplied rather than inherited.
+  - **`preview_render` worked on no clean install.** `install.sh` asked for
+    `forgelab[mcp,agent]`; matplotlib and numpy are the `preview` extra and
+    nothing else pulls them. It now installs `[mcp,agent,preview]`, and a
+    missing extra raises `PreviewError` instead of a bare
+    `ModuleNotFoundError` — which the MCP boundary does not carry, so the model
+    had been getting `Error executing tool preview_render` while the sentence
+    that fixes it stayed in the server log.
+  - **The `mcp` extra declares `pyjwt`.** Every one of the 40 tools calls
+    `require_scope` → `forgelab.auth`, which imports `jwt` at module scope, so
+    the stdio server has always needed it and started only because the MCP SDK
+    happened to depend on PyJWT itself.
+  - **The version is derived from git** (`hatch-vcs`), replacing a static
+    `0.1.0` that was the same string on every commit. `forgelab update` can now
+    say what it moved between instead of printing `SPEC_VERSION`, which never
+    changes; it also drops `--force-reinstall --no-cache-dir`, which is global
+    in pip and rebuilt all ~30 transitive dependencies on every run. New:
+    `forgelab --version`.
+
+  One correction to the record: re-running the install one-liner was *not*
+  stale, as first diagnosed. pip has reinstalled a git URL at an unchanged
+  version since 24.0; only pip 23.x and older skipped it, and `install.sh`
+  upgrades pip before installing. The derived version fixes even that case, but
+  it was not the reason it was needed.
+
 - **The fixes that got the last release green were band-aids; these are the
   changes underneath them.** Three of them would have failed again, and one was
   still broken.
@@ -40,6 +87,12 @@ All notable changes to this project are documented here. The format is based on
     the standard of the code it documents.
 
 ### Added
+- **`scripts/verify-install.sh`, and a CI job that runs it.** A real install
+  into a throwaway HOME against stub agent CLIs: it asserts the registration
+  argv, talks to the resulting server over stdio (40 tools, `list_domains`,
+  and a `preview_render` that must produce a PNG), and upgrades a git-URL
+  install across two commits to prove it moves when the source does. That last
+  check is the one a unit test cannot fake.
 - **`pytest --no-external-tools` and `scripts/check.sh`.** FreeCAD and
   `kicad-cli` are installed on every machine this project is developed on and on
   no CI runner, so the code paths taken when a tool is *missing* were unreachable

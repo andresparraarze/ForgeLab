@@ -3,15 +3,18 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install.sh | bash
 #
-# Creates a venv at ~/.forgelab/venv, installs forgelab[mcp,agent] into it
-# (from the local checkout when run inside the repo, otherwise straight from
-# GitHub — no separate clone is kept), sets up ~/forgelab-output, and puts the
-# venv's bin dir on the PATH. Safe to re-run: every step is idempotent, so
-# running both the Claude Code and Codex one-liners on the same machine just
-# reuses the same install.
+# Creates a venv at ~/.forgelab/venv, installs forgelab[mcp,agent,preview]
+# into it (from the local checkout when run inside the repo, otherwise straight
+# from GitHub — no separate clone is kept), sets up ~/forgelab-output, and puts
+# the venv's bin dir on the PATH.
 #
-# Client registration lives in the thin wrappers install-claude-code.sh and
-# install-codex.sh, which run this script first.
+# Re-running is both safe and useful: it upgrades an existing install rather
+# than reusing it, so running the Claude Code and Codex one-liners on the same
+# machine converges on one current install instead of leaving a stale one.
+#
+# Client registration lives in the thin wrappers install-claude-code.sh,
+# install-codex.sh, install-hermes.sh and install-openclaw.sh, which run this
+# script first and then call `forgelab init --agent <name>`.
 
 set -euo pipefail
 
@@ -88,21 +91,28 @@ mkdir -p "$FORGELAB_HOME"
 "$PYTHON" -m venv "$VENV" || fail "Could not create venv at $VENV."
 ok "venv ready"
 
-# 3. Install forgelab[mcp,agent] — from this checkout if the script lives in
-#    the repo, otherwise straight from GitHub.
-step "Installing forgelab[mcp,agent]"
+# 3. Install forgelab[mcp,agent,preview] — from this checkout if the script
+#    lives in the repo, otherwise straight from GitHub.
+#
+#    'preview' is not optional in practice: preview_render and critique_render
+#    are two of the 40 MCP tools, and without matplotlib/numpy they are the two
+#    that fail on a machine where everything else works.
+step "Installing forgelab[mcp,agent,preview]"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/../pyproject.toml" ]; then
   "$VENV/bin/pip" install --quiet --upgrade pip
-  "$VENV/bin/pip" install --quiet -e "$SCRIPT_DIR/..[mcp,agent]" \
+  "$VENV/bin/pip" install --quiet --upgrade -e "$SCRIPT_DIR/..[mcp,agent,preview]" \
     || fail "pip install from local checkout failed."
 else
+  # --upgrade pip first, then --upgrade forgelab: pip 23.x and older refuse to
+  # reinstall a git URL whose version has not changed, which is what made
+  # re-running this script a silent no-op on older machines.
   "$VENV/bin/pip" install --quiet --upgrade pip
-  "$VENV/bin/pip" install --quiet "forgelab[mcp,agent] @ git+$REPO_URL" \
+  "$VENV/bin/pip" install --quiet --upgrade "forgelab[mcp,agent,preview] @ git+$REPO_URL" \
     || fail "pip install from $REPO_URL failed."
 fi
 [ -x "$VENV/bin/forgelab-mcp" ] || fail "forgelab-mcp not found in the venv after install."
-ok "forgelab installed ($("$VENV/bin/python" -c 'import forgelab.spec; print("spec", forgelab.spec.SPEC_VERSION)'))"
+ok "forgelab installed ($("$VENV/bin/forgelab" --version))"
 
 # 4. Output directory
 step "Creating output directory $OUTPUT_DIR"
@@ -113,7 +123,7 @@ ok "output directory ready"
 step "Adding $VENV/bin to your PATH"
 PATH_LINE="export PATH=\"$VENV/bin:\$PATH\""
 forgelab_setup_path "$VENV/bin"
-command -v forgelab >/dev/null 2>&1 || fail "forgelab not found on PATH after update."
+command -v forgelab >/dev/null 2>&1 || fail "forgelab not found on PATH after install."
 ZSH_DIR="$(forgelab_zsh_dir)"
 ok "PATH updated — 'forgelab', 'forgelab-mcp' are now global commands"
 if [ "$ZSH_DIR" != "$HOME" ]; then

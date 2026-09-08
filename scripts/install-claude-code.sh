@@ -4,8 +4,15 @@
 #   curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
 #
 # Thin wrapper: runs the generic installer (scripts/install.sh — venv at
-# ~/.forgelab, forgelab[mcp,agent], ~/forgelab-output, PATH), then registers
-# the MCP server with Claude Code (stdio).
+# ~/.forgelab, forgelab[mcp,agent,preview], ~/forgelab-output, PATH), then
+# registers the MCP server with Claude Code over stdio. Standalone: no prior
+# ForgeLab install and no other agent required.
+#
+# The registration itself is `forgelab init --agent claude-code`, not a hand-written
+# `claude mcp add` line. These four CLIs disagree in small ways that are easy to
+# copy wrong — scope defaults, how server arguments are passed, whether removal
+# is spelled "remove" or "unset", whether adding prompts for confirmation — so
+# the commands live in forgelab/cli.py where tests can assert them exactly.
 
 set -euo pipefail
 
@@ -31,11 +38,10 @@ fi
 step "Registering MCP server with Claude Code"
 command -v claude >/dev/null 2>&1 \
   || fail "The 'claude' CLI was not found. Install Claude Code first, then re-run."
-claude mcp remove forgelab >/dev/null 2>&1 || true
-claude mcp add forgelab --env "FORGELAB_OUTPUT_DIR=$FORGELAB_OUTPUT_DIR" -- \
-  "$VENV/bin/forgelab-mcp" --transport stdio \
-  || fail "claude mcp add failed."
-ok "registered as MCP server 'forgelab'"
+# </dev/null: under `curl ... | bash` this script *is* stdin, and a registrar
+# that asks a question would otherwise swallow the rest of it.
+"$VENV/bin/forgelab" init --agent claude-code --output-dir "$FORGELAB_OUTPUT_DIR" </dev/null \
+  || fail "forgelab init --agent claude-code failed."
 
 echo
 ok "Done! Restart Claude Code (or run /mcp) and try:"

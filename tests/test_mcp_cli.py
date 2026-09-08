@@ -88,3 +88,16 @@ def test_http_transport_is_stateless_with_json_responses(served):
 def test_stdio_is_not_given_transport_settings(served):
     """stdio has no host or port; handing it some would hide a typo."""
     assert served(["--transport", "stdio"]).run_kwargs == {}
+
+
+def test_stdio_is_the_default_transport():
+    """`forgelab init --agent hermes` depends on this default.
+
+    `hermes mcp add` passes server arguments through --args (nargs="*"), which
+    argparse cannot fill with a value beginning in "-": `--args --transport
+    stdio` fails outright. ForgeLab is therefore registered there as the bare
+    command with no arguments, so changing this default would silently turn
+    every Hermes install into an HTTP server nobody is listening to.
+    """
+    _, args = cli._build([])
+    assert args.transport == "stdio"

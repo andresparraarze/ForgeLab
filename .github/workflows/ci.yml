@@ -43,3 +43,23 @@ jobs:
       # the flag itself covered, and it is the gate that matters locally.
       - name: Pytest (external tools hidden)
         run: scripts/check.sh tests-bare
+
+  # A real install, because none of the above performs one. Every defect this
+  # catches was invisible to the suite: an MCP registration scoped to the
+  # install directory, an extra the installer forgot so two of the 40 tools
+  # failed on clean machines only, and a git-URL install that does not move
+  # when the source does. One interpreter is enough — the matrix above covers
+  # the library; this covers the packaging.
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The version is derived from git, and the upgrade check installs
+          # HEAD~1 before HEAD, so a shallow clone would fail both.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify install
+        run: scripts/verify-install.sh
