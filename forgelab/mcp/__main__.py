@@ -11,6 +11,10 @@ from forgelab.mcp.server import create_server
 
 def _build(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(prog="forgelab-mcp", description="ForgeLab MCP server")
+    # stdio is the default on purpose, and agents rely on it: `hermes mcp add`
+    # cannot pass a server argument beginning with "-", so ForgeLab is
+    # registered there as the bare command. Changing this default silently
+    # breaks that registration — see test_stdio_is_the_default_transport.
     parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
