@@ -111,3 +111,54 @@ def test_the_kernel_error_is_a_value_error():
     from forgelab.formats import FreeCADKernelError
 
     assert issubclass(FreeCADKernelError, ValueError)
+
+
+# --- missing optional extras ------------------------------------------------
+#
+# The same contract, one layer out. A missing *dependency* is as actionable as
+# a missing kernel, and the MCP error boundary only carries ValueError: a bare
+# ModuleNotFoundError reaches the model as "Error executing tool <name>" with
+# the sentence that fixes it left in the server log.
+
+
+@pytest.fixture
+def no_preview_extra(monkeypatch):
+    """Make matplotlib/numpy unimportable, leaving every other import alone."""
+    import builtins
+
+    real = builtins.__import__
+    hidden = {"matplotlib", "numpy", "mpl_toolkits"}
+
+    def guarded(name, *args, **kwargs):
+        if name.split(".")[0] in hidden:
+            raise ModuleNotFoundError(f"No module named {name!r}")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+
+
+def test_a_missing_preview_extra_is_reported_as_value_error(no_preview_extra, tmp_path):
+    example = Path(__file__).resolve().parents[1] / "examples/threed/cube.forge.json"
+    document = validate(json.loads(example.read_text()))
+
+    with pytest.raises(ValueError) as excinfo:
+        render_preview(document, str(tmp_path / "out.png"))
+
+    assert "preview" in str(excinfo.value)
+    assert "pip install" in str(excinfo.value)
+
+
+def test_the_mcp_extra_declares_every_import_the_server_makes():
+    """forgelab-mcp imports PyJWT on every path, stdio included.
+
+    Each of the 40 tools calls require_scope -> forgelab.mcp.auth_bridge ->
+    forgelab.auth, which imports jwt at module scope. Until [mcp] declared it,
+    a fresh install started only because the MCP SDK happened to depend on
+    PyJWT itself.
+    """
+    from importlib.metadata import requires
+
+    mcp_extra = [
+        line for line in (requires("forgelab") or []) if 'extra == "mcp"' in line.replace("'", '"')
+    ]
+    assert any(line.lower().startswith("pyjwt") for line in mcp_extra), mcp_extra
