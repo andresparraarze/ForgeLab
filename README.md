@@ -14,25 +14,16 @@ ForgeLab lets AI agents design hardware, mechanical parts, and 3D models — and
 
 ## Install in 30 seconds
 
+One line per agent. Each installs ForgeLab into `~/.forgelab/venv` and
+registers the MCP server with that agent over stdio. They are interchangeable
+and safe to combine: all four point at the same install, so running two of them
+on one machine gives you one ForgeLab, not two.
+
 ### Claude Code
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-claude-code.sh | bash
 ```
-
-That's it. Ask Claude Code to design anything.
-
-### Hermes Agent
-
-Paste this prompt:
-
-> Install ForgeLab on this machine by running `curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install.sh | bash`. Then start the MCP server with `~/.forgelab/venv/bin/forgelab-mcp --transport streamable-http --port 8001` and confirm the tools are available by calling list_domains over that transport. Then tell me what domains are supported.
-
-### OpenClaw
-
-Paste this prompt:
-
-> Install ForgeLab on this machine by running `curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install.sh | bash`. Then add the stdio MCP server to your MCP configuration with the command `~/.forgelab/venv/bin/forgelab-mcp --transport stdio`, verify by calling list_domains, and confirm what design domains are available.
 
 ### Codex CLI
 
@@ -40,8 +31,31 @@ Paste this prompt:
 curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-codex.sh | bash
 ```
 
-That's it. Ask Codex to design anything. Run `/mcp` inside a Codex session to
-confirm ForgeLab's tools are listed.
+### Hermes Agent
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-hermes.sh | bash
+```
+
+### OpenClaw
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install-openclaw.sh | bash
+```
+
+That's it. Restart the agent and ask it to design anything. To confirm the
+connection, ask it to call `list_domains` — it should answer hardware,
+mechanical, threed.
+
+### Any other agent
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andresparraarze/ForgeLab/main/scripts/install.sh | bash
+forgelab init
+```
+
+`forgelab init` registers with whichever agent you pick, and prints an
+`mcpServers` config block for agents with no CLI of their own.
 
 ## Updating
 
@@ -49,10 +63,20 @@ confirm ForgeLab's tools are listed.
 forgelab update
 ```
 
-Updates the installed ForgeLab package in `~/.forgelab/venv` to the latest
-version from GitHub. No client-specific re-registration is needed: Claude
-Code, Codex, Hermes, and OpenClaw all point at the same venv, so a single
-`forgelab update` refreshes ForgeLab for all of them at once.
+Upgrades `~/.forgelab/venv` to the latest commit and tells you what it moved
+between:
+
+```
+✔ ForgeLab updated — 0.1.1.dev288+gaaaaaaa → 0.1.1.dev292+gbbbbbbb.
+```
+
+No client-specific re-registration is needed: Claude Code, Codex, Hermes and
+OpenClaw all point at the same venv, so one `forgelab update` refreshes
+ForgeLab for all of them at once. Re-running any install one-liner does the
+same thing — the installers upgrade rather than reuse.
+
+`forgelab --version` reports the build you are on and the document spec it
+implements.
 
 ## What you can do
 
@@ -401,7 +425,7 @@ A `.forge.project` file ties multiple domain documents together with a shared di
 
 ## Project status
 
-**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **40 MCP tools**, and **968 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import**, **STEP/STL export**, and a **Blender script** export that renders a finished product shot; **geometry verification and preview** for mechanical parts against a real FreeCAD kernel; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. The one remaining tool integration is Gerber *import* (a scaffolded stub). Altium and Fusion 360 are **not planned** (closed proprietary format / cloud-only with mandatory account — see Tool support), and Unreal Engine needs no integration: it natively imports the glTF that ForgeLab already exports. APIs may change before 1.0.
+**Pre-alpha** (library v0.1, spec v0.5.0). Three working domains (**hardware**, **mechanical**, **3D**), **40 MCP tools**, and **1006 tests** green. Shipped: the IR, validator, compiler pipeline, and REST API; three round-trips (**KiCad**, **glTF**, **FreeCAD**) plus **OBJ/STL import**, **STEP/STL export**, and a **Blender script** export that renders a finished product shot; **geometry verification and preview** for mechanical parts against a real FreeCAD kernel; the **project** concept (shared dimensions across board + enclosure + render, exported in one call); a **component library** of 32 pre-built parts with datasheet pad geometry; the **AI SDK**, the **OAuth 2.0** module, and the **MCP server**. The one remaining tool integration is Gerber *import* (a scaffolded stub). Altium and Fusion 360 are **not planned** (closed proprietary format / cloud-only with mandatory account — see Tool support), and Unreal Engine needs no integration: it natively imports the glTF that ForgeLab already exports. APIs may change before 1.0.
 
 ## Roadmap
 

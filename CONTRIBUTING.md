@@ -38,6 +38,16 @@ came to raise the wrong exception type past a green local suite and break all
 four CI interpreters. Run it before pushing anything that touches an optional
 external tool.
 
+`./scripts/verify-install.sh` is the sixth gate, and it is not part of
+`check.sh` because it is slow: it performs a *real* install into a throwaway
+HOME against stub agent CLIs, talks to the resulting server over stdio, and
+upgrades a git-URL install across two commits. Run it when you touch anything
+under `scripts/`, `forgelab/cli.py`, or the packaging — the suite asserts what
+the installers *say*, and this asserts what they do. It is what catches an MCP
+registration scoped to one directory, an extra the installer forgot so a tool
+fails on clean machines only, and an install that does not move when the source
+does. CI runs it as its own job.
+
 A test that needs one of those tools declares it, rather than computing a skip
 condition of its own:
 
