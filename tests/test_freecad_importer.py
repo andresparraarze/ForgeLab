@@ -2,6 +2,7 @@ import pytest
 
 from forgelab.formats import FcDocument, FcObject, FcProperty, write_fcstd
 from forgelab.importers.mechanical import FreeCADImporter, FreeCADParseError
+from forgelab.spec import SPEC_VERSION
 
 
 def _box_fcstd():
@@ -141,7 +142,7 @@ def test_real_schema_import_recovers_non_xy_plane():
     from forgelab.spec.mechanical import Body, Sketch, SketchGeometry
 
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="v", generator="test"),
         nodes=[

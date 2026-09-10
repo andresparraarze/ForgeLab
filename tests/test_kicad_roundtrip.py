@@ -3,7 +3,7 @@ from pathlib import Path
 from forgelab.exporters.hardware.kicad import KiCadExporter
 from forgelab.formats import parse
 from forgelab.importers.hardware.kicad import KiCadImporter
-from forgelab.spec import NODE_COMPONENT, NODE_NET, Component
+from forgelab.spec import NODE_COMPONENT, NODE_NET, SPEC_VERSION, Component, ForgeDocument
 
 FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "hardware" / "blinky.kicad_pcb"
 
@@ -129,3 +129,171 @@ def test_pad_positions_survive_roundtrip():
         Component.model_validate(n.props).pads for n in doc2.nodes if n.type == NODE_COMPONENT
     )
     assert [p.at for p in pads2] == [[-1.5, -2.0], [1.5, -2.0], [1.5, 2.0], [-1.5, 2.0]]
+
+
+# ----------------------------------------- everything the importer used to drop
+
+
+def _full_board() -> ForgeDocument:
+    """A board carrying every feature the exporter can write.
+
+    The round-trip tests were passing while the importer silently discarded
+    drills, tracks, vias and copper pours, because the only fixture was a bare
+    two-footprint board that had none of them. Measured on the routed Arduino
+    Uno, a single round trip lost 32 drills and every routed track: a
+    through-hole board came back surface-mount and unrouted.
+    """
+    return ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "hardware",
+            "meta": {"name": "full", "generator": "test"},
+            "nodes": [
+                {
+                    "id": "board",
+                    "type": "board",
+                    "props": {
+                        "kicad_version": "20240108",
+                        "generator": "pcbnew",
+                        "layers": [
+                            {"ordinal": 0, "canonical_name": "F.Cu", "layer_type": "signal"},
+                            {"ordinal": 31, "canonical_name": "B.Cu", "layer_type": "signal"},
+                            {"ordinal": 44, "canonical_name": "Edge.Cuts", "layer_type": "user"},
+                        ],
+                        # Three straight sides and one rounded corner, so the arc
+                        # path is exercised and the mirror axis has to account
+                        # for a point that is on no straight segment.
+                        "outline": [
+                            {"start": [0, 0], "end": [30, 0]},
+                            {"start": [30, 0], "end": [30, 16]},
+                            {"start": [30, 16], "end": [4, 20], "arc_mid": [18, 19]},
+                            {"start": [4, 20], "end": [0, 0]},
+                        ],
+                        "design_rules": {
+                            "clearance": 0.2,
+                            "track_width": 0.25,
+                            "via_diameter": 0.8,
+                            "via_drill": 0.4,
+                        },
+                    },
+                },
+                {"id": "net:0", "type": "net", "props": {"code": 0, "name": ""}},
+                {"id": "net:1", "type": "net", "props": {"code": 1, "name": "GND"}},
+                {"id": "net:2", "type": "net", "props": {"code": 2, "name": "VCC"}},
+                {
+                    "id": "J1",
+                    "type": "component",
+                    "props": {
+                        "reference": "J1",
+                        "value": "CONN",
+                        "footprint": "NotAReal:Header",
+                        "layer": "F.Cu",
+                        "at": [8, 8, 0],
+                        "pads": [
+                            {
+                                "number": "1",
+                                "net": "GND",
+                                "at": [0, 0],
+                                "size": [1.7, 1.7],
+                                "shape": "rect",
+                                "drill": {"diameter": 1.0},
+                            },
+                            {
+                                "number": "2",
+                                "net": "VCC",
+                                "at": [2.54, 0],
+                                "size": [1.7, 1.7],
+                                "shape": "oval",
+                                "drill": {"oval": [1.2, 0.6], "plated": False},
+                            },
+                        ],
+                    },
+                },
+                {
+                    "id": "track_1",
+                    "type": "track",
+                    "props": {
+                        "net": "VCC",
+                        "layer": "F.Cu",
+                        "start": [10.54, 8],
+                        "end": [20, 8],
+                        "width": 0.25,
+                    },
+                },
+                {
+                    "id": "via_1",
+                    "type": "via",
+                    "props": {"at": [20, 8], "net": "VCC", "size": 0.8, "drill": 0.4},
+                },
+                {
+                    "id": "zone_1",
+                    "type": "zone",
+                    "props": {
+                        "net": "GND",
+                        "layer": "B.Cu",
+                        "polygon": [[2, 2], [28, 2], [28, 14], [2, 14]],
+                        "min_thickness": 0.25,
+                    },
+                },
+            ],
+        }
+    )
+
+
+def _types(doc):
+    counts = {}
+    for node in doc.walk():
+        counts[node.type] = counts.get(node.type, 0) + 1
+    return counts
+
+
+def test_a_full_board_survives_import_intact():
+    doc = _full_board()
+    back = KiCadImporter().to_ir(KiCadExporter().from_ir(doc))
+    before, after = _types(doc), _types(back)
+    for kind in ("track", "via", "zone", "component", "board"):
+        assert after.get(kind) == before.get(kind), f"{kind}: {before} -> {after}"
+
+
+def test_through_hole_drills_survive_import():
+    """Every header, DIP and connector came back surface-mount without this."""
+    back = KiCadImporter().to_ir(KiCadExporter().from_ir(_full_board()))
+    comp = next(n for n in back.walk() if n.type == NODE_COMPONENT)
+    drills = {p["number"]: p.get("drill") for p in comp.props["pads"]}
+    assert drills["1"]["diameter"] == 1.0
+    assert drills["1"]["plated"] is True
+    assert drills["2"]["oval"] == [1.2, 0.6]
+    assert drills["2"]["plated"] is False, "an unplated hole must not come back plated"
+
+
+def test_a_curved_outline_keeps_its_curve():
+    back = KiCadImporter().to_ir(KiCadExporter().from_ir(_full_board()))
+    board = next(n for n in back.walk() if n.type == "board")
+    arcs = [seg for seg in board.props["outline"] if seg.get("arc_mid")]
+    assert len(arcs) == 1
+    assert arcs[0]["arc_mid"] == [18.0, 19.0]
+
+
+def test_a_full_board_export_is_byte_identical_after_a_roundtrip():
+    """The property the old fixture was too thin to test."""
+    exp, imp = KiCadExporter(), KiCadImporter()
+    once = exp.from_ir(imp.to_ir(exp.from_ir(_full_board())))
+    twice = exp.from_ir(imp.to_ir(once))
+    assert once == twice
+
+
+def test_an_imported_board_is_named_after_its_file():
+    """Every imported board used to come back called "blinky"."""
+    imp = KiCadImporter()
+    imp.source_name = "power_supply"
+    doc = imp.to_ir(KiCadExporter().from_ir(_full_board()))
+    assert doc.meta.name == "power_supply"
+
+
+def test_a_generator_containing_a_space_still_parses():
+    """It was written as a bare symbol, which a space splits into two tokens."""
+    doc = _full_board()
+    board = next(n for n in doc.nodes if n.type == "board")
+    board.props["generator"] = "ForgeLab 0.2"
+    text = KiCadExporter().from_ir(doc).decode()
+    assert KiCadImporter().to_ir(text.encode()) is not None

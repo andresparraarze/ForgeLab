@@ -32,7 +32,7 @@ _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 # designator off the pads (and Value onto F.Fab), which changes SMD and
 # through-hole exports alike by design. Any *other* diff to this hash is a
 # regression.
-_SMD_SHA = "658f34d459d0a5029a1dcea80a78058523e0a1f8ecacccae572f86e1137ab2c1"
+_SMD_SHA = "136386aeb89df98f814a911508f425398c95e56b85f9c1315a9680b4fce70cbd"
 
 
 def _doc(pads: list[dict], layer: str = "F.Cu") -> ForgeDocument:

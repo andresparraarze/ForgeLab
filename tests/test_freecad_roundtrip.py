@@ -2,7 +2,7 @@ from pathlib import Path
 
 from forgelab.exporters.mechanical import FreeCADExporter
 from forgelab.importers.mechanical import FreeCADImporter
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import (
     Body,
     Constraint,
@@ -54,7 +54,7 @@ def _box_with_hole_doc():
         (pocket, "pocket"),
     ]
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="box-with-hole", generator="forgelab-freecad"),
         nodes=[Node(id=m.name, type=t, props=m.model_dump()) for m, t in pairs],

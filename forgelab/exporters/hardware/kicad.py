@@ -111,7 +111,7 @@ def _mirror_axis(outline) -> float:
     """``ymin + ymax`` of the outline: mirroring about it maps the board's Y
     range onto itself, keeping coordinates positive and round-trippable.
     Without an outline there is no board frame, so mirror about y=0."""
-    ys = [float(p[1]) for seg in outline for p in (seg.start, seg.end)]
+    ys = [float(p[1]) for seg in outline for p in seg.points]
     return (min(ys) + max(ys)) if ys else 0.0
 
 
@@ -166,6 +166,11 @@ def _mirror_layer(name: str) -> str:
     if name.startswith("B."):
         return "F." + name[2:]
     return name
+
+
+def _side_layer(front: str, component_layer: str) -> str:
+    """``front`` moved to the back when the component is."""
+    return _mirror_layer(front) if component_layer.startswith("B.") else front
 
 
 def _mirrored(node: object) -> object:
@@ -256,7 +261,9 @@ class KiCadExporter(Exporter):
 
         tree: list = [Symbol("kicad_pcb")]
         tree.append(_s("version", _format_version(board.kicad_version)))
-        tree.append(_s("generator", Symbol(board.generator)))
+        # Quoted, not a bare symbol: a generator containing a space would
+        # otherwise produce a file KiCad cannot parse. KiCad 9+ quotes it too.
+        tree.append(_s("generator", board.generator))
         tree.append(_s("property", HASH_KEY, document_hash(document.model_dump(mode="json"))))
         tree.append(_s("general", _s("thickness", 1.6)))
         tree.append(_s("paper", "A4"))
@@ -270,7 +277,7 @@ class KiCadExporter(Exporter):
         obstacles = self._pad_obstacles(components, axis)
         for comp in components:
             tree.append(self._footprint(comp, name_to_code, axis, obstacles))
-        for node in document.nodes:
+        for node in document.walk():
             if node.type == NODE_TRACK:
                 track = Track.model_validate(node.props)
                 tree.append(
@@ -299,6 +306,18 @@ class KiCadExporter(Exporter):
                 zone = Zone.model_validate(node.props)
                 tree.append(self._zone(zone, name_to_code, board.design_rules, axis))
         for seg in board.outline:
+            if seg.arc_mid is not None:
+                tree.append(
+                    _s(
+                        "gr_arc",
+                        _s("start", _num(seg.start[0]), _num(_flip_y(seg.start[1], axis))),
+                        _s("mid", _num(seg.arc_mid[0]), _num(_flip_y(seg.arc_mid[1], axis))),
+                        _s("end", _num(seg.end[0]), _num(_flip_y(seg.end[1], axis))),
+                        _s("stroke", _s("width", 0.1), _s("type", Symbol("solid"))),
+                        _s("layer", "Edge.Cuts"),
+                    )
+                )
+                continue
             tree.append(
                 _s(
                     "gr_line",
@@ -312,7 +331,7 @@ class KiCadExporter(Exporter):
         return dumps(tree).encode("utf-8")
 
     def _board(self, document: ForgeDocument) -> BoardConstraints:
-        for node in document.nodes:
+        for node in document.walk():
             if node.type == NODE_BOARD:
                 return BoardConstraints.model_validate(node.props)
         return BoardConstraints(
@@ -438,7 +457,7 @@ class KiCadExporter(Exporter):
                         Symbol(shape),
                         _s("at", _num(x), _num(y)),
                         _s("size", _num(width), _num(height)),
-                        _s("layers", "F.Cu"),
+                        _s("layers", comp.layer),
                         _s("net", code, pad.net),
                     )
                 )
@@ -487,7 +506,7 @@ class KiCadExporter(Exporter):
                 "Reference",
                 comp.reference,
                 _s("at", 0, _num(round(ref_y, 6)), 0),
-                _s("layer", "F.SilkS"),
+                _s("layer", _side_layer("F.SilkS", comp.layer)),
                 effects,
             ),
             _s(
@@ -495,7 +514,7 @@ class KiCadExporter(Exporter):
                 "Value",
                 comp.value,
                 _s("at", 0, _num(round(bottom + gap, 6)), 0),
-                _s("layer", "F.Fab"),
+                _s("layer", _side_layer("F.Fab", comp.layer)),
                 effects,
             ),
         ]
