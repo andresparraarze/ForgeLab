@@ -301,6 +301,21 @@ def test_every_example_is_drc_clean_under_real_kicad(name, tmp_path):
     assert report.exists(), proc.stderr
     report_json = json.loads(report.read_text())
     violations = report_json["violations"]
+
+    # KiCad can only report a footprint mismatch if it can find the library to
+    # compare against, and it needs a configured fp-lib-table for that. On a
+    # machine that has never launched KiCad there is none, and the mismatch check
+    # silently does not run — which would make this gate pass no matter how wrong
+    # the footprints were. Fail loudly instead of passing vacuously.
+    unconfigured = [
+        v for v in violations if "does not include the footprint library" in v["description"]
+    ]
+    assert not unconfigured, (
+        "KiCad has no footprint library table, so it never compared these "
+        "footprints against the library — this gate proved nothing. Seed "
+        "~/.config/kicad/<version>/fp-lib-table from "
+        "/usr/share/kicad/template/fp-lib-table."
+    )
     assert violations == [], [f"{v['type']}: {v['description']}" for v in violations]
 
     unconnected_nets = set()

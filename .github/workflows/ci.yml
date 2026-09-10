@@ -93,6 +93,18 @@ jobs:
           # exporter embeds. Neither is any use here without the other.
           sudo apt-get install -y --no-install-recommends kicad kicad-footprints
           kicad-cli version
+      - name: Configure KiCad's library table
+        run: |
+          # A fresh runner has never launched KiCad, so it has no user config and
+          # therefore no footprint library table. Without one, KiCad cannot look
+          # up "Resistor_SMD" to compare a board's footprint against — the
+          # lib_footprint_mismatch check simply does not run, and the DRC gate
+          # would pass no matter how wrong the footprints were. Seeding the
+          # stock template is what makes that gate mean something.
+          VERSION="$(kicad-cli version | cut -d. -f1).0"
+          mkdir -p "$HOME/.config/kicad/$VERSION"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/$VERSION/fp-lib-table"
+          echo "seeded $HOME/.config/kicad/$VERSION/fp-lib-table"
       - name: Install
         run: |
           python -m pip install --upgrade pip
