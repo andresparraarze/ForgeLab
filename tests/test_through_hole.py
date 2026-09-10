@@ -8,7 +8,6 @@ and the fact that the SMD path is byte-for-byte unchanged.
 
 import hashlib
 import io
-import json
 import zipfile
 from pathlib import Path
 
@@ -33,7 +32,7 @@ _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 # designator off the pads (and Value onto F.Fab), which changes SMD and
 # through-hole exports alike by design. Any *other* diff to this hash is a
 # regression.
-_BLINKY_SMD_SHA = "86e6e1a19c3833a425e204fb77dfef6a3bc97c183e4cef6bd600ec6928cbee53"
+_SMD_SHA = "658f34d459d0a5029a1dcea80a78058523e0a1f8ecacccae572f86e1137ab2c1"
 
 
 def _doc(pads: list[dict], layer: str = "F.Cu") -> ForgeDocument:
@@ -152,10 +151,21 @@ def test_oval_drill_exports_oval_token():
 
 
 def test_smd_export_is_byte_identical():
-    doc = ForgeDocument.model_validate(
-        json.loads((_EXAMPLES / "hardware/blinky.forge.json").read_text())
+    """Adding through-hole support left the SMD output untouched, byte for byte.
+
+    The document is synthetic rather than the blinky example, and its footprint
+    deliberately names no real library: an export that embeds a footprint from
+    the installed KiCad libraries would hash differently on a machine with a
+    different KiCad, or none at all. A golden hash has to describe output
+    ForgeLab alone produces.
+    """
+    doc = _doc(
+        [
+            {"number": "1", "net": "GND", "at": [-0.8, 0], "size": [1.0, 1.2]},
+            {"number": "2", "net": "VCC", "at": [0.8, 0], "size": [1.0, 1.2]},
+        ]
     )
-    assert hashlib.sha256(KiCadExporter().from_ir(doc)).hexdigest() == _BLINKY_SMD_SHA
+    assert hashlib.sha256(KiCadExporter().from_ir(doc)).hexdigest() == _SMD_SHA
 
 
 def test_smd_pad_keeps_single_layer_and_no_drill_tokens():

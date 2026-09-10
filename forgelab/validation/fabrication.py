@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from typing import Any, NamedTuple
 
+from forgelab.footprints import resolve as resolve_pads
 from forgelab.layout import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.hardware import (
@@ -24,8 +25,6 @@ from forgelab.spec.hardware import (
     NODE_TRACK,
     NODE_VIA,
     NODE_ZONE,
-    pad_default_size,
-    pad_grid_offset,
 )
 
 # Floating-point slack so an exactly-at-minimum value (0.1 vs 0.1) passes.
@@ -64,6 +63,12 @@ _FAB_PROFILES: dict[str, dict[str, float]] = {
         "min_via_drill": 0.203,
     },
 }
+
+#: Layer of a pad that is copper on every layer (a plated through-hole).
+#: ``_shares_layer`` treats it as matching whatever it is compared against,
+#: which is what makes a back-side track over a front component's THT pad the
+#: short that it physically is.
+_ALL_LAYERS = "*.Cu"
 
 DEFAULT_FAB = "jlcpcb"
 
@@ -221,6 +226,15 @@ class _PadCopper(NamedTuple):
     circle: bool
 
 
+def _shares_layer(a: str, b: str) -> bool:
+    """Whether two pieces of copper can touch, given their layers.
+
+    ``_ALL_LAYERS`` is a through-hole pad's barrel: present on every layer, so
+    it shares a layer with everything.
+    """
+    return a == b or _ALL_LAYERS in (a, b)
+
+
 def _collect_pad_copper(document: ForgeDocument) -> list[_PadCopper]:
     """Every pad's absolute copper rectangle/circle, exactly as exported.
 
@@ -241,32 +255,22 @@ def _collect_pad_copper(document: ForgeDocument) -> list[_PadCopper]:
         rotation = component_rotation(props)
         layer = str(props.get("layer") or "F.Cu")
         ref = str(props.get("reference") or node.id)
-        pads = [p for p in props.get("pads") or [] if isinstance(p, dict)]
-        default = pad_default_size([p.get("at") for p in pads])
-        for index, pad in enumerate(pads):
-            offset = pad.get("at")
-            if isinstance(offset, list) and len(offset) == 2:
-                ox, oy = float(offset[0]), float(offset[1])
-            else:
-                ox, oy = pad_grid_offset(index, len(pads))
-            rx, ry = rotate_offset(ox, oy, rotation)
-            size = pad.get("size")
-            if isinstance(size, list) and len(size) == 2:
-                width, height = float(size[0]), float(size[1])
-            else:
-                width = height = default
+        for pad in resolve_pads(props.get("footprint"), props.get("pads") or []):
+            rx, ry = rotate_offset(pad.x, pad.y, rotation)
             out.append(
                 _PadCopper(
                     ref=ref,
-                    number=str(pad.get("number", "?")),
-                    net=str(pad.get("net", "")),
-                    layer=layer,
+                    number=pad.number or "?",
+                    net=pad.net,
+                    # A drilled pad is copper on every layer, so it is foreign
+                    # to a track on either side — not just the component's own.
+                    layer=_ALL_LAYERS if pad.through_hole else layer,
                     cx=cx + rx,
                     cy=cy + ry,
-                    width=width,
-                    height=height,
-                    rotation=rotation,
-                    circle=str(pad.get("shape") or "") == "circle",
+                    width=pad.width,
+                    height=pad.height,
+                    rotation=pad.rotation + rotation,
+                    circle=pad.shape == "circle",
                 )
             )
     return out
@@ -419,7 +423,7 @@ def _check_copper_collisions(
     for i, pad_a in enumerate(pads):
         for pad_b in pads[i + 1 :]:
             if (
-                pad_a.layer != pad_b.layer
+                not _shares_layer(pad_a.layer, pad_b.layer)
                 or not pad_a.net
                 or not pad_b.net
                 or pad_a.net == pad_b.net
@@ -443,7 +447,7 @@ def _check_copper_collisions(
                 )
     for track_net, track_layer, start, end, width in tracks:
         for pad in pads:
-            if pad.layer != track_layer or (pad.net and pad.net == track_net):
+            if not _shares_layer(pad.layer, track_layer) or (pad.net and pad.net == track_net):
                 continue
             gap = _segment_pad_gap(start, end, pad) - width / 2
             if _below(gap, min_spacing):
@@ -615,7 +619,7 @@ def _check_zone_clearance(
 
     for zone in zones:
         for pad in pads:
-            if pad.layer != zone.layer or (pad.net and pad.net == zone.net):
+            if not _shares_layer(pad.layer, zone.layer) or (pad.net and pad.net == zone.net):
                 continue
             if _point_in_polygon(pad.cx, pad.cy, zone.poly):
                 continue  # enclosed — the pour clears it during fill

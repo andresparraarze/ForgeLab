@@ -458,8 +458,8 @@
         "footprint": "Package_QFP:TQFP-32_7x7mm_P0.8mm",
         "layer": "F.Cu",
         "at": [
-          34.0,
-          27.0,
+          29.15,
+          10.65,
           0.0
         ],
         "pads": [
@@ -731,8 +731,8 @@
         "footprint": "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
         "layer": "F.Cu",
         "at": [
-          52.0,
-          40.0,
+          58.04,
+          10.7,
           0.0
         ],
         "pads": [
@@ -876,8 +876,8 @@
         "footprint": "Crystal:Crystal_SMD_HC49-SD",
         "layer": "F.Cu",
         "at": [
-          34.0,
-          17.0,
+          46.589999999999996,
+          8.35,
           0.0
         ],
         "pads": [
@@ -909,8 +909,8 @@
         "footprint": "Capacitor_SMD:C_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          29.0,
-          14.0,
+          1.98,
+          45.79,
           0.0
         ],
         "pads": [
@@ -942,8 +942,8 @@
         "footprint": "Capacitor_SMD:C_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          39.0,
-          14.0,
+          5.9399999999999995,
+          45.79,
           0.0
         ],
         "pads": [
@@ -975,8 +975,8 @@
         "footprint": "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
         "layer": "F.Cu",
         "at": [
-          12.0,
-          12.0,
+          21.0,
+          31.42,
           0.0
         ],
         "pads": [
@@ -1003,14 +1003,6 @@
               2.3,
               -3.0
             ]
-          },
-          {
-            "number": "4",
-            "net": "+3V3",
-            "at": [
-              0.0,
-              3.0
-            ]
           }
         ]
       }
@@ -1024,8 +1016,8 @@
         "footprint": "Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal",
         "layer": "F.Cu",
         "at": [
-          7.0,
-          45.0,
+          7.49,
+          15.02,
           0.0
         ],
         "pads": [
@@ -1062,7 +1054,7 @@
             ]
           },
           {
-            "number": "5",
+            "number": "SH",
             "net": "GND",
             "at": [
               0.0,
@@ -1081,8 +1073,8 @@
         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
         "layer": "F.Cu",
         "at": [
-          50.0,
-          4.0,
+          28.17,
+          42.29,
           0.0
         ],
         "pads": [
@@ -1164,8 +1156,8 @@
         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical",
         "layer": "F.Cu",
         "at": [
-          22.0,
-          50.0,
+          37.07,
+          25.05,
           0.0
         ],
         "pads": [
@@ -1269,8 +1261,8 @@
         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
         "layer": "F.Cu",
         "at": [
-          52.0,
-          50.0,
+          32.71,
+          42.29,
           0.0
         ],
         "pads": [
@@ -1352,8 +1344,8 @@
         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
         "layer": "F.Cu",
         "at": [
-          20.0,
-          4.0,
+          37.25000000000001,
+          42.29,
           0.0
         ],
         "pads": [
@@ -1435,8 +1427,8 @@
         "footprint": "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical",
         "layer": "F.Cu",
         "at": [
-          63.0,
-          27.0,
+          41.790000000000006,
+          34.67,
           0.0
         ],
         "pads": [
@@ -1518,8 +1510,8 @@
         "footprint": "LED_SMD:LED_0805_2012Metric",
         "layer": "F.Cu",
         "at": [
-          60.0,
-          46.0,
+          57.589999999999996,
+          28.77,
           0.0
         ],
         "pads": [
@@ -1551,8 +1543,8 @@
         "footprint": "Resistor_SMD:R_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          56.0,
-          46.0,
+          9.9,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1584,8 +1576,8 @@
         "footprint": "LED_SMD:LED_0805_2012Metric",
         "layer": "F.Cu",
         "at": [
-          46.0,
-          47.0,
+          61.949999999999996,
+          28.77,
           0.0
         ],
         "pads": [
@@ -1617,8 +1609,8 @@
         "footprint": "Resistor_SMD:R_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          42.0,
-          47.0,
+          13.86,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1650,8 +1642,8 @@
         "footprint": "LED_SMD:LED_0805_2012Metric",
         "layer": "F.Cu",
         "at": [
-          46.0,
-          44.0,
+          66.31,
+          28.77,
           0.0
         ],
         "pads": [
@@ -1683,8 +1675,8 @@
         "footprint": "Resistor_SMD:R_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          42.0,
-          44.0,
+          17.82,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1713,11 +1705,11 @@
       "props": {
         "reference": "SW1",
         "value": "RESET",
-        "footprint": "Button_Switch_SMD:SW_SPST_PTS645",
+        "footprint": "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92",
         "layer": "F.Cu",
         "at": [
-          60.0,
-          12.0,
+          10.55,
+          31.22,
           0.0
         ],
         "pads": [
@@ -1749,8 +1741,8 @@
         "footprint": "Capacitor_SMD:C_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          27.0,
-          33.0,
+          21.78,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1782,8 +1774,8 @@
         "footprint": "Capacitor_SMD:C_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          41.0,
-          33.0,
+          25.740000000000002,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1815,8 +1807,8 @@
         "footprint": "Capacitor_SMD:C_0603_1608Metric",
         "layer": "F.Cu",
         "at": [
-          34.0,
-          35.0,
+          29.700000000000003,
+          45.79,
           0.0
         ],
         "pads": [
@@ -1848,8 +1840,8 @@
         "footprint": "Capacitor_SMD:C_0805_2012Metric",
         "layer": "F.Cu",
         "at": [
-          16.0,
-          18.0,
+          48.81,
+          28.8,
           0.0
         ],
         "pads": [
@@ -1881,8 +1873,8 @@
         "footprint": "Capacitor_SMD:C_0805_2012Metric",
         "layer": "F.Cu",
         "at": [
-          8.0,
-          12.0,
+          53.21,
+          28.8,
           0.0
         ],
         "pads": [

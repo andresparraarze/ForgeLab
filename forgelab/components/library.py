@@ -94,12 +94,17 @@ def _quad(count: int, pitch: float, span_to_side: float) -> list[dict[str, Any]]
 
 
 def _sot223() -> list[dict[str, Any]]:
-    """SOT-223: three pins (2.3mm pitch) opposite a large tab (pin 4 = pin 2 net)."""
+    """SOT-223: three pins (2.3mm pitch) opposite a large tab.
+
+    The tab is **pin 2**, not a fourth pin — which is what the KiCad footprint's
+    ``TabPin2`` suffix says, and how the library spells it: two pad entries both
+    numbered "2". Numbering it 4 wired a pin the part does not expose.
+    """
     return [
         {"number": "1", "at": [-2.3, -3.0]},
         {"number": "2", "at": [0.0, -3.0]},
         {"number": "3", "at": [2.3, -3.0]},
-        {"number": "4", "at": [0.0, 3.0]},  # tab
+        {"number": "2", "at": [0.0, 3.0]},  # tab, electrically pin 2
     ]
 
 
@@ -132,26 +137,46 @@ def _esp32_wroom() -> list[dict[str, Any]]:
 
 
 def _usb_b() -> list[dict[str, Any]]:
-    """USB-B: 4 signal pins (VBUS, D-, D+, GND) plus two shield/mount pads."""
+    """USB-B: 4 signal pins (VBUS, D-, D+, GND) plus two shield/mount pads.
+
+    The shells are pin ``SH``, not 5 and 6: they are two copper areas of one
+    electrical terminal, and that is the number the KiCad footprint gives both.
+    """
     return [
         {"number": "1", "at": [-1.25, -3.5]},  # VBUS
         {"number": "2", "at": [-3.75, -1.0]},  # D-
         {"number": "3", "at": [3.75, -1.0]},  # D+
         {"number": "4", "at": [1.25, -3.5]},  # GND
-        {"number": "5", "at": [-5.65, 2.5]},  # shield
-        {"number": "6", "at": [5.65, 2.5]},  # shield
+        {"number": "SH", "at": [-5.65, 2.5]},  # shell
+        {"number": "SH", "at": [5.65, 2.5]},  # shell
     ]
 
 
+#: A 16-pin USB-C receptacle's pins are named by row and position, not counted
+#: 1..16 — A1/A4..A9/A12 on one side, B1/B4..B9/B12 on the other, with the
+#: unused A2/A3/A10/A11 (and B) positions absent on a 16-pin part. These are the
+#: names the KiCad footprint uses, and a netlist has to match them to connect.
+_USB_C_16P_PINS = (
+    "A1", "A4", "A5", "A6", "A7", "A8", "A9", "A12",
+    "B1", "B4", "B5", "B6", "B7", "B8", "B9", "B12",
+)  # fmt: skip
+
+
 def _usb_c_16p() -> list[dict[str, Any]]:
-    """USB-C 16-pin receptacle: 12 signal pads (two rows, 0.5mm pitch) + 4 mounts."""
-    pitch = 0.5
-    signal = _dual_row(12, pitch, 2.4)
+    """USB-C 16-pin receptacle: 16 signal pads (two rows) plus 4 shell tabs.
+
+    The four mounting tabs are one electrical terminal, ``SH``, as in the
+    footprint — they were numbered 13-16, which named pins the part has not got.
+    """
+    signal = [
+        {**pad, "number": name}
+        for pad, name in zip(_dual_row(16, 0.5, 2.4), _USB_C_16P_PINS, strict=True)
+    ]
     mounts = [
-        {"number": "13", "at": [-4.32, 1.8]},
-        {"number": "14", "at": [4.32, 1.8]},
-        {"number": "15", "at": [-4.32, -1.8]},
-        {"number": "16", "at": [4.32, -1.8]},
+        {"number": "SH", "at": [-4.32, 1.8]},
+        {"number": "SH", "at": [4.32, 1.8]},
+        {"number": "SH", "at": [-4.32, -1.8]},
+        {"number": "SH", "at": [4.32, -1.8]},
     ]
     return signal + mounts
 
@@ -229,13 +254,13 @@ _LIBRARY: dict[str, dict[str, dict[str, Any]]] = {
         ),
         "CP2102": _component(
             "CP2102",
-            "Package_DFN_QFN:QFN-28-1EP_5x5mm_P0.5mm",
+            "Package_DFN_QFN:QFN-28-1EP_5x5mm_P0.5mm_EP3.1x3.1mm",
             "USB-to-UART bridge, QFN-28 (0.5mm pitch)",
             _quad(28, 0.5, 2.5),
         ),
         "USB-B": _component(
             "USB-B",
-            "Connector_USB:USB_B_OST_USB-B1HSB6",
+            "Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal",
             "USB Type-B through-hole receptacle",
             _usb_b(),
         ),
@@ -290,7 +315,7 @@ _LIBRARY: dict[str, dict[str, dict[str, Any]]] = {
     "Sensors": {
         "DHT22": _component(
             "DHT22",
-            "Sensor:Aosong_DHT22_AM2302_P2.54mm",
+            "Sensor:ASAIR_AM2302_P2.54mm_Vertical",
             "Temperature/humidity sensor, 4-pin SIP (VCC/DATA/NC/GND, 2.54mm pitch)",
             _inline(4, 2.54),
         ),
@@ -302,9 +327,13 @@ _LIBRARY: dict[str, dict[str, dict[str, Any]]] = {
         ),
         "SCD40": _component(
             "SCD40",
-            "Package_DFN_QFN:Sensirion_DFN-10_2.0x2.5mm_P0.5mm",
-            "CO2/temperature/humidity sensor, DFN-10 2.0x2.5mm",
-            _dual_row(10, 0.5, 1.6),
+            "Sensor:Sensirion_SCD4x-1EP_10.1x10.1mm_P1.25mm_EP4.8x4.8mm",
+            "CO2/temperature/humidity sensor, SCD4x 10.1x10.1mm (19 pins)",
+            # Pin numbers, not positions: this footprint resolves against the
+            # KiCad libraries, so the real pad geometry comes from there. The
+            # entry this replaced described a DFN-10 2.0x2.5mm — a package the
+            # SCD40 does not come in, off by a factor of four in every dimension.
+            _inline(19, 1.25),
         ),
     },
     "Connectors": {

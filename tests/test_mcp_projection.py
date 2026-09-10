@@ -40,7 +40,7 @@ def _hardware_doc():
                 "props": {
                     "reference": "R1",
                     "value": "330R",
-                    "footprint": "Resistor_SMD:R_0402",
+                    "footprint": "Resistor_SMD:R_0402_1005Metric",
                     "layer": "F.Cu",
                     # Mid-board: check_hardware now fails out-of-bounds parts.
                     "at": [5.0, 5.0, 0.0],

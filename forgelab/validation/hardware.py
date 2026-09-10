@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from forgelab.footprints import unknown_pad_numbers
+from forgelab.formats import kicad_library
 from forgelab.layout import component_bbox
 from forgelab.spec import Domain, ForgeDocument, Node
 from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, NODE_NET
@@ -183,6 +185,34 @@ def check_hardware(document: ForgeDocument) -> tuple[list[str], list[str]]:
             if net and net not in defined_nets:
                 num = pad.get("number", "?")
                 errors.append(f"Component {ref} pad {num} references undefined net {net}")
+
+    # 4b. Footprint fidelity (warning + error). A component naming a footprint
+    #     the installed KiCad libraries have is exported with that library's
+    #     real copper; one that names anything else gets copper ForgeLab
+    #     synthesizes, which is approximate by construction. Saying so is the
+    #     difference between an approximation and a silent lie — the board still
+    #     builds, but its pads are not the part's pads.
+    for comp in components:
+        ref = _reference(comp)
+        footprint = str(comp.props.get("footprint") or "")
+        if not footprint:
+            continue
+        if kicad_library.resolve(footprint) is None:
+            if kicad_library.available():
+                warnings.append(
+                    f"Component {ref} names footprint {footprint!r}, which is not in the "
+                    "installed KiCad libraries — its pads are synthesized and will not "
+                    "match the real part; check the library and footprint names"
+                )
+            continue
+        # 4c. A pad number the real footprint does not have (error): the design
+        #     wires a pin the part does not expose.
+        unknown = unknown_pad_numbers(footprint, _pads(comp))
+        if unknown:
+            errors.append(
+                f"Component {ref} wires pad(s) {', '.join(unknown)}, which footprint "
+                f"{footprint!r} does not have — wrong footprint, or a mistyped pad number"
+            )
 
     # 5. Missing board outline (warning).
     for board in board_nodes:

@@ -8,13 +8,46 @@ from forgelab.spec import NODE_COMPONENT, NODE_NET, Component
 FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "hardware" / "blinky.kicad_pcb"
 
 
-def test_semantic_roundtrip_is_stable():
+def test_semantic_roundtrip_reaches_a_fixed_point():
+    """A round trip normalizes to the library's geometry, then stops moving.
+
+    This used to assert plain identity, and could, because export was a faithful
+    echo of whatever the IR said — including pad geometry that was invented. Now
+    a component naming a stock KiCad footprint is exported with the library's
+    real copper, so the first round trip *corrects* the document rather than
+    reproducing it: the fixture's two pads at (0 0) come back at the 0603
+    footprint's actual +/-0.825mm.
+
+    Identity is therefore the wrong property to pin; convergence is the right
+    one. One pass may change the document, and every pass after it must not.
+    """
     imp = KiCadImporter()
     exp = KiCadExporter()
     doc1 = imp.to_ir(FIXTURE.read_bytes())
-    text = exp.from_ir(doc1)
-    doc2 = imp.to_ir(text)
-    assert doc1 == doc2
+    doc2 = imp.to_ir(exp.from_ir(doc1))
+    doc3 = imp.to_ir(exp.from_ir(doc2))
+    assert doc2 == doc3
+
+
+def test_export_is_byte_identical_once_the_document_has_settled():
+    """export -> import -> export stops changing the file.
+
+    The property that matters for `verify_sync` and for diffing a board against
+    its native file: a round trip must not keep rewriting the bytes on disk.
+
+    The *first* export of a freshly imported board legitimately differs from the
+    second, and only in the embedded `forgelab_hash`: that hash is taken over the
+    document, and the first round trip corrects the document's pad geometry to
+    the library's. From the fixed point onward the bytes must be identical —
+    which also means the hash has stopped moving, so `verify_sync` cannot report
+    a board as drifted just for having been round-tripped.
+    """
+    imp = KiCadImporter()
+    exp = KiCadExporter()
+    settled = imp.to_ir(exp.from_ir(imp.to_ir(FIXTURE.read_bytes())))
+    once = exp.from_ir(settled)
+    twice = exp.from_ir(imp.to_ir(once))
+    assert once == twice
 
 
 def test_roundtrip_preserves_counts_and_connectivity():

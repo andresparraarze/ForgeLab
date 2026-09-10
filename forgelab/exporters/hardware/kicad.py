@@ -19,7 +19,9 @@ from __future__ import annotations
 import math
 
 from forgelab.exporters.base import Exporter
-from forgelab.formats import Symbol, dumps
+from forgelab.footprints import ResolvedPad
+from forgelab.footprints import resolve as resolve_pads
+from forgelab.formats import Symbol, dumps, kicad_library
 from forgelab.spec import (
     NODE_BOARD,
     NODE_COMPONENT,
@@ -32,12 +34,9 @@ from forgelab.spec import (
     DesignRules,
     ForgeDocument,
     Net,
-    Pad,
     Track,
     Via,
     Zone,
-    pad_default_size,
-    pad_grid_offset,
 )
 from forgelab.sync.hashing import HASH_KEY, document_hash
 
@@ -146,6 +145,99 @@ def _rotated_half_extents(width: float, height: float, angle: float) -> tuple[fl
 def _overlaps(a: _Rect, b: _Rect) -> bool:
     """True when two axis-aligned rectangles share any area."""
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+# Tokens a standalone .kicad_mod carries that a board-embedded footprint must
+# not: the board states its own format version, and the footprint's generator is
+# not the board's.
+_MOD_ONLY_TOKENS = frozenset({"version", "generator", "generator_version"})
+
+
+def _mirror_layer(name: str) -> str:
+    """Front/back counterpart of a footprint layer name.
+
+    A footprint placed on the back of the board carries the same geometry with
+    every ``F.*`` layer swapped for its ``B.*`` twin — that is how KiCad stores a
+    flipped part. Wildcards (``*.Cu``, ``*.Mask``) and unsided layers pass
+    through untouched.
+    """
+    if name.startswith("F."):
+        return "B." + name[2:]
+    if name.startswith("B."):
+        return "F." + name[2:]
+    return name
+
+
+def _mirrored(node: object) -> object:
+    """Deep copy of an S-expression with every layer name front/back swapped."""
+    if not isinstance(node, list):
+        return node
+    if node and str(node[0]) == "layer":
+        return [node[0], *(Symbol(_mirror_layer(str(x))) for x in node[1:])]
+    if node and str(node[0]) == "layers":
+        return [node[0], *(_mirror_layer(str(x)) for x in node[1:])]
+    return [_mirrored(child) for child in node]
+
+
+def _embed_library_footprint(
+    tree: list, comp: Component, name_to_code: dict[str, int], axis: float
+) -> list:
+    """Rewrite a library ``.kicad_mod`` as a footprint placed on this board.
+
+    The geometry — pads, silkscreen, courtyard, fab outline, 3D model — is the
+    library's, unmodified. That is the whole point: KiCad compares a board's
+    footprint against its library copy and reports ``lib_footprint_mismatch`` on
+    any difference, so anything ForgeLab redraws itself is a difference. Only
+    the things that belong to *this* placement are substituted:
+
+    * the library id, so KiCad knows which library copy to compare against;
+    * position and rotation, which the library file has no opinion about;
+    * the ``Reference`` and ``Value`` text, which are per-instance;
+    * each pad's ``(net ...)``, which is the netlist this board wires up.
+
+    The IR's own pad ``at``/``size`` are deliberately **not** applied. When a
+    component names a stock library footprint, the library is what that
+    footprint *is*; IR geometry that disagrees with it is wrong by definition,
+    and honouring it is what produced shorted pads and mismatch warnings. A
+    component that needs bespoke copper should not claim a library part — leave
+    the footprint unresolvable and the synthesized path still applies.
+    """
+    back = comp.layer.startswith("B.")
+    nets = {pad.number: pad.net for pad in comp.pads}
+
+    out: list = [Symbol("footprint"), comp.footprint]
+    out.append(_s("layer", comp.layer))
+    if comp.uuid is not None:
+        out.append(_s("uuid", comp.uuid))
+    out.append(_s("at", _num(comp.at[0]), _num(_flip_y(comp.at[1], axis)), _num(comp.at[2])))
+
+    for item in tree[2:]:
+        if not isinstance(item, list) or not item:
+            continue
+        tag = str(item[0])
+        if tag in _MOD_ONLY_TOKENS or tag in ("layer", "at", "uuid"):
+            continue
+        if tag == "property" and len(item) > 2 and item[1] in ("Reference", "Value"):
+            item = list(item)
+            item[2] = comp.reference if item[1] == "Reference" else comp.value
+        elif tag == "pad":
+            item = _embed_pad(item, nets, name_to_code)
+        out.append(_mirrored(item) if back else item)
+    return out
+
+
+def _embed_pad(pad: list, nets: dict[str, str], name_to_code: dict[str, int]) -> list:
+    """Attach this board's net to one library pad, by pad number.
+
+    A library pad the IR does not mention keeps no net, which is correct for a
+    mechanical or thermal pad the design leaves unconnected.
+    """
+    number = str(pad[1]) if len(pad) > 1 else ""
+    rebuilt = [x for x in pad if not (isinstance(x, list) and x and str(x[0]) == "net")]
+    net = nets.get(number)
+    if net:
+        rebuilt.append(_s("net", name_to_code.get(net, 0), net))
+    return rebuilt
 
 
 class KiCadExporter(Exporter):
@@ -281,30 +373,18 @@ class KiCadExporter(Exporter):
                 block.append(_s("add_net", net.name))
         return block
 
-    def _placed_pads(self, comp: Component) -> list[tuple[Pad, float, float, float, float]]:
-        """Resolve every pad to ``(pad, x, y, width, height)`` in footprint-local
-        KiCad (Y-down) coordinates — the geometry the exporter emits, and the
-        same geometry the silkscreen placement has to keep clear of."""
-        total = len(comp.pads)
-        # Size-less pads render the shared pitch-aware default, so the copper
-        # here matches what the layout and validation tools assumed.
-        default = pad_default_size([p.at for p in comp.pads if p.at is not None])
-        placed: list[tuple[Pad, float, float, float, float]] = []
-        for index, pad in enumerate(comp.pads):
-            # Honor an explicit pad offset; otherwise spread pads on a grid so
-            # a multi-pin part doesn't collapse onto the footprint origin.
-            if pad.at is not None:
-                # Pad-local offsets are Y-up in the IR, Y-down in KiCad:
-                # negate (not mirror — this is a footprint-relative frame).
-                x, y = pad.at[0], -pad.at[1] + 0.0
-            else:
-                # The fallback grid is computed in IR (Y-up) space — the same
-                # grid the Gerber exporter uses — so its Y is negated too.
-                x, y = pad_grid_offset(index, total)
-                y = -y + 0.0
-            width, height = (pad.size[0], pad.size[1]) if pad.size else (default, default)
-            placed.append((pad, x, y, width, height))
-        return placed
+    def _placed_pads(self, comp: Component) -> list[ResolvedPad]:
+        """Every pad in footprint-local KiCad (Y-down) coordinates.
+
+        The real library footprint's geometry when the component names one, and
+        the shared fallback otherwise — the same resolution the layout and
+        validation tools use, so all four agree on where the copper is. Pads
+        come back Y-flipped: offsets are Y-up in the IR and Y-down in KiCad, and
+        this is a footprint-relative frame, so they are negated rather than
+        mirrored about the board.
+        """
+        resolved = resolve_pads(comp.footprint, [p.model_dump() for p in comp.pads])
+        return [pad._replace(y=-pad.y + 0.0) for pad in resolved]
 
     def _pad_obstacles(self, components: list[Component], axis: float) -> list[_Rect]:
         """Every pad's copper as an absolute, axis-aligned rectangle in the KiCad
@@ -313,9 +393,9 @@ class KiCadExporter(Exporter):
         rects: list[_Rect] = []
         for comp in components:
             cx, cy, angle = comp.at[0], _flip_y(comp.at[1], axis), comp.at[2]
-            for _pad, x, y, width, height in self._placed_pads(comp):
-                px, py = _rotate_local(x, y, angle)
-                half_w, half_h = _rotated_half_extents(width, height, angle)
+            for pad in self._placed_pads(comp):
+                px, py = _rotate_local(pad.x, pad.y, angle)
+                half_w, half_h = pad.rotated_half_extents(angle)
                 rects.append(
                     (cx + px - half_w, cy + py - half_h, cx + px + half_w, cy + py + half_h)
                 )
@@ -328,6 +408,13 @@ class KiCadExporter(Exporter):
         axis: float,
         obstacles: list[_Rect],
     ) -> list:
+        library = kicad_library.load(comp.footprint)
+        if library is not None:
+            # The real footprint exists on this machine: emit the library's own
+            # geometry rather than an approximation of it. See
+            # _embed_library_footprint for why nothing here is redrawn.
+            return _embed_library_footprint(library, comp, name_to_code, axis)
+
         fp: list = [Symbol("footprint"), comp.footprint, _s("layer", comp.layer)]
         if comp.uuid is not None:
             fp.append(_s("uuid", comp.uuid))
@@ -337,10 +424,11 @@ class KiCadExporter(Exporter):
         placed = self._placed_pads(comp)
 
         fp.extend(self._text_properties(comp, placed, axis, obstacles))
-        for pad, x, y, width, height in placed:
+        for pad in placed:
+            x, y, width, height = pad.x, pad.y, pad.width, pad.height
             code = name_to_code.get(pad.net, 0)
             shape = pad.shape if pad.shape else "roundrect"
-            if pad.drill is None:
+            if pad.drill is None and pad.oval is None:
                 # SMD: copper on the component's layer only. Output unchanged.
                 fp.append(
                     _s(
@@ -361,7 +449,7 @@ class KiCadExporter(Exporter):
     def _text_properties(
         self,
         comp: Component,
-        placed: list[tuple[Pad, float, float, float, float]],
+        placed: list[ResolvedPad],
         axis: float,
         obstacles: list[_Rect],
     ) -> list[list]:
@@ -383,8 +471,8 @@ class KiCadExporter(Exporter):
         with the footprint, so the offset stays clear of the pads at any angle.
         """
         if placed:
-            top = min(y - height / 2 for _pad, _x, y, _w, height in placed)
-            bottom = max(y + height / 2 for _pad, _x, y, _w, height in placed)
+            top = min(pad.y - pad.rotated_half_extents()[1] for pad in placed)
+            bottom = max(pad.y + pad.rotated_half_extents()[1] for pad in placed)
         else:
             top = bottom = 0.0
         gap = _TEXT_HALF_HEIGHT + _SILK_PAD_GAP
@@ -437,7 +525,14 @@ class KiCadExporter(Exporter):
         return above
 
     def _through_hole_pad(
-        self, pad: Pad, code: int, x: float, y: float, width: float, height: float, shape: str
+        self,
+        pad: ResolvedPad,
+        code: int,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        shape: str,
     ) -> list:
         """A drilled pad: ``thru_hole``/``np_thru_hole`` spanning ``*.Cu`` + ``*.Mask``.
 
@@ -447,15 +542,12 @@ class KiCadExporter(Exporter):
         layer via ``(layers "*.Cu" "*.Mask")`` — which is exactly what lets a
         copper pour or a back-side track connect to the pad.
         """
-        assert pad.drill is not None
-        drill = pad.drill
-        pad_type = "thru_hole" if drill.plated else "np_thru_hole"
-        if drill.oval is not None:
-            drill_token = _s("drill", Symbol("oval"), _num(drill.oval[0]), _num(drill.oval[1]))
+        pad_type = "thru_hole" if pad.plated else "np_thru_hole"
+        if pad.oval is not None:
+            drill_token = _s("drill", Symbol("oval"), _num(pad.oval[0]), _num(pad.oval[1]))
         else:
-            # The model validator guarantees exactly one of oval/diameter is set.
-            assert drill.diameter is not None
-            drill_token = _s("drill", _num(drill.diameter))
+            assert pad.drill is not None
+            drill_token = _s("drill", _num(pad.drill))
         return _s(
             "pad",
             pad.number,

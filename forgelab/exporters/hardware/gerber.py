@@ -30,6 +30,7 @@ from __future__ import annotations
 import math
 
 from forgelab.exporters.base import Exporter
+from forgelab.footprints import resolve as resolve_pads
 from forgelab.formats import write_archive
 from forgelab.spec import (
     NODE_BOARD,
@@ -37,8 +38,6 @@ from forgelab.spec import (
     NODE_TRACK,
     NODE_VIA,
     ForgeDocument,
-    pad_default_size,
-    pad_grid_offset,
 )
 
 # Soldermask opening expansion per side (mm), a common fab default.
@@ -222,29 +221,23 @@ class GerberExporter(Exporter):
             props = node.props
             at = props.get("at") or [0.0, 0.0]
             cx, cy = float(at[0]), float(at[1])
-            rotation = float(at[2]) if len(at) >= 3 else 0.0
+            component_rotation = float(at[2]) if len(at) >= 3 else 0.0
             side = "B.Cu" if str(props.get("layer", "F.Cu")) == "B.Cu" else "F.Cu"
-            pads = [p for p in (props.get("pads") or []) if isinstance(p, dict)]
-            # Size-less pads render the shared pitch-aware default — the same
-            # copper the KiCad export and the layout/validation tools assume.
-            default = pad_default_size([p.get("at") for p in pads])
+            # The real library footprint when the component names one, else the
+            # shared fallback — the same copper the KiCad export and the
+            # layout/validation tools model.
             max_pad_y = 0.0
-            for index, pad in enumerate(pads):
-                offset = pad.get("at")
-                if isinstance(offset, list) and len(offset) == 2:
-                    px, py = _rotate_offset(float(offset[0]), float(offset[1]), rotation)
-                else:
-                    # The fallback grid is footprint-local, so it rotates with
-                    # the component exactly like an explicit offset (KiCad
-                    # rotates footprint-local coordinates natively).
-                    gx, gy = pad_grid_offset(index, len(pads))
-                    px, py = _rotate_offset(gx, gy, rotation)
-                size = pad.get("size")
-                if isinstance(size, list) and len(size) == 2:
-                    width, height = float(size[0]), float(size[1])
-                else:
-                    width, height = default, default
-                shape = str(pad.get("shape") or "roundrect")
+            for pad in resolve_pads(props.get("footprint"), props.get("pads") or []):
+                # Offsets are footprint-local, so they rotate with the component
+                # exactly like an explicit offset (KiCad rotates footprint-local
+                # coordinates natively).
+                px, py = _rotate_offset(pad.x, pad.y, component_rotation)
+                width, height = pad.width, pad.height
+                shape = pad.shape
+                # The pad's own turn within the footprint (a QFP's side pins are
+                # the same rectangle rotated 90) composes with the placement
+                # angle to orient the aperture.
+                rotation = pad.rotation + component_rotation
                 # The aperture rotates with the pad: swap the rectangle/oval
                 # dimensions at 90/270. An arbitrary angle cannot be expressed
                 # with a standard R/O aperture, so refuse it honestly rather
@@ -274,19 +267,18 @@ class GerberExporter(Exporter):
                 # round hole, or a slot for an oval drill. The drill dimensions
                 # are footprint-local, so the slot direction rotates with the
                 # component exactly like the pad offset does.
-                drill_spec = pad.get("drill")
-                if isinstance(drill_spec, dict):
+                if pad.drill is not None or pad.oval is not None:
                     hx, hy = cx + px, cy + py
-                    oval = drill_spec.get("oval")
-                    if isinstance(oval, list) and len(oval) == 2:
+                    oval = pad.oval
+                    if oval is not None:
                         ow, oh = float(oval[0]), float(oval[1])
                         tool = min(ow, oh)
                         span = abs(ow - oh) / 2
                         ddx, ddy = (span, 0.0) if ow >= oh else (0.0, span)
                         rdx, rdy = _rotate_offset(ddx, ddy, rotation)
                         slots.append((hx - rdx, hy - rdy, hx + rdx, hy + rdy, tool))
-                    elif drill_spec.get("diameter") is not None:
-                        drills.append((hx, hy, float(drill_spec["diameter"])))
+                    elif pad.drill is not None:
+                        drills.append((hx, hy, float(pad.drill)))
                 max_pad_y = max(max_pad_y, py + height / 2)
             reference = str(props.get("reference", "") or node.id)
             if reference:

@@ -29,14 +29,13 @@ import heapq
 import math
 from typing import Any
 
+from forgelab.footprints import resolve as resolve_pads
 from forgelab.layout.placement import component_rotation, rotate_offset
 from forgelab.spec import Domain, ForgeDocument
 from forgelab.spec.hardware import (
     DEFAULT_ZONE_MIN_THICKNESS,
     NODE_BOARD,
     NODE_COMPONENT,
-    pad_default_size,
-    pad_grid_offset,
 )
 
 # Minimum drill-to-drill wall (mm) between via holes, any net: closer than
@@ -465,42 +464,29 @@ def route_document(
         at = node.props.get("at") or [0.0, 0.0]
         cx, cy = float(at[0]), float(at[1])
         rotation = component_rotation(node.props)
-        theta = math.radians(rotation)
-        cos_r, sin_r = abs(math.cos(theta)), abs(math.sin(theta))
-        pads = [p for p in node.props.get("pads") or [] if isinstance(p, dict)]
-        default = pad_default_size([p.get("at") for p in pads])
-        for index, pad in enumerate(pads):
-            offset = pad.get("at")
-            if isinstance(offset, list) and len(offset) == 2:
-                routable = True
-                ox, oy = float(offset[0]), float(offset[1])
-            else:
-                routable = False
-                ox, oy = pad_grid_offset(index, len(pads))
-            rx, ry = rotate_offset(ox, oy, rotation)
+        # The real library footprint when the component names one, so the
+        # router models the same copper the exporter draws.
+        side = 1 if str(node.props.get("layer") or "F.Cu").startswith("B.") else 0
+        for pad in resolve_pads(node.props.get("footprint"), node.props.get("pads") or []):
+            routable = pad.positioned
+            rx, ry = rotate_offset(pad.x, pad.y, rotation)
             px, py = cx + rx, cy + ry
-            net = str(pad.get("net", ""))
+            net = pad.net
             if net:
                 net_id = net_ids.setdefault(net, len(net_ids) + 1)
                 if routable:
                     net_pads.setdefault(net, []).append((px, py))
             else:
                 net_id = _BLOCKED
-            size = pad.get("size")
-            if isinstance(size, list) and len(size) == 2:
-                width, height = float(size[0]), float(size[1])
-            else:
-                width, height = default, default
             # Copper extents: the axis-aligned bbox of the (possibly rotated)
             # pad rectangle.
-            half_w = (width * cos_r + height * sin_r) / 2
-            half_h = (width * sin_r + height * cos_r) / 2
+            half_w, half_h = pad.rotated_half_extents(rotation)
             # A through-hole pad is copper on every layer, so it blocks routing
-            # on both planes; an SMD pad blocks only F.Cu. (Without this a B.Cu
-            # track routes straight through a header pad — KiCad DRC then reports
-            # a real short against the pad's back-side copper.)
-            through_hole = isinstance(pad.get("drill"), dict)
-            obstacle_layers = range(grid.layers) if through_hole else (0,)
+            # on both planes; an SMD pad blocks only its component's side.
+            # (Without this a B.Cu track routes straight through a header pad —
+            # KiCad DRC then reports a real short against its back-side copper.)
+            through_hole = pad.through_hole
+            obstacle_layers = range(grid.layers) if through_hole else (side,)
             for layer in obstacle_layers:
                 grid.mark_rect(
                     layer,
