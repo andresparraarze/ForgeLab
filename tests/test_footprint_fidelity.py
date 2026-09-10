@@ -64,14 +64,24 @@ def test_unusable_ids_resolve_to_none(lib_id):
 def test_pad_geometry_is_the_real_thing():
     """The measurement that makes the whole change worth it.
 
-    The 0603 resistor's real pads sit 1.65mm apart and are rectangular. The
-    fallback produced two 1.6mm squares at the origin — touching, and therefore
-    a short between whatever two nets the part connects.
+    The fallback produced two 1.6mm squares at the footprint origin: touching,
+    and therefore a short between whatever two nets the part connects. The real
+    0603 has two separated rectangles — in KiCad 10, at +/-0.825mm and 0.8x0.95.
+
+    Asserted on the properties rather than those exact numbers, because the
+    numbers belong to whichever KiCad is installed and a library revision that
+    nudges a pad by a hundredth of a millimetre is not a ForgeLab regression.
+    What must hold for any revision is that the pads are apart, and that they
+    are the rectangle the part actually has rather than a square.
     """
     pads = {p["number"]: p for p in kicad_library.pad_geometry(_R0603)}
-    assert pads["1"]["at"] == [-0.825, 0.0]
-    assert pads["2"]["at"] == [0.825, 0.0]
-    assert pads["1"]["size"] == [0.8, 0.95]
+    assert set(pads) == {"1", "2"}
+    (x1, _y1), (x2, _y2) = pads["1"]["at"], pads["2"]["at"]
+    width = pads["1"]["size"][0]
+    assert abs(x2 - x1) > width, "the pads must not touch — that was the short"
+    assert x1 == -x2 and x1 != 0.0, "a 0603 is symmetric about its origin"
+    assert pads["1"]["size"][0] != pads["1"]["size"][1], "a real 0603 pad is not square"
+    assert all(v < 1.6 for v in pads["1"]["size"]), "and is smaller than the 1.6mm default"
 
 
 def test_courtyard_is_larger_than_the_copper():

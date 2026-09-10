@@ -39,8 +39,9 @@ jobs:
         run: scripts/check.sh types
       - name: Pytest
         run: scripts/check.sh tests
-      # Near a no-op here — CI has neither FreeCAD nor kicad-cli — but it keeps
-      # the flag itself covered, and it is the gate that matters locally.
+      # Near a no-op here — this job has neither FreeCAD nor kicad-cli — but it
+      # keeps the flag itself covered, and it is the gate that matters locally.
+      # The `hardware` job below is where the KiCad-backed tests actually run.
       - name: Pytest (external tools hidden)
         run: scripts/check.sh tests-bare
 
@@ -63,3 +64,30 @@ jobs:
           python-version: "3.13"
       - name: Verify install
         run: scripts/verify-install.sh
+
+  # The KiCad-backed tests, on the one runner that has KiCad. Everything above
+  # skips them, which is how ForgeLab shipped boards KiCad reported 23 mismatched
+  # footprints and two shorts on: the suite called kicad-cli "ground truth" and
+  # then never had it installed anywhere it ran. Its own job because installing
+  # KiCad costs a couple of minutes and the matrix should not pay that four
+  # times over.
+  hardware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install KiCad
+        run: |
+          sudo apt-get update
+          # kicad-cli runs the DRC; the footprint libraries are what the
+          # exporter embeds. Neither is any use here without the other.
+          sudo apt-get install -y --no-install-recommends kicad kicad-footprints
+          kicad-cli version
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+      - name: Pytest
+        run: scripts/check.sh tests
