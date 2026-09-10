@@ -77,7 +77,10 @@ def test_get_component_returns_valid_pad_geometry():
         pads = part["pads"]
         assert pads, f"{name} has no pads"
         numbers = [p["number"] for p in pads]
-        assert len(numbers) == len(set(numbers)), f"{name} has duplicate pad numbers"
+        # Repeated numbers are legitimate and match how KiCad models the part:
+        # a SOT-223's tab and a USB shell are each one electrical pin spread
+        # over more than one copper area, so they share that pin's number.
+        assert all(numbers), f"{name} has an unnumbered pad"
         for pad in pads:
             at = pad["at"]
             assert isinstance(at, list) and len(at) == 2

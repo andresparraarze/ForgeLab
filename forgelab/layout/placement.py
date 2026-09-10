@@ -20,8 +20,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from forgelab.footprints import courtyard
+from forgelab.footprints import resolve as resolve_pads
 from forgelab.spec import Domain, ForgeDocument, Node
-from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, pad_default_size, pad_grid_offset
+from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT
 
 DEFAULT_KEEPOUT = 0.5
 
@@ -102,29 +104,24 @@ def component_bbox(
     """
     if rotation is None:
         rotation = component_rotation(props)
-    pads = [p for p in props.get("pads") or [] if isinstance(p, dict)]
-    default = pad_default_size([p.get("at") for p in pads])
-    theta = math.radians(rotation)
-    cos_r, sin_r = abs(math.cos(theta)), abs(math.sin(theta))
+    footprint = props.get("footprint")
+    pads = resolve_pads(footprint, props.get("pads") or [])
     xs: list[float] = []
     ys: list[float] = []
-    for index, pad in enumerate(pads):
-        at = pad.get("at")
-        if isinstance(at, list) and len(at) == 2:
-            ox, oy = float(at[0]), float(at[1])
-        else:
-            ox, oy = pad_grid_offset(index, len(pads))
-        rx, ry = rotate_offset(ox, oy, rotation)
-        size = pad.get("size")
-        if isinstance(size, list) and len(size) == 2:
-            w, h = float(size[0]), float(size[1])
-        else:
-            w = h = default
+    for pad in pads:
+        rx, ry = rotate_offset(pad.x, pad.y, rotation)
         # Axis-aligned extents of the rotated pad rectangle.
-        half_w = (w * cos_r + h * sin_r) / 2
-        half_h = (w * sin_r + h * cos_r) / 2
+        half_w, half_h = pad.rotated_half_extents(rotation)
         xs.extend((rx - half_w, rx + half_w))
         ys.extend((ry - half_h, ry + half_h))
+    # A real footprint states how much board it needs in its courtyard, and that
+    # is bigger than its copper: a TQFP-32's pads span 8.6mm, its body 10.3mm.
+    # KiCad's courtyards_overlap rule is exactly "two of these intersect", so
+    # packing to the pad box alone places parts that physically collide.
+    cx0, cy0, cx1, cy1 = courtyard(footprint, rotation)
+    if (cx0, cy0, cx1, cy1) != (0.0, 0.0, 0.0, 0.0):
+        xs.extend((cx0, cx1))
+        ys.extend((cy0, cy1))
     if not xs:
         xs = [-_FALLBACK_HALF, _FALLBACK_HALF]
         ys = [-_FALLBACK_HALF, _FALLBACK_HALF]

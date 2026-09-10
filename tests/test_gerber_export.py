@@ -16,6 +16,7 @@ import pytest
 
 from forgelab.core import validate
 from forgelab.exporters.hardware.gerber import GerberExporter
+from forgelab.footprints import resolve as resolve_pads
 from forgelab.mcp import tools
 from forgelab.spec import SPEC_VERSION
 from forgelab.validation import check_gerber_completeness
@@ -272,20 +273,24 @@ def test_arduino_uno_place_route_export_gerbers(tmp_path, monkeypatch):
     stack = LayerStack.open(out)
     assert stack[("top", "copper")] is not None and stack[("bottom", "copper")] is not None
     # Every via the router placed AND every through-hole pad is really drilled.
+    # The pad count comes from the resolved footprints, not from the IR's own
+    # pad list: when a component names a real KiCad footprint the library
+    # defines its holes, and a part like the USB-B jack carries mounting holes
+    # the netlist never mentions. Counting the IR here would under-count them.
     doc = validate(json.loads((tmp_path / "routed.forge.json").read_text()))
     tht_pads = sum(
         1
         for n in doc.walk()
         if n.type == "component"
-        for p in (n.props.get("pads") or [])
-        if isinstance(p, dict) and isinstance(p.get("drill"), dict)
+        for pad in resolve_pads(n.props.get("footprint"), n.props.get("pads") or [])
+        if pad.drill is not None or pad.oval is not None
     )
     assert tht_pads > 0, "the Uno's pin headers should carry through-hole drills"
     drill = ExcellonFile.open(out / "drill.drl")
     assert len(drill.objects) == routed["vias_used"] + tht_pads
     # Copper flash count matches pads (all components) + via annulars.
     pad_count = sum(
-        len(n.props.get("pads") or [])
+        len(resolve_pads(n.props.get("footprint"), n.props.get("pads") or []))
         for n in doc.walk()
         if n.type == "component" and str(n.props.get("layer", "F.Cu")) != "B.Cu"
     )

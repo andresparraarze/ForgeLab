@@ -14,10 +14,14 @@ machine by hiding those executables, so both halves of the suite are reachable
 from one checkout. ``scripts/check.sh`` runs it as a gate.
 """
 
+import os
 import shutil
+import tempfile
 
 import pytest
 from external_tools import EXTERNAL_TOOLS, MISSING_REASON
+
+from forgelab.formats import kicad_library
 
 _FLAG = "--no-external-tools"
 
@@ -63,6 +67,14 @@ def pytest_configure(config: pytest.Config) -> None:
     config.stash[_REAL_WHICH] = real
     shutil.which = which
 
+    # KiCad's footprint libraries are found by path, not by PATH, so hiding
+    # kicad-cli does not hide them. Point the override at an empty directory so
+    # the exporter takes the same synthesize-and-warn branch a machine without
+    # KiCad takes — which is what CI is, and therefore what the gate must cover.
+    empty = tempfile.mkdtemp(prefix="forgelab-no-kicad-lib-")
+    os.environ[kicad_library.FORGELAB_OVERRIDE] = empty
+    kicad_library.reset_cache()
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip the tests whose tool is absent, deciding during collection.
@@ -84,3 +96,5 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     real = config.stash.get(_REAL_WHICH, None)
     if real is not None:
         shutil.which = real
+    if os.environ.pop(kicad_library.FORGELAB_OVERRIDE, None) is not None:
+        kicad_library.reset_cache()

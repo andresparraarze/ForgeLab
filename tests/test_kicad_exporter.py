@@ -195,6 +195,13 @@ def _multi_pad_doc(n_pads: int, with_positions: bool = False):
 
 
 def test_pads_have_at_and_size():
+    """Every emitted pad carries a position and a copper size.
+
+    The size is no longer asserted to be the 1.6mm fallback square: when the
+    component names a footprint the installed KiCad libraries have, the pad is
+    the library's real copper instead. What must hold either way is that the pad
+    is fully specified — a pad with no size is copper KiCad cannot render.
+    """
     tree = _tree()
     footprints = _blocks(tree, "footprint")
     pads = [e for fp in footprints for e in fp if isinstance(e, list) and str(e[0]) == "pad"]
@@ -202,7 +209,8 @@ def test_pads_have_at_and_size():
     for pad in pads:
         sub = {str(e[0]): e for e in pad if isinstance(e, list) and e}
         assert len(sub["at"]) >= 3  # (at x y)
-        assert sub["size"][1:3] == [1.6, 1.6]
+        assert len(sub["size"]) >= 3
+        assert all(float(v) > 0 for v in sub["size"][1:3])
 
 
 def test_unpositioned_pads_do_not_stack_at_origin():

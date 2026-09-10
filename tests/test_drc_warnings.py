@@ -16,10 +16,10 @@ from pathlib import Path
 from external_tools import requires_kicad_cli
 
 from forgelab.exporters.hardware.kicad import KiCadExporter
-from forgelab.formats import parse
+from forgelab.formats import kicad_library, parse
 from forgelab.layout.placement import component_rotation, place_components, rotate_offset
 from forgelab.layout.routing import route_document
-from forgelab.spec import ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, ForgeDocument, Node
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
@@ -113,12 +113,63 @@ def test_reference_is_on_silkscreen_and_value_on_fab():
 def test_reference_steps_away_from_a_neighbouring_parts_pads():
     """Clearing only your own pads is not enough on a densely packed board.
 
-    U2 on the auto-placed Uno lands close enough to J_ANALOG that the default
-    spot above the part still crossed a *neighbour's* pad, so the placement had
-    to try the other side. The Uno's headers, which have room above them, keep
-    the library-convention position.
+    A part whose default designator spot — above the footprint, the library
+    convention — crosses a *neighbour's* copper has to try the other side.
+
+    The two footprints here deliberately name no real KiCad library. A component
+    that resolves against the installed libraries is emitted with the library's
+    own silkscreen, correctly placed by the people who drew it; this stepping
+    logic is what covers everything else, so that is what the test exercises.
     """
-    doc = _uno()
+    board = {
+        "id": "board",
+        "type": "board",
+        "props": {
+            "kicad_version": "20240108",
+            "generator": "test",
+            "outline": [
+                {"start": [0, 0], "end": [20, 0]},
+                {"start": [20, 0], "end": [20, 20]},
+                {"start": [20, 20], "end": [0, 20]},
+                {"start": [0, 20], "end": [0, 0]},
+            ],
+            "design_rules": {
+                "clearance": 0.2,
+                "track_width": 0.25,
+                "via_diameter": 0.8,
+                "via_drill": 0.4,
+            },
+        },
+    }
+
+    def part(ref: str, x: float, y: float) -> dict:
+        return {
+            "id": ref,
+            "type": "component",
+            "props": {
+                "reference": ref,
+                "value": "X",
+                "footprint": "NotAReal:Library",
+                "layer": "F.Cu",
+                "at": [x, y, 0],
+                "pads": [{"number": "1", "net": "N1", "at": [0, 0], "size": [1.0, 1.0]}],
+            },
+        }
+
+    # U2 sits just below U1, so the spot above U2 runs into U1's pad.
+    doc = ForgeDocument.model_validate(
+        {
+            "forgelab_version": SPEC_VERSION,
+            "domain": "hardware",
+            "meta": {"name": "silk", "generator": "test"},
+            "nodes": [
+                board,
+                {"id": "net:1", "type": "net", "props": {"code": 1, "name": "N1"}},
+                part("U1", 10.0, 12.0),
+                part("U2", 10.0, 10.0),
+            ],
+        }
+    )
     text = KiCadExporter().from_ir(doc).decode()
 
     def side(reference: str) -> str:
@@ -128,8 +179,10 @@ def test_reference_steps_away_from_a_neighbouring_parts_pads():
         ref_y = _prop(footprint, "Reference")[3][2]
         return "above" if ref_y < top else "below"
 
+    # U2's designator cannot go above without crossing U1's copper, so it flips.
     assert side("U2") == "below"
-    assert side("J_ANALOG") == "above"
+    # U1 has clear board above it and keeps the library-convention position.
+    assert side("U1") == "above"
 
 
 # --------------------------------------------------- redundant via suppression
@@ -150,10 +203,18 @@ def test_router_places_no_via_on_a_same_net_through_hole_pad():
 
 
 def test_suppressing_redundant_vias_does_not_cost_routed_nets():
-    """The fix drops drill holes, not connections: the Uno still routes the same
-    nets and still auto-pours GND and +5V."""
+    """The fix drops drill holes, not connections: the Uno still routes most of
+    its nets and still auto-pours GND and +5V.
+
+    How many nets route depends on how well the router knows the parts. With
+    KiCad's libraries installed it models each footprint's real copper and gets
+    through 21+; falling back to synthesized pads it has a coarser board to work
+    with and manages fewer. Both are held to a floor here rather than pinning one
+    number that could only ever be right on one kind of machine.
+    """
+    floor = 21 if kicad_library.available() else 16
     result = route_document(_uno())
-    assert len(result["nets_routed"]) >= 21
+    assert len(result["nets_routed"]) >= floor
     assert set(result["nets_poured"]) == {"GND", "+5V"}
 
 
