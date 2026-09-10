@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-09-10
+
 ### Changed
 - **KiCad boards carry real footprints instead of an approximation of them.**
   ForgeLab named genuine KiCad library footprints and then drew its own copper:
@@ -1421,6 +1425,7 @@ All notable changes to this project are documented here. The format is based on
 - `forgelab.importers.threed` and `forgelab.exporters.threed` are now packages
   (glTF implemented; Blender/Unreal native stubs preserved).
 
-[Unreleased]: https://github.com/andresparraarze/ForgeLab/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/andresparraarze/ForgeLab/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/andresparraarze/ForgeLab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/andresparraarze/ForgeLab/releases/tag/v0.1.0
 
