@@ -1500,6 +1500,7 @@ def generation_status() -> dict[str, Any]:
     available, reason = _generation_availability()
     preview_ok = _preview_extra_installed()
     freecad_ok = _freecad_kernel_available()
+    kicad_ok = _kicad_cli_available()
     status: dict[str, Any] = {
         "available": available,
         "generate_document": available,
@@ -1507,7 +1508,10 @@ def generation_status() -> dict[str, Any]:
         "critique_render": available,
         "preview_render": preview_ok,
         "freecad_kernel": freecad_ok,
-        "verify_geometry": freecad_ok,
+        # verify_geometry dispatches on the document's domain, so it is usable
+        # whenever either tool is present — not only FreeCAD, as it read before.
+        "verify_geometry": freecad_ok or kicad_ok,
+        "kicad_cli": kicad_ok,
     }
     if not preview_ok:
         status["preview_reason"] = (
@@ -1518,6 +1522,13 @@ def generation_status() -> dict[str, Any]:
             "FreeCAD is not installed (freecadcmd is not on PATH); mechanical "
             "documents still export to .FCStd, but cannot be verified, previewed "
             "or converted to STEP/STL"
+        )
+    if not kicad_ok:
+        status["kicad_reason"] = (
+            "KiCad is not installed (kicad-cli is not on PATH); hardware "
+            "documents still export to .kicad_pcb, but cannot be checked against "
+            "KiCad's own DRC, and footprint copper is synthesized rather than "
+            "taken from the real library"
         )
     if not available:
         status["reason"] = reason
@@ -1875,8 +1886,15 @@ def _freecad_kernel_available() -> bool:
         return False
 
 
+def _kicad_cli_available() -> bool:
+    try:
+        return bool(_import_verify().kicad.available())
+    except ImportError:
+        return False
+
+
 def verify_geometry(document_path: str) -> dict[str, Any]:
-    """Build a mechanical document in FreeCAD and report what it actually made.
+    """Check a document against the real tool that owns it, and report its verdict.
 
     ``validate_document`` checks the description: closed profiles, positive
     radii, references that resolve. This checks the *result*, and it is a
@@ -1885,19 +1903,28 @@ def verify_geometry(document_path: str) -> dict[str, Any]:
     the face it rounds, a shell with no opening — so a document can validate
     cleanly, export cleanly, and open as an empty part. Only the kernel knows.
 
-    Run this after generating or patching a mechanical part, before handing the
-    file to anyone. It pairs with ``preview_render``: this says whether the part
+    **Hardware** documents go to KiCad's own DRC. ``check_fabrication`` measures
+    the copper ForgeLab can reason about; KiCad measures the rest — filled copper
+    pours with their clearances and thermal reliefs, courtyard overlap, solder
+    mask bridging, silkscreen over copper, hole-to-hole spacing, and connectivity
+    computed from the real fill. A board can pass every ForgeLab check and still
+    be one KiCad refuses.
+
+    Run this after generating or patching, before handing the file to anyone. For
+    mechanical parts it pairs with ``preview_render``: this says whether the part
     exists, the render shows whether it is the right one.
 
     Args:
-        document_path: path to the mechanical ``.forge.json`` (a bare filename
-            resolves against ``FORGELAB_OUTPUT_DIR``).
+        document_path: path to the ``.forge.json`` (a bare filename resolves
+            against ``FORGELAB_OUTPUT_DIR``).
 
     Returns:
-        ``{"verified", "errors", "warnings", "solid_count", "total_volume",
-        "bbox", "nodes"}``. ``errors`` names the specific IR node that built
-        nothing; ``total_volume`` is mm³ and ``bbox`` is
-        ``[xmin, ymin, zmin, xmax, ymax, zmax]``. Requires FreeCAD (see
+        For mechanical documents, ``{"verified", "errors", "warnings",
+        "solid_count", "total_volume", "bbox", "nodes"}`` — ``errors`` names the
+        specific IR node that built nothing, ``total_volume`` is mm³ and ``bbox``
+        is ``[xmin, ymin, zmin, xmax, ymax, zmax]``. For hardware documents,
+        ``{"verified", "errors", "warnings", "unconnected", "violations",
+        "checked_by"}``. Requires FreeCAD or KiCad respectively (see
         ``generation_status``); scope ``forge:read``.
     """
     require_scope("forge:read")
@@ -1911,6 +1938,8 @@ def verify_geometry(document_path: str) -> dict[str, Any]:
     except ImportError as exc:  # pragma: no cover - verify has no optional deps
         raise ValueError(f"geometry verification unavailable: {exc}") from exc
     try:
+        if document_model.domain.value == "hardware":
+            return verify.kicad.verify_document(document_model)
         return verify.verify_document(document_model)
     except Exception as exc:
         raise ValueError(str(exc)) from exc
