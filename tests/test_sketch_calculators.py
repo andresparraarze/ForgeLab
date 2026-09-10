@@ -14,6 +14,7 @@ import pytest
 from external_tools import requires_freecad
 
 from forgelab.calc import calculate_bolt_circle, calculate_rounded_rect, calculate_slot
+from forgelab.spec import SPEC_VERSION
 from forgelab.spec.mechanical import Sketch, SketchGeometry
 from forgelab.validation.mechanical import _segments_form_closed_loop
 
@@ -196,7 +197,7 @@ def test_calculated_profiles_build_a_real_solid_in_freecad():
     from forgelab.verify import verify_document
 
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="calcplate"),
         nodes=[

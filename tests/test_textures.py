@@ -35,6 +35,7 @@ from forgelab.exporters.threed import BlenderScriptExporter, GltfExporter
 from forgelab.formats.gltf import decode_accessor
 from forgelab.importers.threed import GltfImporter
 from forgelab.spec import (
+    SPEC_VERSION,
     DocumentMeta,
     Domain,
     ForgeDocument,
@@ -63,19 +64,19 @@ _TEXTURE = "textures/wood_planks.png"
 # to re-pin the hashes.
 _UNTEXTURED_SHAS = {
     "space_station": (
-        "dcbd9ed89829344d6bfc6849eda8b66e150ba3f7ca59c399af5d47c1fe0f83b8",
+        "b05e98154ad6baefad435853319e9f47cde499f0c55f54cc7b8f3ccca89c7777",
         "90b674990b3b2c73bc507be9370923a0797672b79ff36094f150624dbcabefa9",
     ),
     "torii_gate": (
-        "e7644fef5957e67f7131231c531f0da3460fb5ef4779cb6bfe249074e0c70eb8",
+        "739bce37941f239a5de4069fb4c931aca7aae47e276cb81e5d6b083b7f1cd678",
         "325c3ac8604a53c2edb16775b569952fcec3bd251aba6f419bbf7dabe3ec740e",
     ),
     "cube": (
-        "b1a525c5c12772335eb4c6db30a6ba8a4bdf305e83a4261d1bd9342a6e5fb7ce",
+        "4c7c15db5c208f0b8054d7321e528c415034b3587d45a39b51e2544bdc2c159c",
         "aba519d571cff061ef4ebca7359eb40361d6f5041384bc4682a0b5844d1727c7",
     ),
     "organic_handle": (
-        "2623827b5ffd18d7bd86c6f165e4feedaf7f745f1712ac13a490d1887b21a608",
+        "a3bb7e26fbcc9572142fe4448b1b1defa543d878e51a264a2fefbfca2b5e2171",
         "cde65c0d075eb6cab691d450f7b4df885f77b98ab4fa8dd01d3265991ef67fe5",
     ),
 }
@@ -114,7 +115,7 @@ def _doc(*, texture: str = _TEXTURE, uvs: list[float] | None = _QUAD_UVS,
         ),
     )
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.THREED,
         meta=DocumentMeta(name="tex", generator="test"),
         nodes=[

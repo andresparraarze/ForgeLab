@@ -6,7 +6,70 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- **KiCad boards carry real footprints instead of an approximation of them.**
+  ForgeLab named genuine KiCad library footprints and then drew its own copper:
+  a shared default that made every pad a square, and a fallback grid for pads
+  with no stated position. KiCad's own DRC reported it on all 23 footprints of
+  the Arduino Uno example, and where two invented pads landed on the same point
+  it was not merely inexact — `blinky.forge.json`, the board `forgelab init`
+  tells users to ask for, shipped with two nets shorted together.
+
+  When a component names a footprint the installed KiCad libraries have, that
+  footprint's own definition is now embedded — pads, silkscreen, courtyard, fab
+  outline, 3D model. Measured with `kicad-cli`, the three examples go from 30
+  violations between them to **zero**. KiCad remains optional: without it the
+  previous synthesized geometry still applies, and `validate_document` now says
+  so rather than letting the caller believe the pads are the part's.
+
+  Pad geometry is resolved once (`forgelab/footprints.py`) and shared by both
+  exporters, the placer, the router and the fabrication checker, which have to
+  agree — a router modelling a 0603 pad as a 1.3mm square while the board
+  carries the library's 0.8x0.95 rectangle routes copper straight through it.
+  The placer also reserves each part's real **courtyard** rather than its pad
+  bounding box.
+
+  Wiring the netlist to real pin numbers found five parts naming pins their
+  package has not got: a SOT-223's tab is pin 2 (that is what the footprint's
+  `TabPin2` suffix says), a USB-B's two shells and a USB-C's four mounting tabs
+  are each one terminal named `SH`, and a USB-C's 16 pins are `A1`/`A4`..`A12`
+  and `B1`/`B4`..`B12`, never 1..16. Four library footprint names did not exist
+  at all — including an SCD40 described as a 2.0x2.5mm DFN-10, a package about a
+  quarter of the real part in every dimension.
+
+- **The KiCad importer no longer destroys most of the board.** It parsed
+  footprints and nets and silently discarded everything else: pad drills, tracks,
+  vias, copper zones, and any outline not drawn with `gr_line`. A round trip of
+  the routed Arduino Uno lost **32 drills** and every routed track — a
+  through-hole board came back surface-mount and unrouted. The round-trip tests
+  passed throughout, because the only fixture was a bare two-footprint board
+  that had none of those things.
+
+  All of it is now read back, and export -> import -> export is byte-identical on
+  a board that has them. The outline mirror axis is computed from every Edge.Cuts
+  graphic rather than straight lines alone; reading only `gr_line` put every
+  imported coordinate on a rounded board off by a constant, silently. An imported
+  board is also named after its file instead of always being called "blinky".
+
+### Fixed
+- A component on `B.Cu` exported its pads to `F.Cu` and its silkscreen to
+  `F.SilkS` — a board whose back-side parts were drawn on the front. The Gerber
+  exporter had this right, so the two outputs disagreed.
+- The KiCad exporter iterated `document.nodes` rather than `walk()`, dropping
+  nested nodes that the Gerber exporter included — against the contract stated
+  in `forgelab/spec/models.py`.
+- `(generator ...)` was written as a bare symbol, so a generator string
+  containing a space produced a file KiCad could not parse.
+
+### Added
+- `OutlineSegment.arc_mid`: board outlines keep their curves. KiCad states an arc
+  as start/mid/end and so does the IR now, so a rounded or D-shaped board
+  survives a round trip instead of being flattened or dropped. **Spec 0.5.0 ->
+  0.6.0.**
+- `FORGELAB_KICAD_FOOTPRINT_DIR` overrides footprint-library discovery, for
+  pointing ForgeLab at a house library — and for reproducing on a KiCad machine
+  what a machine without KiCad does, which is what the `--no-external-tools`
+  gate now uses.
 
 ## [0.1.0] - 2026-09-09
 

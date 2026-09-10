@@ -32,7 +32,7 @@ from pydantic import ValidationError
 
 from forgelab.core import validate
 from forgelab.exporters.mechanical import FreeCADExporter
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import (
     Body,
     Boolean,
@@ -89,7 +89,7 @@ def _two_body_doc(
         ),
     ]
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name=f"bool-{operation}", generator="test"),
         nodes=[Node(id=m.name, type=t, props=m.model_dump()) for m, t in pairs],

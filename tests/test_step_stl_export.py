@@ -21,7 +21,7 @@ from forgelab.core import validate
 from forgelab.core.pipeline import default_registry
 from forgelab.exporters.mechanical import StepExporter, StlExporter
 from forgelab.formats import freecad_kernel, step
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 
@@ -44,7 +44,7 @@ def test_both_formats_are_registered_for_export():
 @pytest.mark.parametrize("exporter", [StepExporter, StlExporter])
 def test_refuses_a_non_mechanical_document_with_a_usable_alternative(exporter):
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.THREED,
         meta=DocumentMeta(name="scene"),
         nodes=[],
@@ -59,7 +59,7 @@ def test_refuses_a_non_mechanical_document_with_a_usable_alternative(exporter):
 def test_refuses_a_document_that_defines_no_solid(exporter):
     """Checked before the kernel runs, and points at the tool that diagnoses it."""
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="empty"),
         nodes=[Node(id="B", type="body", props={"name": "B"})],

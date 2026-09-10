@@ -27,7 +27,7 @@ from pydantic import ValidationError
 
 from forgelab.core import validate
 from forgelab.exporters.mechanical import FreeCADExporter
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import Body, Pad, Part, Sketch, SketchGeometry
 from forgelab.validation import check_mechanical
 
@@ -69,7 +69,7 @@ def _plate_doc(geometry: list[SketchGeometry]) -> ForgeDocument:
         (Pad(name="Plate", body="Body", profile="Outline", length=_T), "pad"),
     ]
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="plate", generator="test"),
         nodes=[Node(id=m.name, type=t, props=m.model_dump()) for m, t in pairs],

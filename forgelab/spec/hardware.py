@@ -379,19 +379,37 @@ class BoardLayer(BaseModel):
 
 
 class OutlineSegment(BaseModel):
-    """A straight segment of the board outline (Edge.Cuts)."""
+    """One segment of the board outline (Edge.Cuts): a line, or an arc.
+
+    ``arc_mid`` is a point the curve passes through between ``start`` and
+    ``end``. Three points is how KiCad's ``gr_arc`` states an arc too, so the
+    two round-trip exactly — and a rounded or D-shaped board keeps its shape
+    instead of being flattened to its chords.
+
+    Consumers that only need a bound may read ``start``/``end``/``arc_mid`` as
+    plain points: the three together bound the arc more tightly than its chord
+    does, which is the direction that errs toward keeping copper off the edge.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     start: list[float]
     end: list[float]
+    arc_mid: list[float] | None = None
 
-    @field_validator("start", "end")
+    @field_validator("start", "end", "arc_mid")
     @classmethod
-    def _is_xy(cls, value: list[float]) -> list[float]:
-        if len(value) != 2:
+    def _is_xy(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and len(value) != 2:
             raise ValueError("outline point must be [x, y]")
         return value
+
+    @property
+    def points(self) -> list[list[float]]:
+        """Every point that defines this segment, arc midpoint included."""
+        return (
+            [self.start, self.end] if self.arc_mid is None else [self.start, self.arc_mid, self.end]
+        )
 
 
 class DesignRules(BaseModel):

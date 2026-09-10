@@ -21,7 +21,7 @@ from external_tools import requires_freecad
 
 from forgelab.core import validate
 from forgelab.exporters.mechanical import FreeCADExporter, realxml
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.validation.mechanical import check_mechanical
 from forgelab.verify import VerifyError, verify_document
 
@@ -56,7 +56,7 @@ def _cube_doc(*extra: Node) -> ForgeDocument:
         *extra,
     ]
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="cube"),
         nodes=nodes,
@@ -124,7 +124,7 @@ def test_only_the_finished_shape_is_left_visible(tmp_path):
 
 def test_verification_rejects_a_non_mechanical_document():
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.THREED,
         meta=DocumentMeta(name="scene"),
         nodes=[],
@@ -244,7 +244,7 @@ def test_mcp_verify_geometry_rejects_a_non_mechanical_document(tmp_path):
     from forgelab.mcp import tools
 
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.THREED,
         meta=DocumentMeta(name="scene"),
         nodes=[],
@@ -469,7 +469,7 @@ def _pocketed_cube(**pocket_props):
     props = {"name": "K", "body": "B", "profile": "S2", "length": 5.0}
     props.update(pocket_props)
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="pocketed"),
         nodes=[

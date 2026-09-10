@@ -62,10 +62,10 @@ def test_node_children_nest():
     assert node.children[0].id == "c"
 
 
-def test_spec_version_is_0_5_0():
+def test_spec_version_is_0_6_0():
     from forgelab.spec.version import SPEC_VERSION
 
-    assert SPEC_VERSION == "0.5.0"
+    assert SPEC_VERSION == "0.6.0"
 
 
 def test_document_walk_yields_all_nodes_depth_first():

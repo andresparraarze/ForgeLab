@@ -14,7 +14,7 @@ from external_tools import requires_freecad
 
 from forgelab.core import validate
 from forgelab.preview import PreviewError, render_preview
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples/mechanical"
 
@@ -47,7 +47,7 @@ def _tower(height: float = 40.0) -> ForgeDocument:
         ),
     ]
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="tower"),
         nodes=nodes,
@@ -122,7 +122,7 @@ def test_mechanical_views_are_engineering_views_not_scene_views(tmp_path):
 def test_a_part_that_builds_nothing_reports_why(tmp_path):
     """An empty body has no solids; say so, and point at the diagnosis."""
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="empty"),
         nodes=[Node(id="B", type="body", props={"name": "B"})],
@@ -133,7 +133,7 @@ def test_a_part_that_builds_nothing_reports_why(tmp_path):
 
 def test_hardware_documents_are_still_refused(tmp_path):
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.HARDWARE,
         meta=DocumentMeta(name="board"),
         nodes=[],

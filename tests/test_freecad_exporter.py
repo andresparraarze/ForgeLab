@@ -2,7 +2,7 @@ import pytest
 
 from forgelab.exporters.mechanical import FreeCADExporter
 from forgelab.formats import read_document
-from forgelab.spec import DocumentMeta, Domain, ForgeDocument, Node
+from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument, Node
 from forgelab.spec.mechanical import Body, Pad, Part
 
 
@@ -11,7 +11,7 @@ def _doc():
     body = Body(name="Body", part="Part")
     pad = Pad(name="Pad", body="Body", profile="Sketch", length=10.0)
     return ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="box", generator="forgelab-freecad"),
         nodes=[
@@ -151,7 +151,7 @@ def test_export_is_byte_stable():
 
 def test_unknown_node_type_raises():
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="x"),
         nodes=[Node(id="weird", type="wormhole", props={})],

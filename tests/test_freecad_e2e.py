@@ -9,6 +9,8 @@ from pathlib import Path
 
 from external_tools import requires_freecad
 
+from forgelab.spec import SPEC_VERSION
+
 pytestmark = requires_freecad
 
 _CHECK = textwrap.dedent(
@@ -62,7 +64,7 @@ def test_fresh_export_recomputes_without_manual_touch(tmp_path):
         ],
     )
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="fresh", generator="test"),
         nodes=[
@@ -158,7 +160,7 @@ def test_non_xy_sketch_pocket_cuts_in_freecad(tmp_path):
         geometry=[SketchGeometry(geo_type="circle", center=[20, 15], radius=5.0)],
     )
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="vpart", generator="test"),
         nodes=[
@@ -231,7 +233,7 @@ def test_through_all_pocket_cuts_without_reversed(tmp_path):
         geometry=[SketchGeometry(geo_type="circle", center=[30, 15], radius=8.0)],
     )
     doc = ForgeDocument(
-        forgelab_version="0.5.0",
+        forgelab_version=SPEC_VERSION,
         domain=Domain.MECHANICAL,
         meta=DocumentMeta(name="plate", generator="test"),
         nodes=[
