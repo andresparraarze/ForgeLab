@@ -8,6 +8,28 @@ All notable changes to this project are documented here. The format is based on
 
 Nothing yet.
 
+## [Unreleased]
+
+### Fixed
+- **Footprint embedding on a KiCad older than the one it was written against.**
+  KiCad 8 and earlier spell a footprint's designator `(fp_text reference ...)`
+  and KiCad 9+ `(property "Reference" ...)`. Only the second was substituted, so
+  on any distro KiCad every footprint on every exported board kept the library's
+  placeholder — a board of parts all called `REF**`, silently.
+  `tests/fixtures/legacy_footprints/` keeps a KiCad 7-era footprint so that path
+  is exercised on a machine that has only a modern KiCad.
+- A pad number the installed footprint does not have is a **warning**, not an
+  error. A USB-B's shells are pads 5 and 6 in KiCad 7's library and one pad named
+  `SH` from 9 onward — the same document cannot be wrong or right depending on a
+  library revision ForgeLab does not choose.
+- `verify_geometry` passed `--refill-zones` unconditionally; it arrived after
+  KiCad 9, and 9.0.9 rejects it outright rather than ignoring it, failing the
+  whole run. ForgeLab now asks `kicad-cli` which flags it has.
+- CI seeds KiCad's footprint library table. Without one KiCad cannot look up a
+  library to compare a board's footprint against, so the mismatch check does not
+  run — and the DRC gate would have passed on any board, however wrong its
+  footprints. The gate now fails loudly rather than passing vacuously.
+
 ## [0.2.0] - 2026-09-10
 
 ### Changed
