@@ -1,5 +1,6 @@
 """Domain-specific constraint sanity checks layered on top of IR validation."""
 
+from forgelab.validation.electrical import check_connectivity, check_electrical
 from forgelab.validation.fabrication import (
     check_fab_rules,
     check_gerber_completeness,
@@ -11,6 +12,8 @@ from forgelab.validation.mechanical import check_mechanical
 from forgelab.validation.threed import check_threed
 
 __all__ = [
+    "check_connectivity",
+    "check_electrical",
     "check_hardware",
     "check_mechanical",
     "check_threed",

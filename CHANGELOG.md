@@ -51,7 +51,29 @@ All notable changes to this project are documented here. The format is based on
   imported coordinate on a rounded board off by a constant, silently. An imported
   board is also named after its file instead of always being called "blinky".
 
+- **Electrical rule checking, which did not exist.** Every hardware check
+  measured geometry — clearances, overlaps, whether a part fits. None asked
+  whether the copper connects what the netlist says it connects, so a board with
+  a third of its nets unrouted reported `passed: True`; a test asserted that as
+  correct. `forgelab/validation/electrical.py` adds connectivity (a union-find
+  over pads, tracks, vias and pours), duplicate reference designators, duplicate
+  net codes, undeclared layers, and nets that reach one pad or none.
+
+  Checked against `kicad-cli` on the routed Arduino Uno it names 7 of the 8 nets
+  KiCad reports and raises **no false alarms**; the miss is the poured net, whose
+  fill ForgeLab does not compute and does not pretend to. Connectivity is
+  therefore advisory — an unrouted board is a normal step between
+  `generate_document` and `route_board`, not an invalid document.
+
 ### Fixed
+- **`design_rules.clearance` was never checked against the fab profile.** It was
+  the one declared rule with no test against `min_trace_spacing`, and it is the
+  value every geometric check measures against — so setting it low silently
+  lowered the bar for all of them. `clearance: 0.01` passed JLCPCB.
+- **`zone` was missing from the LLM schema**, so `validate_llm_output` rejected
+  the copper pours `route_board` produces.
+- The pad-to-pad clearance check skipped pads with no net, contradicting its own
+  docstring — copper touching an unconnected pad is still a short.
 - A component on `B.Cu` exported its pads to `F.Cu` and its silkscreen to
   `F.SilkS` — a board whose back-side parts were drawn on the front. The Gerber
   exporter had this right, so the two outputs disagreed.

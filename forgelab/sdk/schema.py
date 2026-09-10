@@ -20,6 +20,7 @@ from forgelab.spec import (
     NODE_SCENE,
     NODE_TRACK,
     NODE_VIA,
+    NODE_ZONE,
     BoardConstraints,
     Component,
     Material,
@@ -29,6 +30,7 @@ from forgelab.spec import (
     Scene,
     Track,
     Via,
+    Zone,
 )
 from forgelab.spec.mechanical import (
     NODE_BODY,
@@ -63,6 +65,9 @@ DOMAIN_VOCAB: dict[str, dict[str, type[BaseModel]]] = {
         NODE_COMPONENT: Component,
         NODE_TRACK: Track,
         NODE_VIA: Via,
+        # route_board emits zones, so the schema has to accept them: without
+        # this, validate_llm_output rejected the router's own output.
+        NODE_ZONE: Zone,
     },
     "threed": {
         NODE_SCENE: Scene,

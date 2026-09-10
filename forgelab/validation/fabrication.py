@@ -26,6 +26,7 @@ from forgelab.spec.hardware import (
     NODE_VIA,
     NODE_ZONE,
 )
+from forgelab.validation.electrical import check_connectivity
 
 # Floating-point slack so an exactly-at-minimum value (0.1 vs 0.1) passes.
 _EPS = 1e-9
@@ -422,12 +423,11 @@ def _check_copper_collisions(
                 )
     for i, pad_a in enumerate(pads):
         for pad_b in pads[i + 1 :]:
-            if (
-                not _shares_layer(pad_a.layer, pad_b.layer)
-                or not pad_a.net
-                or not pad_b.net
-                or pad_a.net == pad_b.net
-            ):
+            # A pad with no net is foreign to every net (as this module's
+            # docstring has always claimed): copper touching it is still a
+            # short, and skipping netless pads let exactly that through.
+            same_net = pad_a.net and pad_b.net and pad_a.net == pad_b.net
+            if not _shares_layer(pad_a.layer, pad_b.layer) or same_net:
                 continue
             gap = _pad_pad_gap(pad_a, pad_b)
             if _below(gap, min_spacing):
@@ -751,6 +751,16 @@ def check_fab_rules(document: ForgeDocument, fab: str = DEFAULT_FAB) -> dict[str
         track_width = float(rules.get("track_width", 0.0))
         via_diameter = float(rules.get("via_diameter", 0.0))
         via_drill = float(rules.get("via_drill", 0.0))
+        clearance = float(rules.get("clearance", 0.0))
+        # The board's own clearance is what the router routes to, so a value
+        # below the fab's floor produces copper the fab cannot etch — and every
+        # geometric check below measures against it, so it silently lowers the
+        # bar for all of them. It was the one declared rule never checked.
+        if _below(clearance, profile["min_trace_spacing"]):
+            errors.append(
+                f"clearance {clearance}mm is below {fab} minimum trace spacing "
+                f"{profile['min_trace_spacing']}mm"
+            )
         if _below(track_width, profile["min_trace_width"]):
             errors.append(
                 f"track_width {track_width}mm is below {fab} minimum trace width "
@@ -824,6 +834,7 @@ def check_gerber_completeness(document: ForgeDocument, fab: str = DEFAULT_FAB) -
             "board has no routed tracks — the Gerber set would contain no copper "
             "connections; run route_board (or hand-place track nodes) before export"
         )
+    warnings.extend(check_connectivity(document))
     if document.domain == Domain.HARDWARE and any(n.type == NODE_ZONE for n in document.walk()):
         warnings.append(
             "board has copper zones — the Gerber exporter does not render pours yet, so "
