@@ -6,10 +6,6 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-Nothing yet.
-
-## [Unreleased]
-
 ### Fixed
 - **Footprint embedding on a KiCad older than the one it was written against.**
   KiCad 8 and earlier spell a footprint's designator `(fp_text reference ...)`
