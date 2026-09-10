@@ -84,6 +84,28 @@ All notable changes to this project are documented here. The format is based on
   containing a space produced a file KiCad could not parse.
 
 ### Added
+- **`verify_geometry` now covers hardware, by running KiCad's own DRC.** The
+  mechanical domain has always had a ground truth — the part is built in the real
+  OCC kernel and what actually got made is reported. Hardware had none: the test
+  suite called KiCad "ground truth" while nothing in `forgelab/` ever ran it, and
+  handing `verify_geometry` a board failed somewhere inside the FreeCAD exporter.
+
+  One tool, two authorities — it dispatches on the document's domain, so the
+  tool count is unchanged. What KiCad adds is everything ForgeLab deliberately
+  does not reimplement: filled copper pours with their clearances and thermal
+  reliefs, courtyard overlap, solder-mask bridging, silkscreen over copper,
+  hole-to-hole spacing, and connectivity computed from the real fill. A board can
+  pass every ForgeLab check and still be one KiCad refuses — there is a test that
+  builds exactly that board. `generation_status` gains `kicad_cli` so an agent
+  can discover the capability before relying on it.
+- The hardware system prompt named none of the eleven hardware-specific tools
+  and was a tenth the length of the mechanical one. It now covers footprint
+  naming, the netlist rules that actually bite (a SOT-223's tab is pin 2, a USB
+  shell is `SH`), `auto_place`/`route_board`, and the three-step check at the
+  end.
+- `topology` projections of a routed board no longer reduce to hundreds of
+  contentless `{"id": "track_1", "type": "track"}` entries; tracks, vias and
+  zones carry their net and layer.
 - `OutlineSegment.arc_mid`: board outlines keep their curves. KiCad states an arc
   as start/mid/end and so does the IR now, so a rounded or D-shaped board
   survives a round trip instead of being flattened or dropped. **Spec 0.5.0 ->

@@ -57,14 +57,38 @@ _FEW_SHOT: dict[str, list[tuple[str, str]]] = {
 # etc.). Keyed by domain so only the relevant note ships with each prompt.
 _REFERENCE_HINTS: dict[str, str] = {
     "hardware": (
-        'Pad placement: give every pad on a component its physical "at" '
-        "offset — the pad's [x, y] position relative to the footprint origin in "
-        "millimetres — so a multi-pin part spreads across its real package "
-        'outline. For example a 4-pad SOIC: "at": [-1.5, -2.0], [1.5, -2.0], '
-        '[1.5, 2.0], [-1.5, 2.0]. A pad with no "at" is placed on a fallback '
-        "grid, so omitting it makes every pad collapse toward the origin instead "
-        'of matching the real layout. Optionally set each pad\'s "size" '
-        '([width, height]) and "shape" when known.'
+        "Footprints are the important thing to get right. Name a real KiCad "
+        'library footprint ("Resistor_SMD:R_0603_1608Metric", '
+        '"Package_QFP:TQFP-32_7x7mm_P0.8mm") and ForgeLab embeds that '
+        "footprint's actual copper, silkscreen and courtyard from the installed "
+        "KiCad libraries — you do not have to describe the geometry, and any "
+        "geometry you do give is ignored in favour of the library's. Use "
+        "list_components/get_component for 32 ready-made parts whose footprint "
+        "names are known good. What you must get right is the netlist: every "
+        'pad\'s "number" has to be a pin the real package has — "1".."3" and a '
+        'tab that is also "2" on a SOT-223, "SH" for a USB shell, "A1".."B12" on '
+        "a USB-C. validate_document reports a pad number the footprint has not "
+        "got, and a footprint name it could not resolve (whose copper is then "
+        "only approximated).\n"
+        "\n"
+        "Coordinates are Y-up with the origin at the board outline's lower-left. "
+        'Every component needs an "at" inside the outline. If you do not know '
+        "where things go, place them roughly and call auto_place, which packs "
+        "them without overlapping courtyards or the board edge.\n"
+        "\n"
+        "Do not draw copper by hand. Emit board, net and component nodes only, "
+        "then call route_board: it lays the tracks and vias and pours ground and "
+        "power planes, and reports any net it could not route. Use "
+        "calculate_trace_width for a current-carrying net and "
+        "calculate_pad_positions for a package you are describing by hand.\n"
+        "\n"
+        "Check your work. validate_document covers the netlist and the "
+        "connectivity (it names any net whose pads are not all joined by "
+        "copper); check_fabrication measures the copper against a real fab's "
+        "rules (list_fab_profiles); and verify_geometry runs KiCad's own DRC, "
+        "which is the only thing that sees filled copper pours, courtyard "
+        "overlap and solder-mask bridging. generation_status says whether KiCad "
+        "is installed. A board that passes all three is one you can send out."
     ),
     "threed": (
         'References between nodes always use the target node\'s top-level "id", '

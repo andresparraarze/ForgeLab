@@ -30,13 +30,21 @@ script for each of its steps, so there is one place a command is written down
 and the two cannot drift apart.
 
 `tests-bare` is `pytest --no-external-tools`, and it is the gate worth knowing
-about. ForgeLab shells out to FreeCAD and `kicad-cli` for geometry ground truth;
-neither is a pip dependency, both are installed on developer machines, and
-neither is present in CI. Without this gate the code paths taken when a tool is
-*missing* never run locally — which is exactly how a mechanical `preview_render`
-came to raise the wrong exception type past a green local suite and break all
-four CI interpreters. Run it before pushing anything that touches an optional
-external tool.
+about. ForgeLab shells out to FreeCAD and `kicad-cli` for ground truth; neither
+is a pip dependency, both are installed on developer machines, and neither is
+present in CI. Without this gate the code paths taken when a tool is *missing*
+never run locally — which is exactly how a mechanical `preview_render` came to
+raise the wrong exception type past a green local suite and break all four CI
+interpreters. Run it before pushing anything that touches an optional external
+tool.
+
+That flag hides KiCad's **footprint libraries** as well as its binaries, by
+pointing `FORGELAB_KICAD_FOOTPRINT_DIR` at an empty directory. It has to: the
+libraries are found by filesystem path rather than on `PATH`, so hiding
+`kicad-cli` alone would leave the exporter still embedding real footprints while
+CI, which has neither, took the synthesized branch nobody had run. Anything that
+touches `forgelab/footprints.py` or `forgelab/formats/kicad_library.py` needs
+both halves of this gate.
 
 `./scripts/verify-install.sh` is the sixth gate, and it is not part of
 `check.sh` because it is slow: it performs a *real* install into a throwaway

@@ -97,6 +97,30 @@ def _topology_hardware(node: Node) -> dict[str, Any]:
             "type": node.type,
             "props": {"code": props.get("code"), "name": props.get("name")},
         }
+    # Routed copper: which net and which layer, never where. That is what makes
+    # a topology projection of a routed board readable — it used to reduce to
+    # hundreds of bare {"id": "track_1", "type": "track"} entries, which told a
+    # reader nothing at all while still costing them the tokens.
+    if node.type in ("track", "via"):
+        summary = {"net": props.get("net", "")}
+        if node.type == "track":
+            summary["layer"] = props.get("layer")
+        return {"id": node.id, "type": node.type, "props": summary}
+    if node.type == "zone":
+        polygon = props.get("polygon") or []
+        return {
+            "id": node.id,
+            "type": node.type,
+            "props": {
+                "net": props.get("net", ""),
+                "layer": props.get("layer"),
+                # The shape is geometry; how many corners it has is topology.
+                "corners": len(polygon),
+            },
+        }
+    # The board node stays content-free at this level on purpose: its props are
+    # the design rules and the outline, which are exactly the geometry a
+    # topology projection exists to leave out (see _GEOMETRY_STRIP).
     return {"id": node.id, "type": node.type}
 
 
