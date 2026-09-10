@@ -17,6 +17,7 @@ from forgelab.exporters.hardware.kicad import KiCadExporter
 from forgelab.layout.routing import route_document
 from forgelab.spec import SPEC_VERSION, ForgeDocument
 from forgelab.validation import check_connectivity, check_electrical, check_fab_rules
+from forgelab.verify.kicad import drc_argv
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "hardware"
 
@@ -227,8 +228,7 @@ def test_connectivity_agrees_with_kicad_and_raises_no_false_alarms(tmp_path):
     board.write_bytes(KiCadExporter().from_ir(doc))
     report = tmp_path / "drc.json"
     subprocess.run(
-        ["kicad-cli", "pcb", "drc", "--severity-all", "--refill-zones",
-         "--format", "json", "-o", str(report), str(board)],
+        drc_argv(board, report),
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert report.exists()

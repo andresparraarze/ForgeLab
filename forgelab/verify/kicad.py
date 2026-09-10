@@ -31,6 +31,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,50 @@ _UNAVAILABLE = (
 def available() -> bool:
     """Whether ``kicad-cli`` can be run on this machine."""
     return shutil.which(KICAD_CLI) is not None
+
+
+@lru_cache(maxsize=1)
+def supports_refill_zones() -> bool:
+    """Whether this ``kicad-cli`` accepts ``--refill-zones``.
+
+    The flag arrived after KiCad 9 — 9.0.9 rejects it outright with "Unknown
+    argument", which fails the whole run rather than degrading. Asking the tool
+    what it accepts, instead of assuming the version the author happened to have
+    installed, is the difference between working on one machine and working.
+    """
+    if not available():
+        return False
+    try:
+        proc = subprocess.run(
+            [KICAD_CLI, "pcb", "drc", "--help"],
+            capture_output=True, text=True, check=False, timeout=30,
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):  # pragma: no cover - defensive
+        return False
+    return "--refill-zones" in (proc.stdout + proc.stderr)
+
+
+def drc_argv(board: Path | str, report: Path | str, fill_zones: bool = True) -> list[str]:
+    """The ``kicad-cli pcb drc`` command line for this machine's KiCad.
+
+    Shared with the tests so there is one place that knows which flags this
+    version has.
+    """
+    argv = [
+        KICAD_CLI, "pcb", "drc",
+        "--severity-all",
+        "--format", "json",
+        "-o", str(report),
+    ]  # fmt: skip
+    if fill_zones and supports_refill_zones():
+        # Without it KiCad measures the pours as drawn rather than as filled,
+        # reporting clearance and connectivity the fabricated board would not
+        # have. Where the flag does not exist, KiCad uses whatever fill the file
+        # carries — ForgeLab writes none, so pours read as empty and a poured
+        # net's pads show as unconnected. Reported honestly either way.
+        argv.append("--refill-zones")
+    argv.append(str(board))
+    return argv
 
 
 def verify_document(
@@ -83,18 +128,7 @@ def verify_document(
         board = Path(tmp) / "board.kicad_pcb"
         report = Path(tmp) / "drc.json"
         board.write_bytes(KiCadExporter().from_ir(document))
-        argv = [
-            KICAD_CLI, "pcb", "drc",
-            "--severity-all",
-            "--format", "json",
-            "-o", str(report),
-            str(board),
-        ]  # fmt: skip
-        if fill_zones:
-            # Without this KiCad measures the pours as drawn rather than as
-            # filled, which reports clearance and connectivity that the
-            # fabricated board would not have.
-            argv.insert(3, "--refill-zones")
+        argv = drc_argv(board, report, fill_zones=fill_zones)
         try:
             proc = subprocess.run(
                 argv, capture_output=True, text=True, check=False,

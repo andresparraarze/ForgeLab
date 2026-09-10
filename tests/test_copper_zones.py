@@ -4,7 +4,7 @@ Zones are emitted as *unfilled* boundaries — KiCad computes the actual poured
 copper. ForgeLab therefore checks the boundary and the pour's declared
 parameters conservatively (it may warn about a boundary the fill never reaches,
 but never silently misses a short), and the real fill-clearance is verified by
-running kicad-cli's own DRC with --refill-zones, exactly the ground truth the
+running kicad-cli's own DRC (refilling the zones where this KiCad can), the ground truth the
 router's copper was pinned against.
 """
 
@@ -19,6 +19,7 @@ from forgelab.layout import place_components, route_document
 from forgelab.spec import SPEC_VERSION, ForgeDocument, Node
 from forgelab.validation import check_fab_rules
 from forgelab.validation.fabrication import check_gerber_completeness
+from forgelab.verify.kicad import drc_argv
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
@@ -150,8 +151,8 @@ def test_zone_export_is_copper_clean_under_kicad_drc(tmp_path):
     """KiCad's own DRC, with the zones refilled, is the ground truth.
 
     Place and route the Arduino Uno (which auto-pours GND and +5V), export it,
-    and run kicad-cli drc with --refill-zones so KiCad computes the real poured
-    copper. There must be no error-level copper violations — no shorts, no
+    and run kicad-cli drc, refilling the zones where this KiCad can so it
+    computes the real poured copper. There must be no error-level copper violations — no shorts, no
     clearance errors, and no starved-thermal errors (the reason the pour uses a
     solid pad connection rather than thermal relief). ``isolated_copper`` is a
     warning, not an error: the +5V B.Cu plane cannot connect to F.Cu-only SMD
@@ -185,17 +186,7 @@ def test_zone_export_is_copper_clean_under_kicad_drc(tmp_path):
 
     report = tmp_path / "drc.json"
     proc = subprocess.run(
-        [
-            "kicad-cli",
-            "pcb",
-            "drc",
-            "--refill-zones",
-            "--format",
-            "json",
-            "-o",
-            str(report),
-            str(board),
-        ],  # fmt: skip
+        drc_argv(board, report),  # fmt: skip
         capture_output=True,
         text=True,
         check=False,

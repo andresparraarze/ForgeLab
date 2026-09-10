@@ -25,6 +25,7 @@ from forgelab.formats import kicad_library, parse
 from forgelab.layout.routing import route_document
 from forgelab.spec import SPEC_VERSION, DocumentMeta, Domain, ForgeDocument
 from forgelab.validation import check_hardware
+from forgelab.verify.kicad import drc_argv
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "hardware"
 _R0603 = "Resistor_SMD:R_0603_1608Metric"
@@ -294,8 +295,7 @@ def test_every_example_is_drc_clean_under_real_kicad(name, tmp_path):
     board.write_bytes(KiCadExporter().from_ir(ForgeDocument.model_validate(data)))
     report = tmp_path / "drc.json"
     proc = subprocess.run(
-        ["kicad-cli", "pcb", "drc", "--severity-all", "--refill-zones",
-         "--format", "json", "-o", str(report), str(board)],
+        drc_argv(board, report),
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert report.exists(), proc.stderr

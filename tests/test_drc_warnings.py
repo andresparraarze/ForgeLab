@@ -20,6 +20,7 @@ from forgelab.formats import kicad_library, parse
 from forgelab.layout.placement import component_rotation, place_components, rotate_offset
 from forgelab.layout.routing import route_document
 from forgelab.spec import SPEC_VERSION, ForgeDocument, Node
+from forgelab.verify.kicad import drc_argv
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
@@ -254,17 +255,7 @@ def test_uno_board_has_no_silk_or_hole_to_hole_warnings(tmp_path):
 
     report = tmp_path / "drc.json"
     proc = subprocess.run(
-        [
-            "kicad-cli",
-            "pcb",
-            "drc",
-            "--refill-zones",
-            "--format",
-            "json",
-            "-o",
-            str(report),
-            str(board),
-        ],  # fmt: skip
+        drc_argv(board, report),  # fmt: skip
         capture_output=True,
         text=True,
         check=False,
