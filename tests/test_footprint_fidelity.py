@@ -245,10 +245,18 @@ def test_an_unresolvable_footprint_is_reported_not_silently_approximated():
     assert not errors
 
 
-def test_wiring_a_pad_the_part_does_not_have_is_an_error():
+def test_wiring_a_pad_the_part_does_not_have_is_reported():
+    """A warning rather than an error, because the answer is version-dependent.
+
+    A USB-B's shell is one pad named "SH" in KiCad 9's library and two numbered
+    5 and 6 in KiCad 7's. ForgeLab cannot call a document wrong for disagreeing
+    with a library revision the user chose and it did not — but the pad will
+    carry no net, so it has to say something.
+    """
     doc = _doc(_R0603, pads=[{"number": "1", "net": "N1"}, {"number": "7", "net": "N1"}])
-    errors, _ = check_hardware(doc)
-    assert any("does not have" in e and "7" in e for e in errors)
+    errors, warnings = check_hardware(doc)
+    assert any("does not have" in w and "7" in w for w in warnings)
+    assert errors == []
 
 
 # ------------------------------------------------------- KiCad's own last word
@@ -309,3 +317,51 @@ def test_every_example_is_drc_clean_under_real_kicad(name, tmp_path):
         "KiCad found connections missing on nets the router claimed it wired: "
         f"{sorted(unconnected_nets - announced)}"
     )
+
+
+# ------------------------------------------- libraries older than this machine's
+
+_LEGACY_LIB = Path(__file__).resolve().parent / "fixtures" / "legacy_footprints"
+_LEGACY_ID = "Legacy_SMD:R_Legacy_0603"
+
+
+@pytest.fixture
+def legacy_library(monkeypatch):
+    """Point footprint discovery at a KiCad 7-era library.
+
+    The installed library is whichever KiCad the user has, and the two eras spell
+    the designator differently: KiCad 8 and earlier use `(fp_text reference ...)`,
+    KiCad 9+ use `(property "Reference" ...)`. Developing against one and
+    testing against the same one hid that completely — every footprint embedded
+    from a distro KiCad kept the library's placeholder "REF**" as its
+    designator, on every board, silently.
+    """
+    monkeypatch.setenv(kicad_library.FORGELAB_OVERRIDE, str(_LEGACY_LIB))
+    kicad_library.reset_cache()
+    yield
+    monkeypatch.delenv(kicad_library.FORGELAB_OVERRIDE, raising=False)
+    kicad_library.reset_cache()
+
+
+def test_a_legacy_library_still_resolves(legacy_library):
+    assert kicad_library.available()
+    pads = {p["number"]: p for p in kicad_library.pad_geometry(_LEGACY_ID)}
+    assert pads["1"]["at"] == [-0.825, 0.0]
+    assert kicad_library.courtyard_bbox(_LEGACY_ID) is not None
+
+
+def test_a_legacy_footprints_designator_is_substituted(legacy_library):
+    """The bug this fixture exists for: "REF**" must not reach the board."""
+    text = KiCadExporter().from_ir(_doc(_LEGACY_ID)).decode()
+    fp = _footprint(text)
+    texts = [n for n in fp if isinstance(n, list) and str(n[0]) == "fp_text"]
+    by_kind = {str(n[1]): n[2] for n in texts}
+    assert by_kind["reference"] == "R1", "the library placeholder reached the board"
+    assert by_kind["value"] == "1k"
+    assert "REF**" not in text
+
+
+def test_a_legacy_footprint_still_carries_its_body(legacy_library):
+    text = KiCadExporter().from_ir(_doc(_LEGACY_ID)).decode()
+    assert "F.CrtYd" in text
+    assert text.count('(pad "') == 2

@@ -223,8 +223,15 @@ def _embed_library_footprint(
         if tag in _MOD_ONLY_TOKENS or tag in ("layer", "at", "uuid"):
             continue
         if tag == "property" and len(item) > 2 and item[1] in ("Reference", "Value"):
+            # KiCad 9+ spelling.
             item = list(item)
             item[2] = comp.reference if item[1] == "Reference" else comp.value
+        elif tag == "fp_text" and len(item) > 2 and str(item[1]) in ("reference", "value"):
+            # KiCad 8 and earlier spell the same two fields as fp_text, and the
+            # installed library is whichever KiCad the user has. Missing this
+            # left every designator on the board reading "REF**".
+            item = list(item)
+            item[2] = comp.reference if str(item[1]) == "reference" else comp.value
         elif tag == "pad":
             item = _embed_pad(item, nets, name_to_code)
         out.append(_mirrored(item) if back else item)

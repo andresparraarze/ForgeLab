@@ -38,6 +38,15 @@ raise the wrong exception type past a green local suite and break all four CI
 interpreters. Run it before pushing anything that touches an optional external
 tool.
 
+ForgeLab's component library names footprints as **KiCad 9 and later** spell
+them, and CI installs KiCad 9 for that reason. Older libraries still work: the
+exporter handles the pre-9 `fp_text` spelling of a designator, and a footprint it
+cannot find falls back to synthesized copper with a warning rather than a
+failure. `tests/fixtures/legacy_footprints/` is a KiCad 7-era footprint kept
+precisely so that path is exercised on a machine that has only a modern KiCad —
+it caught the version of this feature that left every designator reading
+`REF**`.
+
 That flag hides KiCad's **footprint libraries** as well as its binaries, by
 pointing `FORGELAB_KICAD_FOOTPRINT_DIR` at an empty directory. It has to: the
 libraries are found by filesystem path rather than on `PATH`, so hiding

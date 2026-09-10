@@ -233,7 +233,9 @@ def test_generation_status_reports_whether_the_kernel_is_reachable():
 
     status = tools.generation_status()
     assert isinstance(status["freecad_kernel"], bool)
-    assert status["verify_geometry"] == status["freecad_kernel"]
+    # verify_geometry dispatches on the document's domain — FreeCAD for parts,
+    # KiCad for boards — so it is usable whenever either tool is present.
+    assert status["verify_geometry"] == (status["freecad_kernel"] or status["kicad_cli"])
     if not status["freecad_kernel"]:
         # The .FCStd exporter is pure stdlib; the reason must not suggest
         # mechanical export is broken without FreeCAD.

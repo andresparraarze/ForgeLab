@@ -213,13 +213,18 @@ def check_hardware(document: ForgeDocument) -> tuple[list[str], list[str]]:
                     "match the real part; check the library and footprint names"
                 )
             continue
-        # 4c. A pad number the real footprint does not have (error): the design
-        #     wires a pin the part does not expose.
+        # 4c. A pad number the installed footprint does not have. A warning, not
+        #     an error, because the answer depends on which KiCad is installed:
+        #     the USB-B shell is one pad named "SH" in KiCad 9's library and two
+        #     numbered 5 and 6 in KiCad 7's. ForgeLab cannot call the document
+        #     wrong for disagreeing with a library revision it does not choose —
+        #     but the pad will carry no net, so it must still say so.
         unknown = unknown_pad_numbers(footprint, _pads(comp))
         if unknown:
-            errors.append(
-                f"Component {ref} wires pad(s) {', '.join(unknown)}, which footprint "
-                f"{footprint!r} does not have — wrong footprint, or a mistyped pad number"
+            warnings.append(
+                f"Component {ref} wires pad(s) {', '.join(unknown)}, which the installed "
+                f"{footprint!r} does not have — those pads will carry no net; check the "
+                "pad numbering against your KiCad library version"
             )
 
     # 5. Missing board outline (warning).
