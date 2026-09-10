@@ -48,6 +48,31 @@ registration scoped to one directory, an extra the installer forgot so a tool
 fails on clean machines only, and an install that does not move when the source
 does. CI runs it as its own job.
 
+## Releasing
+
+```bash
+./scripts/release.sh patch      # or minor, major, or an explicit 0.2.0
+./scripts/release.sh patch --push
+```
+
+**The version is not written down anywhere.** `hatch-vcs` derives it from the
+git tag, so `git tag v0.1.0` *is* the version bump — a literal in `pyproject.toml`
+would be a second copy to forget, which is exactly the state this replaced. In
+between tags the build reports `0.1.1.dev47+g3919e7e`, which truthfully says
+"47 commits past 0.1.0, not a release".
+
+So `release.sh` exists for the parts a tag does not do by itself: it refuses to
+tag a dirty tree, a branch other than `main`, a failing `check.sh`, a failing
+`verify-install.sh`, or a CHANGELOG whose `[Unreleased]` section is empty. Then
+it moves that section under a dated version heading, fixes the comparison links,
+commits, and tags.
+
+Version numbers follow [semver](https://semver.org/): `patch` for fixes,
+`minor` for backwards-compatible additions (a new MCP tool, a new exporter),
+`major` for a breaking change to the IR or a public API. `SPEC_VERSION` in
+`forgelab/spec/version.py` is a *separate* number for the document format and
+moves only when the schema does.
+
 A test that needs one of those tools declares it, rather than computing a skip
 condition of its own:
 

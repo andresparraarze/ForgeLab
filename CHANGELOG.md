@@ -87,7 +87,17 @@ All notable changes to this project are documented here. The format is based on
     the standard of the code it documents.
 
 ### Added
-- **`scripts/verify-install.sh`, and a CI job that runs it.** A real install
+- **`scripts/release.sh` and a first `v0.1.0` tag.** The version has been
+  derived from git since the previous entry, but nothing turned that into a
+  release: with no tags at all, every build reported a distance from the root
+  commit. `v0.1.0` gives it a real base, so a build now reads
+  `0.1.1.dev47+g3919e7e` — 47 commits past 0.1.0 — instead of counting from
+  nothing. `release.sh` cuts a release the same way every time: it refuses a
+  dirty tree, a branch other than main, a failing `check.sh` or
+  `verify-install.sh`, and an empty `[Unreleased]` section, then dates that
+  section under the new version, repairs the comparison links, commits and
+  tags. The version is still stored nowhere — the tag is the bump.
+ A real install
   into a throwaway HOME against stub agent CLIs: it asserts the registration
   argv, talks to the resulting server over stdio (40 tools, `list_domains`,
   and a `preview_render` that must produce a PNG), and upgrades a git-URL

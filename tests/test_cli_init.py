@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import stat
 from pathlib import Path
@@ -308,8 +309,19 @@ def test_version_reports_both_the_build_and_the_spec(capsys):
 
 
 def test_version_is_derived_not_a_frozen_literal():
-    """A static version made `update` unable to report that anything changed."""
+    """A static version made `update` unable to report that anything changed.
+
+    The check is that nothing in the tree *states* the version, not that it
+    differs from any particular string: standing exactly on tag v0.1.0, "0.1.0"
+    is the correct derived answer, and an earlier version of this test asserted
+    it could not be — which failed the moment the first tag was created.
+    """
     from forgelab import __version__
 
-    assert __version__ != "0.1.0", "version looks hardcoded again"
-    assert Path("forgelab/__init__.py").read_text().count('"0.1.0"') == 0
+    assert re.fullmatch(r"\d+\.\d+\.\d+.*", __version__), __version__
+    init = Path("forgelab/__init__.py").read_text()
+    assert 'version("forgelab")' in init, "__version__ is no longer read from metadata"
+    # The one literal allowed is the sentinel for a source tree with no install.
+    assert re.findall(r'__version__\s*=\s*"([^"]+)"', init) == ["0.0.0+unknown"]
+    assert 'dynamic = ["version"]' in Path("pyproject.toml").read_text()
+    assert "\nversion = " not in Path("pyproject.toml").read_text()
