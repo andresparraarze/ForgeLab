@@ -21,6 +21,7 @@ from forgelab.formats import kicad_library
 from forgelab.layout import component_bbox
 from forgelab.spec import Domain, ForgeDocument, Node
 from forgelab.spec.hardware import NODE_BOARD, NODE_COMPONENT, NODE_NET
+from forgelab.validation.electrical import check_electrical
 
 # Power nets we expect to be decoupled and to use as a hint for the LED check.
 _POWER_NET_NAMES = {"VCC", "VDD", "3V3", "5V", "VBUS"}
@@ -110,6 +111,13 @@ def check_hardware(document: ForgeDocument) -> tuple[list[str], list[str]]:
     nodes = list(document.walk())
     errors: list[str] = []
     warnings: list[str] = []
+
+    # Netlist and connectivity checks live next door; they answer a different
+    # question from these (is it wired?) rather than (is it sensible?), but a
+    # caller wants one verdict.
+    electrical_errors, electrical_warnings = check_electrical(document)
+    errors.extend(electrical_errors)
+    warnings.extend(electrical_warnings)
 
     components = [n for n in nodes if n.type == NODE_COMPONENT]
     net_nodes = [n for n in nodes if n.type == NODE_NET]

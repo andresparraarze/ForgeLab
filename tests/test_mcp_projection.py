@@ -102,8 +102,16 @@ def test_validate_document_with_projection_returns_view(tmp_path):
 
 
 def test_validate_document_without_projection_is_unchanged(tmp_path):
+    """No `projection` key unless one was asked for.
+
+    Asserted on the shape rather than by whole-dict equality: `warnings` is
+    advisory content that grows as the checks get better, and pinning its
+    absence here would make every new check look like a projection regression.
+    """
     src = _write(tmp_path / "b.forge.json", _hardware_doc())
-    assert tools.validate_document(document_path=str(src)) == {"valid": True}
+    result = tools.validate_document(document_path=str(src))
+    assert result["valid"] is True
+    assert "projection" not in result
 
 
 def test_validate_document_invalid_with_projection_reports_error(tmp_path):
