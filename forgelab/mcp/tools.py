@@ -1238,6 +1238,11 @@ def route_board(
     largest plane goes on ``F.Cu`` and connects immediately; a second goes on
     ``B.Cu`` and connects once the pads are made through-hole in KiCad.
 
+    A net in ``nets_poured`` has a plane, which is not the same as having every
+    pad connected: the fill itself is KiCad's to compute, and a pad its copper
+    does not reach stays unconnected. Run ``verify_geometry`` on the routed board
+    to find out — it is the only check that sees filled copper.
+
     Args:
         document_path: path to the placed hardware ``.forge.json`` (a bare
             filename resolves against ``FORGELAB_OUTPUT_DIR``).

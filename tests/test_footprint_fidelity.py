@@ -262,6 +262,14 @@ def test_every_example_is_drc_clean_under_real_kicad(name, tmp_path):
     Before footprints were embedded, KiCad reported 23 mismatched footprints on
     the Uno and two genuine shorts on blinky. Nothing in the suite noticed,
     because nothing in the suite asked KiCad.
+
+    Two properties, and the second matters as much as the first. Every DRC rule
+    passes — no shorts, no clearance failures, no footprint mismatches. And every
+    connection KiCad finds missing belongs to a net `route_board` already told
+    the caller about: one it could not route, or one it answered with a copper
+    pour. The router is basic by design and does not finish the Uno, and a pour's
+    real fill is KiCad's to compute — but a net the router claims it wired with
+    tracks may never come back unconnected. Nothing goes missing quietly.
     """
     data = json.loads((_EXAMPLES / f"{name}.forge.json").read_text())
     doc = ForgeDocument.model_validate(data)
@@ -283,5 +291,21 @@ def test_every_example_is_drc_clean_under_real_kicad(name, tmp_path):
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert report.exists(), proc.stderr
-    violations = json.loads(report.read_text())["violations"]
+    report_json = json.loads(report.read_text())
+    violations = report_json["violations"]
     assert violations == [], [f"{v['type']}: {v['description']}" for v in violations]
+
+    unconnected_nets = set()
+    for item in report_json.get("unconnected_items", []):
+        for entry in item.get("items", []):
+            text = str(entry.get("description", ""))
+            if "[" in text:
+                unconnected_nets.add(text.split("[")[1].split("]")[0])
+    # A poured net is "answered", not "proven connected": route_board places the
+    # pour, KiCad computes the fill, and a pad the fill does not reach is exactly
+    # the blind spot forgelab.validation.electrical documents.
+    announced = set(routed["nets_failed"]) | set(routed["nets_poured"])
+    assert unconnected_nets <= announced, (
+        "KiCad found connections missing on nets the router claimed it wired: "
+        f"{sorted(unconnected_nets - announced)}"
+    )

@@ -72,6 +72,10 @@ All notable changes to this project are documented here. The format is based on
   lowered the bar for all of them. `clearance: 0.01` passed JLCPCB.
 - **`zone` was missing from the LLM schema**, so `validate_llm_output` rejected
   the copper pours `route_board` produces.
+- `route_board`'s `nets_poured` said a plane was placed and read as if the net
+  were connected. Whether the fill reaches a given pad is KiCad's to compute, and
+  on the Arduino Uno it does not reach all of them — both docstrings now say so,
+  and point at `verify_geometry`.
 - The pad-to-pad clearance check skipped pads with no net, contradicting its own
   docstring — copper touching an unconnected pad is still a short.
 - A component on `B.Cu` exported its pads to `F.Cu` and its silkscreen to
@@ -103,6 +107,9 @@ All notable changes to this project are documented here. The format is based on
   naming, the netlist rules that actually bite (a SOT-223's tab is pin 2, a USB
   shell is `SH`), `auto_place`/`route_board`, and the three-step check at the
   end.
+- The KiCad-backed tests now run in CI, on a job that installs KiCad. They had
+  always skipped everywhere the suite executed, which is how boards KiCad
+  rejects came to ship.
 - `topology` projections of a routed board no longer reduce to hundreds of
   contentless `{"id": "track_1", "type": "track"}` entries; tracks, vias and
   zones carry their net and layer.

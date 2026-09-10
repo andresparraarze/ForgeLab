@@ -426,6 +426,12 @@ def route_document(
     ``nets_failed`` into ``nets_poured`` and gains a ``zone``. Signal nets that
     merely lost to congestion are left in ``nets_failed`` untouched.
 
+    ``nets_poured`` means a plane was *placed* for the net, not that every pad
+    on it is connected. ForgeLab does not compute the fill (see
+    ``forgelab.spec.hardware.Zone``), so whether the poured copper actually
+    reaches a given pad — past its clearance, thermal relief and any island the
+    fill strands — is KiCad's answer to give. ``verify_geometry`` asks it.
+
     Raises ``RoutingError`` for a non-hardware document or a missing outline.
     """
     if document.domain != Domain.HARDWARE:
